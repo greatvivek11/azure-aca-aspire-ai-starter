@@ -24,6 +24,7 @@ To scaffold a minimal React 19 application that serves as a "status dashboard" f
 -   **Acceptance Criteria:**
     -   [ ] The main page of the application is titled "AI Hub - System Status".
     -   [ ] The UI displays a section for "Backend API Status".
+    -   [ ] The UI displays a section for "Worker Service Status".
     -   [ ] The UI displays a section for "AI Service Status".
     -   [ ] A button labeled "Ping AI Service" is present.
 
@@ -35,6 +36,10 @@ To scaffold a minimal React 19 application that serves as a "status dashboard" f
         -   [ ] On page load, the application makes an asynchronous `GET` request to the backend's `/v1/health` endpoint.
         -   [ ] This request **must** be routed through the Dapr sidecar, using the Dapr App ID of the backend (e.g., `http://localhost:3500/v1.0/invoke/aihub-backend/method/v1/health`).
         -   [ ] The "Backend API Status" section updates to show "Healthy" (or an error state) based on the API response.
+    -   [ ] **Worker Health Check:**
+        -   [ ] On page load, the application makes an asynchronous `GET` request to the worker's `/v1/health` endpoint.
+        -   [ ] This request **must** be routed through the Dapr sidecar, using the Dapr App ID of the worker (e.g., `http://localhost:3500/v1.0/invoke/aihub-worker/method/v1/health`).
+        -   [ ] The "Worker Service Status" section updates to show "Healthy" (or an error state) based on the API response.
     -   [ ] **AI Service Ping:**
         -   [ ] When the "Ping AI Service" button is clicked, the application makes a `GET` request to the backend's `/v1/ping-ai` endpoint via the Dapr sidecar.
         -   [ ] The "AI Service Status" section updates to show the response from the backend (e.g., "Pong" or an error).
@@ -44,4 +49,5 @@ To scaffold a minimal React 19 application that serves as a "status dashboard" f
 -   [ ] The frontend application can be successfully containerized using its `Dockerfile`.
 -   [ ] When run locally via `docker compose`, the frontend UI loads in the browser.
 -   [ ] The status dashboard correctly reflects the health of the backend and the connectivity to the AI service by calling the backend through Dapr.
+-   [ ] The status dashboard correctly reflects the health of the worker service by calling it through Dapr.
 -   [ ] The application is successfully deployed to Azure Container Apps and is publicly accessible.

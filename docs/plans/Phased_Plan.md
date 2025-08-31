@@ -27,6 +27,7 @@ This plan is intentionally **high-level but actionable**. It defines scope, mile
 
 * Repo scaffold: `/frontend`, `/backend`, `/worker`, `/aspire`, `/infra`, `.github/workflows`.
 * Dockerize FE/BE/Worker; local dev with Aspire AppHost + Dapr sidecars.
+* Worker implements basic health checks and integrates with Dapr.
 * Bicep/Terraform: create ACA env + apps, GHCR, SQL (basic), Blob, Cosmos (Mongo vCore + vector).
 * Configure FE public ingress + custom domain (optional), BE internal-only.
 * Add `/v1/health` in API; FE SSR route handler invokes it via Dapr.
@@ -37,7 +38,7 @@ This plan is intentionally **high-level but actionable**. It defines scope, mile
 
 * CI builds containers, pushes to GHCR on main.
 * Aspire runs FE/API/Worker with Dapr locally.
-* ACA deploys FE+BE; FE→Dapr→BE `/v1/health` returns 200.
+* ACA deploys FE+BE+Worker; FE→Dapr→BE `/v1/health` returns 200; FE→Dapr→Worker `/v1/health` returns 200.
 * Basic OTel traces/logs visible (console/ACA logs).
 
 **Risks & Mitigations**

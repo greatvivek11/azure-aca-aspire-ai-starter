@@ -13,14 +13,17 @@ To establish the project's foundational scaffolding, including the repository st
 
 -   **Goal:** A developer can clone the repository and get a functional local environment running with a single command.
 -   **Acceptance Criteria:**
-    -   [ ] The repository is structured with top-level folders: `/frontend`, `/backend`, `/infra`, `.github`.
+    -   [ ] The repository is structured with top-level folders: `/frontend`, `/backend`, `/worker`, `/aspire`, `/infra`, `.github`.
     -   [ ] A `docker-compose.yml` file exists at the root.
     -   [ ] Running `docker compose up` successfully starts:
         -   The frontend React application container.
         -   The backend .NET application container.
+        -   The worker .NET application container.
         -   A Dapr sidecar for the frontend container.
         -   A Dapr sidecar for the backend container.
+        -   A Dapr sidecar for the worker container.
     -   [ ] The frontend application is accessible locally and can successfully call the backend's `/v1/health` endpoint via its Dapr sidecar.
+    -   [ ] The frontend application is accessible locally and can successfully call the worker's `/v1/health` endpoint via its Dapr sidecar.
 
 ### 2.2. Infrastructure as Code (Bicep)
 
@@ -36,10 +39,12 @@ To establish the project's foundational scaffolding, including the repository st
         -   [ ] **Azure Container Apps:**
             -   `aca-aihub-frontend`: Configured for public ingress.
             -   `aca-aihub-backend`: Configured for **internal-only** ingress.
+            -   `aca-aihub-worker`: Configured for **internal-only** ingress.
         -   [ ] **Dapr Configuration:**
-            -   Dapr is enabled for both `frontend` and `backend` container apps.
+            -   Dapr is enabled for `frontend`, `backend`, and `worker` container apps.
             -   The backend app has a Dapr app-id of `aihub-backend`.
             -   The frontend app has a Dapr app-id of `aihub-frontend`.
+            -   The worker app has a Dapr app-id of `aihub-worker`.
         -   [ ] **Data Stores:**
             -   `Azure SQL Database`: Server and a single database.
             -   `Azure Blob Storage`: Storage account and a container.
@@ -47,6 +52,7 @@ To establish the project's foundational scaffolding, including the repository st
         -   [ ] **Identity & Security:**
             -   A single `User-Assigned Managed Identity` is created for the application.
             -   The backend container app is assigned this managed identity.
+            -   The worker container app is assigned this managed identity.
 
 ### 2.3. CI/CD Pipeline (GitHub Actions)
 
@@ -57,8 +63,8 @@ To establish the project's foundational scaffolding, including the repository st
     -   [ ] **Workflow Steps:**
         1.  [ ] **Authenticate to Azure:** The workflow securely logs into Azure using a pre-configured Service Principal stored in GitHub secrets.
         2.  [ ] **Deploy Infrastructure:** The `infra/main.bicep` file is deployed to the target resource group.
-        3.  [ ] **Build & Test:** The workflow builds both frontend and backend projects and runs any existing unit tests.
-        4.  [ ] **Dockerize:** Docker images for both frontend and backend are built.
+        3.  [ ] **Build & Test:** The workflow builds frontend, backend, and worker projects and runs any existing unit tests.
+        4.  [ ] **Dockerize:** Docker images for frontend, backend, and worker are built.
         5.  [ ] **Push to GHCR:** The new images are tagged and pushed to GitHub Container Registry.
         6.  [ ] **Deploy to ACA:** The Azure Container Apps are updated with the new images, triggering a new revision.
     -   [ ] Secrets (e.g., `AZURE_CREDENTIALS`) are passed securely to the workflow from GitHub Actions secrets.
@@ -66,7 +72,8 @@ To establish the project's foundational scaffolding, including the repository st
 ## 3. Definition of Done (DoD)
 
 -   [ ] The CI/CD pipeline successfully completes on a push to `main`.
--   [ ] The frontend and backend applications are deployed and running in Azure Container Apps.
+-   [ ] The frontend, backend, and worker applications are deployed and running in Azure Container Apps.
 -   [ ] A developer can access the public URL of the deployed frontend application.
 -   [ ] The deployed frontend successfully calls the backend's `/v1/health` endpoint through Dapr and displays a "Healthy" status.
--   [ ] Basic logs from both applications are visible in the ACA Log Stream.
+-   [ ] The deployed frontend successfully calls the worker's `/v1/health` endpoint through Dapr and displays a "Healthy" status.
+-   [ ] Basic logs from all applications are visible in the ACA Log Stream.

@@ -16,6 +16,7 @@ To scaffold a minimal .NET 10 Minimal API project that establishes a baseline fo
     -   [ ] A new .NET 10 Minimal API project is created in the `/backend` directory.
     -   [ ] The project is configured for Vertical Slice Architecture. A `/Features` directory is created to house future feature slices.
     -   [ ] A `Dockerfile` is present in the `/backend` directory, capable of building a production-ready container image for the application.
+    -   [ ] The backend is configured to communicate with the worker service via Dapr service invocation when needed.
 
 ### 2.2. Health Check Endpoint
 
@@ -44,3 +45,5 @@ To scaffold a minimal .NET 10 Minimal API project that establishes a baseline fo
 -   [ ] When run locally via `docker compose`, the `/v1/health` endpoint is reachable from the host machine.
 -   [ ] The `/v1/ping-ai` endpoint successfully returns a response from the Hugging Face model, confirming the Semantic Kernel connection.
 -   [ ] The application is successfully deployed to Azure Container Apps as part of the CI/CD pipeline.
+-   [ ] The backend can successfully communicate with the worker service via Dapr service invocation when needed.
+-   [ ] The backend successfully integrates with Aspire for local development orchestration.

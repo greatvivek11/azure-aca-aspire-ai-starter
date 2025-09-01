@@ -4,11 +4,16 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <PublishAot>true</PublishAot>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="9.4.1" />
+    <PackageReference Include="Dapr.AspNetCore" Version="1.15.4" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="8.0.18" />
+    <PackageReference Include="Microsoft.SemanticKernel" Version="1.64.0" />
+    <PackageReference Include="Microsoft.SemanticKernel.Connectors.OpenAI" Version="1.64.0" />
   </ItemGroup>
 
 </Project>

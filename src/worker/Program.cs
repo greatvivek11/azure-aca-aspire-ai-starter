@@ -1,8 +1,12 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Dapr.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add Dapr support
+builder.Services.AddDaprClient();
 
 // Add health checks
 builder.Services.AddHealthChecks();
@@ -17,6 +21,10 @@ if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
 }
+
+// Use Dapr
+app.UseCloudEvents();
+app.MapSubscribeHandler();
 
 // Health check endpoint
 app.MapHealthChecks("/v1/health");

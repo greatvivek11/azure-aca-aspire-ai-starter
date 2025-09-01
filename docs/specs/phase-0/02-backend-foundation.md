@@ -1,7 +1,8 @@
 # Phase 0 Spec: Backend Foundation
 
-**Component:** Backend (`/backend`)  
+**Component:** Backend (`/src/backend`)
 **Source Plan:** [`docs/plans/Phased_Plan.md`](/docs/plans/Phased_Plan.md)
+**Architectural Blueprint:** [`/docs/architecture/Backend-Architecture.md`](/docs/architecture/Backend-Architecture.md)
 
 ## 1. Goal
 
@@ -13,9 +14,13 @@ To scaffold a minimal .NET 8 Minimal API project that establishes a baseline for
 
 -   **Goal:** A clean, well-structured .NET project that follows modern best practices with .NET Aspire integration.
 -   **Acceptance Criteria:**
-    -   [ ] A new .NET 8 Minimal API project is created in the `/backend` directory.
-    -   [ ] The project is configured for Vertical Slice Architecture. A `/Features` directory is created to house future feature slices.
-    -   [ ] A `Dockerfile` is present in the `/backend` directory, capable of building a production-ready container image for the application.
+    -   [ ] A new .NET 8 Minimal API project is created in `/src/backend`.
+    -   [ ] The project structure strictly adheres to the **Vertical Slice Architecture** defined in the blueprint. The following directories **must** be created:
+        -   `Domain/`: For core POCO entities.
+        -   `Features/`: For individual feature slices.
+        -   `Infrastructure/`: For external service implementations (AI, Persistence, Storage).
+        -   `Shared/`: For cross-cutting concerns.
+    -   [ ] A `Dockerfile` is present in `/src/backend`, capable of building a production-ready container image.
     -   [ ] The backend is configured to communicate with the worker service via Dapr service invocation when needed.
     -   [ ] The backend project is registered in the Aspire `AppHost` project for local orchestration.
     -   [ ] The backend is configured to work with Dapr sidecar when run through Aspire.
@@ -41,6 +46,7 @@ To scaffold a minimal .NET 8 Minimal API project that establishes a baseline for
     -   [ ] This endpoint uses the injected `Kernel` to invoke a simple, non-streaming prompt (e.g., "Ping").
     -   [ ] **On Success:** The endpoint returns a `200 OK` status with a JSON body containing the model's response, like `{"response": "Pong"}`.
     -   [ ] **On Failure:** The endpoint returns a `503 Service Unavailable` status with a descriptive error message if it cannot connect to the AI service.
+
 
 ## 3. Definition of Done (DoD)
 

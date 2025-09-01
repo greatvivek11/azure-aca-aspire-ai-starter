@@ -1,7 +1,8 @@
 # Phase 0 Spec: Worker Foundation
 
-**Component:** Worker (`/worker`)  
+**Component:** Worker (`/src/worker`)
 **Source Plan:** [`docs/plans/Phased_Plan.md`](/docs/plans/Phased_Plan.md)
+**Architectural Blueprint:** [`/docs/architecture/Backend-Architecture.md`](/docs/architecture/Backend-Architecture.md)
 
 ## 1. Goal
 
@@ -13,9 +14,9 @@ To scaffold a minimal .NET background worker service that establishes a baseline
 
 -   **Goal:** A clean, well-structured .NET background worker project that follows modern best practices with .NET Aspire integration.
 -   **Acceptance Criteria:**
-    -   [ ] A new .NET Worker project is created in the `/worker` directory.
+    -   [ ] A new .NET Worker project is created in the `/src/worker` directory.
     -   [ ] The project is configured to work with .NET Aspire for local development orchestration.
-    -   [ ] A `Dockerfile` is present in the `/worker` directory, capable of building a production-ready container image for the application.
+    -   [ ] A `Dockerfile` is present in the `/src/worker` directory, capable of building a production-ready container image for the application.
     -   [ ] The worker project references necessary packages for Dapr integration.
     -   [ ] The worker project is registered in the Aspire `AppHost` project for local orchestration.
     -   [ ] The project is configured to support Native AOT compilation for improved startup performance and reduced memory footprint.
@@ -46,6 +47,7 @@ To scaffold a minimal .NET background worker service that establishes a baseline
     -   [ ] Dapr client is properly initialized and available for dependency injection.
     -   [ ] Basic Dapr service invocation is configured and tested.
     -   [ ] Dapr pub/sub components are configured (though not actively used in Phase 0).
+
 
 ## 3. Definition of Done (DoD)
 

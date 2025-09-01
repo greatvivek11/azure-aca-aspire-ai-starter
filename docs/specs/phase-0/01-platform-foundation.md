@@ -2,6 +2,7 @@
 
 **Component:** Platform (Azure Infrastructure, Local Dev, CI/CD)  
 **Source Plan:** [`docs/plans/Phased_Plan.md`](/docs/plans/Phased_Plan.md)
+**Architectural Blueprint:** [`/docs/architecture/Cloud-Architecture.md`](/docs/architecture/Cloud-Architecture.md)
 
 ## 1. Goal
 
@@ -13,12 +14,13 @@ To establish the project's foundational scaffolding, including the repository st
 
 -   **Goal:** A developer can clone the repository and get a functional local environment running with .NET Aspire orchestration.
 -   **Acceptance Criteria:**
-    -   [ ] The repository is structured with top-level folders: `/frontend`, `/backend`, `/worker`, `/aspire`, `/infra`, `.github`.
+    -   [ ] The repository is structured with top-level folders: `/src`, `/infra`, `.github`.
+    -   [ ] The `/src` directory contains the application source code, organized by project: `/backend`, `/frontend`, `/worker`, and `/aspire`.
     -   [ ] A .NET Aspire `AppHost` project exists in the `/aspire` directory for local service orchestration.
     -   [ ] Running the Aspire AppHost successfully starts:
-        -   The frontend Next.js SSR application.
-        -   The backend .NET Minimal API application.
-        -   The worker .NET background service application.
+        -   The `frontend` application (from `/src/frontend`).
+        -   The `backend` application (from `/src/backend`).
+        -   The `worker` application (from `/src/worker`).
         -   Dapr sidecars for each service with appropriate app-ids.
     -   [ ] The frontend application is accessible locally and can successfully call the backend's `/v1/health` endpoint via its Dapr sidecar.
     -   [ ] The frontend application is accessible locally and can successfully call the worker's `/v1/health` endpoint via its Dapr sidecar.
@@ -37,9 +39,9 @@ To establish the project's foundational scaffolding, including the repository st
             -   Associated with a new `Log Analytics Workspace`.
             -   Set to be `internal` to prevent public ingress to the environment itself.
         -   [ ] **Azure Container Apps:**
-            -   `aca-aihub-frontend`: Configured for public ingress with Next.js SSR.
-            -   `aca-aihub-backend`: Configured for **internal-only** ingress.
-            -   `aca-aihub-worker`: Configured for **internal-only** ingress.
+            -   `aca-aihub-frontend`: The `frontend` container app, configured for public ingress.
+            -   `aca-aihub-backend`: The `backend` container app, configured for **internal-only** ingress.
+            -   `aca-aihub-worker`: The `worker` container app, configured for **internal-only** ingress.
         -   [ ] **Dapr Configuration:**
             -   Dapr is enabled for `frontend`, `backend`, and `worker` container apps.
             -   The backend app has a Dapr app-id of `aihub-backend`.

@@ -1,7 +1,8 @@
 # Phase 0 Spec: Frontend Foundation
 
-**Component:** Frontend (`/frontend`)  
+**Component:** Frontend (`/src/frontend`)
 **Source Plan:** [`docs/plans/Phased_Plan.md`](/docs/plans/Phased_Plan.md)
+**Architectural Blueprint:** [`/docs/architecture/Frontend-Architecture.md`](/docs/architecture/Frontend-Architecture.md)
 
 ## 1. Goal
 
@@ -13,11 +14,18 @@ To scaffold a minimal Next.js 19 SSR application that serves as a "status dashbo
 
 -   **Goal:** A clean, modern Next.js SSR project setup ready for future development with BFF pattern.
 -   **Acceptance Criteria:**
-    -   [ ] A new Next.js 19 project is created in the `/frontend` directory with SSR and BFF route handlers.
+    -   [ ] A new **Next.js 19** project is created in `/src/frontend`, replacing any existing Express-based application.
+    -   [ ] The project structure strictly adheres to the **feature-based organization** defined in the blueprint. The following directories **must** be created:
+        -   `app/`: For Next.js App Router pages and layouts.
+        -   `components/`: For shared UI components, including a `ui/` sub-folder for `shadcn/ui` components.
+        -   `features/`: For feature-specific components (e.g., `chat/`, `documents/`).
+        -   `lib/`: For utility functions and constants.
+        -   `hooks/`: For custom React hooks.
+        -   `stores/`: For Zustand state management stores.
     -   [ ] `Tailwind CSS` is integrated for styling.
-    -   [ ] `shadcn/ui` is initialized for a base component library.
-    -   [ ] A `Dockerfile` is present in the `/frontend` directory, capable of building a production-ready, Next.js SSR container image.
-    -   [ ] The frontend implements the Backend-for-Frontend (BFF) pattern using Next.js route handlers for API calls.
+    -   [ ] `shadcn/ui` is initialized, and its components are added to `components/ui/`.
+    -   [ ] The project **must** use **Next.js Route Handlers** for its Backend-for-Frontend (BFF) layer, which will proxy calls to the backend via Dapr.
+    -   [ ] A `Dockerfile` is present in `/src/frontend` capable of building a production-ready, standalone Next.js container.
 
 ### 2.2. Status Dashboard UI
 
@@ -44,6 +52,7 @@ To scaffold a minimal Next.js 19 SSR application that serves as a "status dashbo
     -   [ ] **AI Service Ping:**
         -   [ ] When the "Ping AI Service" button is clicked, the application makes a `GET` request to the backend's `/v1/ping-ai` endpoint via the Dapr sidecar.
         -   [ ] The "AI Service Status" section updates to show the response from the backend (e.g., "Pong" or an error).
+
 
 ## 3. Definition of Done (DoD)
 

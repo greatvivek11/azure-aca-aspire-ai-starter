@@ -15,7 +15,7 @@
 ## 📋 A. Architecture & Technology Stack
 
 * **Frontend**: React 19 + **Next.js (SSR/BFF)** + Vite 7 + Tailwind v4 + shadcn/ui. (Alternatives for SSR: Remix, SolidStart.)
-* **Backend**: .NET 8/10 Minimal APIs, **.NET Aspire** (AppHost & service discovery), Vertical Slice Architecture, Mediator (source-gen)
+* **Backend**: .NET 8 Minimal APIs, **.NET Aspire** (AppHost & service discovery), Vertical Slice Architecture, Mediator (source-gen)
 * **Infra**: Azure Container Apps (FE public, BE internal), Dapr sidecars for service invocation (and later pub/sub for ingestion).
 * **Service Communication**: Dapr service invocation (FE → Dapr → BE); optional Dapr pub/sub for long-running ingestion/OCR in Phase 2+.
 * **Data**:

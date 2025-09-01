@@ -5,25 +5,25 @@
 
 ## 1. Goal
 
-To establish the project's foundational scaffolding, including the repository structure, a functional local development environment using Docker Compose, and a CI/CD pipeline that deploys the initial containerized applications to a newly provisioned Azure environment.
+To establish the project's foundational scaffolding, including the repository structure, a functional local development environment using .NET Aspire for service orchestration with Dapr sidecars, and a CI/CD pipeline that deploys the initial containerized applications to a newly provisioned Azure environment.
 
 ## 2. Feature Breakdown & Acceptance Criteria
 
 ### 2.1. Repository & Local Development Setup
 
--   **Goal:** A developer can clone the repository and get a functional local environment running with a single command.
+-   **Goal:** A developer can clone the repository and get a functional local environment running with .NET Aspire orchestration.
 -   **Acceptance Criteria:**
     -   [ ] The repository is structured with top-level folders: `/frontend`, `/backend`, `/worker`, `/aspire`, `/infra`, `.github`.
-    -   [ ] A `docker-compose.yml` file exists at the root.
-    -   [ ] Running `docker compose up` successfully starts:
-        -   The frontend React application container.
-        -   The backend .NET application container.
-        -   The worker .NET application container.
-        -   A Dapr sidecar for the frontend container.
-        -   A Dapr sidecar for the backend container.
-        -   A Dapr sidecar for the worker container.
+    -   [ ] A .NET Aspire `AppHost` project exists in the `/aspire` directory for local service orchestration.
+    -   [ ] Running the Aspire AppHost successfully starts:
+        -   The frontend Next.js SSR application.
+        -   The backend .NET Minimal API application.
+        -   The worker .NET background service application.
+        -   Dapr sidecars for each service with appropriate app-ids.
     -   [ ] The frontend application is accessible locally and can successfully call the backend's `/v1/health` endpoint via its Dapr sidecar.
     -   [ ] The frontend application is accessible locally and can successfully call the worker's `/v1/health` endpoint via its Dapr sidecar.
+    -   [ ] Docker Compose is available as an alternative orchestration method for simplified deployment scenarios.
+    -   [ ] An `.editorconfig` file is present at the root of the repository to ensure consistent code formatting across all projects.
 
 ### 2.2. Infrastructure as Code (Bicep)
 
@@ -37,7 +37,7 @@ To establish the project's foundational scaffolding, including the repository st
             -   Associated with a new `Log Analytics Workspace`.
             -   Set to be `internal` to prevent public ingress to the environment itself.
         -   [ ] **Azure Container Apps:**
-            -   `aca-aihub-frontend`: Configured for public ingress.
+            -   `aca-aihub-frontend`: Configured for public ingress with Next.js SSR.
             -   `aca-aihub-backend`: Configured for **internal-only** ingress.
             -   `aca-aihub-worker`: Configured for **internal-only** ingress.
         -   [ ] **Dapr Configuration:**
@@ -61,7 +61,7 @@ To establish the project's foundational scaffolding, including the repository st
     -   [ ] A workflow file exists at `.github/workflows/deploy.yml`.
     -   [ ] The workflow runs on pushes to the `main` branch.
     -   [ ] **Workflow Steps:**
-        1.  [ ] **Authenticate to Azure:** The workflow securely logs into Azure using a pre-configured Service Principal stored in GitHub secrets.
+        1. [ ] **Authenticate to Azure:** The workflow securely logs into Azure using a pre-configured Service Principal stored in GitHub secrets.
         2.  [ ] **Deploy Infrastructure:** The `infra/main.bicep` file is deployed to the target resource group.
         3.  [ ] **Build & Test:** The workflow builds frontend, backend, and worker projects and runs any existing unit tests.
         4.  [ ] **Dockerize:** Docker images for frontend, backend, and worker are built.

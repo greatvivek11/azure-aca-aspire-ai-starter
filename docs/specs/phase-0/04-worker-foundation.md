@@ -5,18 +5,20 @@
 
 ## 1. Goal
 
-To scaffold a minimal .NET background worker service that establishes a baseline for all future background processing tasks. This includes setting up the core project structure, implementing health checks, and verifying integration with the Aspire orchestration system and Dapr sidecar.
+To scaffold a minimal .NET background worker service that establishes a baseline for all future background processing tasks. This includes setting up the core project structure with .NET Aspire orchestration integration, implementing health checks, and verifying integration with the Aspire orchestration system and Dapr sidecar.
 
 ## 2. Feature Breakdown & Acceptance Criteria
 
 ### 2.1. Project Scaffolding
 
--   **Goal:** A clean, well-structured .NET background worker project that follows modern best practices.
+-   **Goal:** A clean, well-structured .NET background worker project that follows modern best practices with .NET Aspire integration.
 -   **Acceptance Criteria:**
     -   [ ] A new .NET Worker project is created in the `/worker` directory.
     -   [ ] The project is configured to work with .NET Aspire for local development orchestration.
     -   [ ] A `Dockerfile` is present in the `/worker` directory, capable of building a production-ready container image for the application.
     -   [ ] The worker project references necessary packages for Dapr integration.
+    -   [ ] The worker project is registered in the Aspire `AppHost` project for local orchestration.
+    -   [ ] The project is configured to support Native AOT compilation for improved startup performance and reduced memory footprint.
 
 ### 2.2. Health Check Endpoint
 
@@ -48,7 +50,8 @@ To scaffold a minimal .NET background worker service that establishes a baseline
 ## 3. Definition of Done (DoD)
 
 -   [ ] The worker application can be successfully containerized using its `Dockerfile`.
--   [ ] When run locally via `docker compose`, the `/v1/health` endpoint is reachable from the host machine.
+-   [ ] When run locally via .NET Aspire, the `/v1/health` endpoint is reachable from the host machine.
 -   [ ] When run via Aspire, the worker starts successfully and integrates with the Dapr sidecar.
 -   [ ] The application is successfully deployed to Azure Container Apps as part of the CI/CD pipeline.
 -   [ ] Basic logs from the worker are visible in the ACA Log Stream.
+-   [ ] The worker is configured to support Native AOT compilation for improved cold start performance in Azure Container Apps.

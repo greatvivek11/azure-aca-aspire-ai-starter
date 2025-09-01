@@ -6,7 +6,7 @@ An enterprise-grade, AI-powered assistant built on a modern, scalable, and secur
 
 # Background
 
-This project is designed as a **PoC + portfolio showcase** demonstrating modern enterprise AI application development with .NET, React, and Azure. The goal is to validate your skills across **C#/.NET 10, React 19, Azure Container Apps, Dapr, Semantic Kernel, and Hugging Face Inference API** while creating a functional product you can share.
+This project is designed as a **PoC + portfolio showcase** demonstrating modern enterprise AI application development with .NET, React, and Azure. The goal is to validate your skills across **C#/.NET 8, React 19, Azure Container Apps, Dapr, Semantic Kernel, and Hugging Face Inference API** while creating a functional product you can share.
 
 ## Vision
 
@@ -15,7 +15,7 @@ Build an **AI-Powered Knowledge Hub** combining conversational AI, document retr
 ## Why This Project Matters
 
 * **Enterprise relevance**: Azure-first deployment (ACA, SQL, Blob, Cosmos).
-* **Modern stack**: .NET 10 Minimal APIs **+ .NET Aspire**, React 19 + **Next.js (SSR/BFF)** + Vite + Tailwind v4, Dapr.
+* **Modern stack**: .NET 8 Minimal APIs **+ .NET Aspire**, React 19 + **Next.js (SSR/BFF)** + Vite + Tailwind v4, Dapr.
 * **AI integration**: Semantic Kernel + Hugging Face Router via OpenAI connector.
 * **Architecture**: Vertical Slice Architecture, Mediator (source-gen), repository pattern, IaC (Bicep/Terraform).
 * **Showcase**: Demonstrates frontend, backend, AI/ML integration, cloud-native deployment, and CI/CD.
@@ -38,7 +38,7 @@ This application enables employees to:
 
 * **Hosting**: Azure Container Apps (ACA) hosts both frontend (SSR) and backend as separate container apps.
 * **Frontend SSR/BFF**: **Next.js (React 19)** server-side rendering for low FCP, secrets on server, and **BFF** route handlers. Optional alternatives: Remix or SolidStart. Client build tooling may still use **Vite** where appropriate.
-* **Backend**: .NET 10 Minimal APIs (Vertical Slice Architecture) with **.NET Aspire** for orchestration, service discovery, and OpenTelemetry.
+* **Backend**: .NET 8 Minimal APIs (Vertical Slice Architecture) with **.NET Aspire** for orchestration, service discovery, and OpenTelemetry.
 * **Service Invocation**: Dapr sidecars provide secure FE → BE invocation (FE → Dapr → BE), retries, mTLS, and service discovery.
 * **Data**:
 

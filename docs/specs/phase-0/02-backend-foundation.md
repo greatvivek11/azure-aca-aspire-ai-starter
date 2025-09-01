@@ -5,18 +5,21 @@
 
 ## 1. Goal
 
-To scaffold a minimal .NET 10 Minimal API project that establishes a baseline for all future backend development. This includes setting up the core project structure, implementing a health check, and verifying the initial Semantic Kernel to Hugging Face model connectivity.
+To scaffold a minimal .NET 8 Minimal API project that establishes a baseline for all future backend development. This includes setting up the core project structure with .NET Aspire orchestration integration, implementing a health check, and verifying the initial Semantic Kernel to Hugging Face model connectivity.
 
 ## 2. Feature Breakdown & Acceptance Criteria
 
 ### 2.1. Project Scaffolding
 
--   **Goal:** A clean, well-structured .NET project that follows modern best practices.
+-   **Goal:** A clean, well-structured .NET project that follows modern best practices with .NET Aspire integration.
 -   **Acceptance Criteria:**
-    -   [ ] A new .NET 10 Minimal API project is created in the `/backend` directory.
+    -   [ ] A new .NET 8 Minimal API project is created in the `/backend` directory.
     -   [ ] The project is configured for Vertical Slice Architecture. A `/Features` directory is created to house future feature slices.
     -   [ ] A `Dockerfile` is present in the `/backend` directory, capable of building a production-ready container image for the application.
     -   [ ] The backend is configured to communicate with the worker service via Dapr service invocation when needed.
+    -   [ ] The backend project is registered in the Aspire `AppHost` project for local orchestration.
+    -   [ ] The backend is configured to work with Dapr sidecar when run through Aspire.
+    -   [ ] The project is configured to support Native AOT compilation for improved startup performance and reduced memory footprint.
 
 ### 2.2. Health Check Endpoint
 
@@ -42,8 +45,9 @@ To scaffold a minimal .NET 10 Minimal API project that establishes a baseline fo
 ## 3. Definition of Done (DoD)
 
 -   [ ] The backend application can be successfully containerized using its `Dockerfile`.
--   [ ] When run locally via `docker compose`, the `/v1/health` endpoint is reachable from the host machine.
+-   [ ] When run locally via .NET Aspire, the `/v1/health` endpoint is reachable from the host machine.
 -   [ ] The `/v1/ping-ai` endpoint successfully returns a response from the Hugging Face model, confirming the Semantic Kernel connection.
 -   [ ] The application is successfully deployed to Azure Container Apps as part of the CI/CD pipeline.
 -   [ ] The backend can successfully communicate with the worker service via Dapr service invocation when needed.
 -   [ ] The backend successfully integrates with Aspire for local development orchestration.
+-   [ ] The backend is configured to support Native AOT compilation for improved cold start performance in Azure Container Apps.

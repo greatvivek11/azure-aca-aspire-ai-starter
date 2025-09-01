@@ -2,7 +2,7 @@
 
 This plan is intentionally **high-level but actionable**. It defines scope, milestones, acceptance criteria (DoD), and risks for each phase. It is the only place where phases are maintained. Other docs should link here.
 
-> Constraints: PoC/resume project, cost-sensitive (avoid paid services like Private Endpoints, Key Vault, Defender for Cloud). Azure Container Apps (ACA) + Dapr, Azure SQL, Blob Storage, Cosmos DB (vector), Semantic Kernel (SK) + Hugging Face Inference Router via OpenAI connector. Frontend: React 19 + **Next.js SSR/BFF**, Tailwind v4. Backend: .NET 10 Minimal APIs **with .NET Aspire**, Vertical Slice Architecture, **Mediator (source-gen) instead of MediatR**.
+> Constraints: PoC/resume project, cost-sensitive (avoid paid services like Private Endpoints, Key Vault, Defender for Cloud). Azure Container Apps (ACA) + Dapr, Azure SQL, Blob Storage, Cosmos DB (vector), Semantic Kernel (SK) + Hugging Face Inference Router via OpenAI connector. Frontend: React 19 + **Next.js SSR/BFF**, Tailwind v4. Backend: .NET 8 Minimal APIs **with .NET Aspire**, Vertical Slice Architecture, **Mediator (source-gen) instead of MediatR**.
 
 ## Phase 0 — Cloud Foundation & Scaffolding
 

@@ -1,0 +1,103 @@
+services:
+  # Frontend service
+  frontend:
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - dapr-frontend
+    networks:
+      - aihub-network
+
+  # Dapr sidecar for frontend
+  dapr-frontend:
+    image: "daprio/daprd:1.14.0"
+    command: [
+      "./daprd",
+      "-app-id", "aihub-frontend",
+      "-app-port", "3000",
+      "--app-channel-address", "frontend",
+      "--resources-path", "/components",
+      "--log-level", "debug"
+    ]
+    volumes:
+      - "./src/components:/components"
+    depends_on:
+      - backend
+      - worker
+    ports:
+      - "3500:3500"  # Dapr HTTP port
+      - "50001:50001"  # Dapr gRPC port
+    networks:
+      - aihub-network
+    restart: unless-stopped
+
+  # Backend service
+  backend:
+    build:
+      context: ./src/backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - dapr-backend
+    networks:
+      - aihub-network
+
+  # Dapr sidecar for backend
+  dapr-backend:
+    image: "daprio/daprd:1.14.0"
+    command: [
+      "./daprd",
+      "-app-id", "aihub-backend",
+      "-app-port", "8080",
+      "--app-channel-address", "backend",
+      "--resources-path", "/components",
+      "--log-level", "debug"
+    ]
+    volumes:
+      - "./src/components:/components"
+    ports:
+      - "3501:3500"  # Dapr HTTP port
+      - "50002:50001"  # Dapr gRPC port
+    networks:
+      - aihub-network
+    restart: unless-stopped
+
+  # Worker service
+  worker:
+    build:
+      context: ./src/worker
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    depends_on:
+      - dapr-worker
+    networks:
+      - aihub-network
+
+  # Dapr sidecar for worker
+  dapr-worker:
+    image: "daprio/daprd:1.14.0"
+    command: [
+      "./daprd",
+      "-app-id", "aihub-worker",
+      "-app-port", "8081",
+      "--app-channel-address", "worker",
+      "--resources-path", "/components",
+      "--log-level", "debug"
+    ]
+    volumes:
+      - "./src/components:/components"
+    ports:
+      - "3502:3500"  # Dapr HTTP port
+      - "50003:50001"  # Dapr gRPC port
+    networks:
+      - aihub-network
+    restart: unless-stopped
+
+networks:
+  aihub-network:
+    driver: bridge

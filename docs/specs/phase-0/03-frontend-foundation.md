@@ -5,18 +5,19 @@
 
 ## 1. Goal
 
-To scaffold a minimal React 19 application that serves as a "status dashboard" for the project's foundation. It must verify end-to-end connectivity from the browser to the backend API via Dapr, and by extension, the backend's connectivity to the AI model.
+To scaffold a minimal Next.js 19 SSR application that serves as a "status dashboard" for the project's foundation. It must verify end-to-end connectivity from the browser to the backend API via Dapr, and by extension, the backend's connectivity to the AI model.
 
 ## 2. Feature Breakdown & Acceptance Criteria
 
 ### 2.1. Project Scaffolding
 
--   **Goal:** A clean, modern React project setup ready for future development.
+-   **Goal:** A clean, modern Next.js SSR project setup ready for future development with BFF pattern.
 -   **Acceptance Criteria:**
-    -   [ ] A new React 19 project is created in the `/frontend` directory using `Vite`.
+    -   [ ] A new Next.js 19 project is created in the `/frontend` directory with SSR and BFF route handlers.
     -   [ ] `Tailwind CSS` is integrated for styling.
     -   [ ] `shadcn/ui` is initialized for a base component library.
-    -   [ ] A `Dockerfile` is present in the `/frontend` directory, capable of building a production-ready, static web server container image (e.g., using Nginx).
+    -   [ ] A `Dockerfile` is present in the `/frontend` directory, capable of building a production-ready, Next.js SSR container image.
+    -   [ ] The frontend implements the Backend-for-Frontend (BFF) pattern using Next.js route handlers for API calls.
 
 ### 2.2. Status Dashboard UI
 
@@ -47,7 +48,7 @@ To scaffold a minimal React 19 application that serves as a "status dashboard" f
 ## 3. Definition of Done (DoD)
 
 -   [ ] The frontend application can be successfully containerized using its `Dockerfile`.
--   [ ] When run locally via `docker compose`, the frontend UI loads in the browser.
+-   [ ] When run locally via .NET Aspire, the frontend UI loads in the browser with SSR.
 -   [ ] The status dashboard correctly reflects the health of the backend and the connectivity to the AI service by calling the backend through Dapr.
 -   [ ] The status dashboard correctly reflects the health of the worker service by calling it through Dapr.
--   [ ] The application is successfully deployed to Azure Container Apps and is publicly accessible.
+-   [ ] The application is successfully deployed to Azure Container Apps and is publicly accessible with SSR.

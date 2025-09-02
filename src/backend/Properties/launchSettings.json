@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "Backend": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "applicationUrl": "http://localhost:5000",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "HUGGINGFACE_API_KEY": "",
+        "HUGGINGFACE_MODEL_ID": "",
+        "HUGGINGFACE_ENDPOINT":""
+      }
+    }
+  }
+}

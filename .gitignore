@@ -61,3 +61,7 @@ bun.lockb
 # Test results
 /TestResult/
 /coverage/
+
+# Environment-specific configuration
+appsettings.Development.json
+appsettings.*.json

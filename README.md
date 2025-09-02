@@ -21,7 +21,7 @@ This project is built to showcase advanced skills in full-stack development, AI 
 
 This project is built using a modern, distributed architecture designed for scalability, maintainability, and security.
 
--   **Backend**: A **.NET 8** application built with **ASP.NET Core Minimal APIs** following a **Vertical Slice Architecture (VSA)** with **MediatR** for clean, feature-focused code.
+-   **Backend**: A **.NET 9** application built with **ASP.NET Core Minimal APIs** following a **Vertical Slice Architecture (VSA)** with clean, feature-focused code.
 -   **Frontend**: A **React 19** Single Page Application (SPA) built with **Vite** and **Bun**, styled with **Tailwind CSS** and **shadcn/ui**.
 -   **Cloud Platform**: Hosted entirely on **Azure Container Apps**, with a containerized frontend and backend.
 -   **Service Communication**: **Dapr (Distributed Application Runtime)** is used for secure, internal service-to-service communication.
@@ -45,7 +45,7 @@ For a deeper dive, please see the detailed architectural documents:
 
 To run this project locally, you will need the following prerequisites installed:
 
--   [.NET 8 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)
+-   [.NET 9 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/9.0)
 -   [Bun](https://bun.sh/)
 -   [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 -   [Dapr CLI](https://docs.dapr.io/getting-started/install-dapr-cli/)

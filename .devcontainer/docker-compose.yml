@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    
+    volumes:
+      - ../..:/workspaces:cached
+      - /var/run/docker.sock:/var/run/docker.sock
+    
+    # Overrides default command so things don't shut down after the process ends.
+    command: sleep infinity
+    
+    # Use "forwardPorts" in **devcontainer.json** to forward an app port locally.
+    # (Adding the "ports" property to this file will not forward from a Codespace.)
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    
+    depends_on:
+      - db
+    
+    networks:
+      - aspire-network
+
+  db:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    restart: unless-stopped
+    environment:
+      SA_PASSWORD: P@ssw0rd
+      ACCEPT_EULA: Y
+    
+    # Add "forwardPorts": ["db:1433"] to **devcontainer.json** to forward MSSQL locally.
+    # (Adding the "ports" property to this file will not forward from a Codespace.)
+    ports:
+      - "1433:1433"
+    
+    volumes:
+      - mssql-data:/var/opt/mssql
+    
+    networks:
+      - aspire-network
+
+volumes:
+  mssql-data:
+
+networks:
+  aspire-network:
+    driver: bridge

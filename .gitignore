@@ -65,3 +65,7 @@ bun.lockb
 # Environment-specific configuration
 appsettings.Development.json
 appsettings.*.json
+
+# Local development configuration
+src/backend/appsettings.local.json
+src/aspire/.env

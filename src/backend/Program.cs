@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Dapr.AspNetCore;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
@@ -16,20 +17,24 @@ builder.Services.AddDaprClient();
 // Add health checks
 builder.Services.AddHealthChecks();
 
+// Register configuration options
+builder.Services.Configure<AIHub.Backend.Infrastructure.Ai.HuggingFaceOptions>(
+    builder.Configuration.GetSection(AIHub.Backend.Infrastructure.Ai.HuggingFaceOptions.SectionName));
+
 // Add Semantic Kernel
 builder.Services.AddKernel();
 builder.Services.AddSingleton<Kernel>(sp =>
 {
     // Configure Semantic Kernel to use Hugging Face Inference Router
-    var configuration = sp.GetRequiredService<IConfiguration>();
+    var options = sp.GetRequiredService<IOptions<AIHub.Backend.Infrastructure.Ai.HuggingFaceOptions>>().Value;
     
-    // Prioritize environment variables over configuration files
-    var huggingFaceApiKey = Environment.GetEnvironmentVariable("HUGGINGFACE_API_KEY") ?? configuration["HuggingFace:ApiKey"] ?? "dummy-key";
-    var huggingFaceModelId = Environment.GetEnvironmentVariable("HUGGINGFACE_MODEL_ID") ?? configuration["HuggingFace:ModelId"] ?? "gpt2";
-    var huggingFaceEndpoint = Environment.GetEnvironmentVariable("HUGGINGFACE_ENDPOINT") ?? configuration["HuggingFace:Endpoint"] ?? "https://api-inference.huggingface.co/v1/";
+    // Prioritize environment variables over configuration options
+    var huggingFaceApiKey = Environment.GetEnvironmentVariable("HUGGINGFACE_API_KEY") ?? options.ApiKey;
+    var huggingFaceModelId = Environment.GetEnvironmentVariable("HUGGINGFACE_MODEL_ID") ?? options.ModelId;
+    var huggingFaceEndpoint = Environment.GetEnvironmentVariable("HUGGINGFACE_ENDPOINT") ?? options.Endpoint;
     
     Console.WriteLine($"Hugging Face Configuration:");
-    Console.WriteLine($"API Key: {(!string.IsNullOrEmpty(huggingFaceApiKey) && huggingFaceApiKey != "dummy-key" ? "Set" : "Not set")}");
+    Console.WriteLine($"API Key: {(!string.IsNullOrEmpty(huggingFaceApiKey) ? "Set" : "Not set")}");
     Console.WriteLine($"Model ID: {huggingFaceModelId}");
     Console.WriteLine($"Endpoint: {huggingFaceEndpoint}");
     

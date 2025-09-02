@@ -51,4 +51,39 @@ To run this project locally, you will need the following prerequisites installed
 -   [Dapr CLI](https://docs.dapr.io/getting-started/install-dapr-cli/)
 -   [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
 
-*(Detailed setup and run instructions will be added here as development progresses.)*
+## 🛠️ Local Development Setup
+
+### 1. Clone the Repository
+```bash
+git clone <repository-url>
+cd <repository-name>
+```
+
+### 2. Set Up Environment Variables
+Copy the example environment file and fill in your actual values:
+```bash
+cp src/aspire/.env.example src/aspire/.env
+```
+
+Edit `src/aspire/.env` and fill in your actual values for Hugging Face API key and other configuration.
+
+### 3. Run the Application
+Navigate to the Aspire project directory and run the application:
+```bash
+cd src/aspire
+dotnet run
+```
+
+The application will automatically load configuration from the `.env` file.
+
+Note: The `.env` file is gitignored and will not be committed to the repository.
+
+## 🚀 Running the Application
+
+After completing the setup steps above, you can run the application with:
+```bash
+cd src/aspire
+dotnet run
+```
+
+This will start all services (frontend, backend, and worker) with Dapr sidecars.

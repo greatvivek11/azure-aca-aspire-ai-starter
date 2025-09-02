@@ -6,10 +6,7 @@
       "dotnetRunMessages": true,
       "applicationUrl": "http://localhost:5000",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development",
-        "HUGGINGFACE_API_KEY": "",
-        "HUGGINGFACE_MODEL_ID": "",
-        "HUGGINGFACE_ENDPOINT":""
+        "ASPNETCORE_ENVIRONMENT": "Development"
       }
     }
   }

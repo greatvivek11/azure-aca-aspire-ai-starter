@@ -25,8 +25,17 @@ services:
     networks:
       - aspire-network
 
+  # Database service - Choose the appropriate image for your platform:
+  # For x86_64 systems (Intel/AMD), use:
+  # image: mcr.microsoft.com/mssql/server:2019-latest
+  # platform: linux/amd64
+  #
+  # For ARM64 systems (Apple Silicon, Raspberry Pi, etc.), use:
+  # image: mcr.microsoft.com/azure-sql-edge:latest
+  # platform: linux/arm64
   db:
-    image: mcr.microsoft.com/mssql/server:2019-latest
+    image: mcr.microsoft.com/azure-sql-edge:latest
+    platform: linux/arm64
     restart: unless-stopped
     environment:
       SA_PASSWORD: P@ssw0rd

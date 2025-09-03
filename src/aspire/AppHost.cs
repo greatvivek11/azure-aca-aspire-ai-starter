@@ -5,6 +5,9 @@ using System.IO;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
+// Enable Docker publisher
+builder.AddDockerComposeEnvironment("aspire-docker-demo");
+
 // Load environment variables from .env file
 LoadEnvFile(".env");
 
@@ -13,25 +16,23 @@ var huggingFaceApiKey = builder.AddParameter("huggingFaceApiKey", secret: true);
 var huggingFaceModelId = builder.AddParameter("huggingFaceModelId");
 var huggingFaceEndpoint = builder.AddParameter("huggingFaceEndpoint");
 
-// Set parameter values from environment variables
-huggingFaceApiKey.Resource.SecretValue = Environment.GetEnvironmentVariable("HUGGINGFACE_API_KEY") ?? "";
-huggingFaceModelId.Resource.Value = Environment.GetEnvironmentVariable("HUGGINGFACE_MODEL_ID") ?? "gpt2";
-huggingFaceEndpoint.Resource.Value = Environment.GetEnvironmentVariable("HUGGINGFACE_ENDPOINT") ?? "https://api-inference.huggingface.co/v1/";
+// Parameter values will be read from appsettings.json or environment variables
+// You can also set them through the .NET Aspire dashboard when running the app
 
-// Add existing projects with Dapr support
-var backend = builder.AddProject<Projects.Backend>("backend")
-    .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions { AppId = "aihub-backend", AppPort = 8080 })
+// Add existing projects with Dapr support and Dockerfiles
+var backend = builder.AddDockerfile("backend", "../backend")
+    .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions { AppId = "aihub-backend", AppPort = 80 })
     .WithEnvironment("HUGGINGFACE_API_KEY", huggingFaceApiKey)
     .WithEnvironment("HUGGINGFACE_MODEL_ID", huggingFaceModelId)
     .WithEnvironment("HUGGINGFACE_ENDPOINT", huggingFaceEndpoint);
 
-var worker = builder.AddProject<Projects.Worker>("worker")
+var worker = builder.AddDockerfile("worker", "../worker")
     .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions { AppId = "aihub-worker", AppPort = 8081 })
     .WithEnvironment("HUGGINGFACE_API_KEY", huggingFaceApiKey)
     .WithEnvironment("HUGGINGFACE_MODEL_ID", huggingFaceModelId)
     .WithEnvironment("HUGGINGFACE_ENDPOINT", huggingFaceEndpoint);
 
-var frontend = builder.AddNpmApp("frontend", "../frontend", "start")
+var frontend = builder.AddDockerfile("frontend", "../frontend")
     .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions { AppId = "aihub-frontend", AppPort = 3000 });
 
 builder.Build().Run();

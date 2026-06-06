@@ -84,7 +84,6 @@ deploy:
   name: Deploy to Azure
   needs: validate  # Wait for validation job to complete
   runs-on: ubuntu-latest
-  environment: production  # Require manual approval (optional)
   steps:
     - Setup tools (azd, .NET, Node.js)
     - Authenticate to Azure (OpenID Connect)
@@ -349,6 +348,8 @@ Add to `.github/workflows/deploy.yml`:
 deploy:
   environment: production  # Require approval in Settings → Environments
 ```
+
+> ⚠️ If you enable a GitHub Actions environment, update your Azure federated credential subject to match `repo:<org>/<repo>:environment:<environment-name>`.
 
 ### Scheduled Deployments
 

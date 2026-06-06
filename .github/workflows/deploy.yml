@@ -72,7 +72,6 @@ jobs:
     name: Deploy to Azure
     needs: validate
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - uses: actions/checkout@v4
 

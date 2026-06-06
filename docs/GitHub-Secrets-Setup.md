@@ -183,7 +183,11 @@ az role assignment create \
 ### ❌ OIDC "Subject not recognized" error
 
 **Cause**: Federated credential configuration mismatch  
-**Solution**: Verify issuer and subject match:
+**Solution**: Verify issuer and subject match.  
+- If workflow jobs do **not** use a GitHub Actions environment, subject should typically be: `repo:<org>/<repo>:ref:refs/heads/main`
+- If workflow jobs use `environment: <name>`, subject must be: `repo:<org>/<repo>:environment:<name>`
+
+Then verify current credentials:
 ```bash
 az ad app federated-credential list \
   --id <AZURE_CLIENT_ID>

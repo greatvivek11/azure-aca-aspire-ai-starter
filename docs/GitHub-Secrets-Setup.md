@@ -189,6 +189,10 @@ az ad app federated-credential list \
   --id <AZURE_CLIENT_ID>
 ```
 
+Expected `subject` must match the workflow token exactly:
+- If workflow job does not set `environment`, use `repo:<org>/<repo>:ref:refs/heads/main`
+- If workflow job sets `environment: production`, use `repo:<org>/<repo>:environment:production`
+
 ### ❌ "ParentResourceNotFound" for userAssignedIdentities/federatedIdentityCredentials
 
 **Cause**: Using managed-identity command with a service principal appId/clientId, or wrong managed identity name/resource group  

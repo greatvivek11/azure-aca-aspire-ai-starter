@@ -84,7 +84,8 @@ deploy:
   name: Deploy to Azure
   needs: validate  # Wait for validation job to complete
   runs-on: ubuntu-latest
-  environment: production  # Require manual approval (optional)
+  # Add environment: production only if your federated credential subject
+  # is configured as repo:<org>/<repo>:environment:production
   steps:
     - Setup tools (azd, .NET, Node.js)
     - Authenticate to Azure (OpenID Connect)
@@ -347,7 +348,9 @@ Add to `.github/workflows/deploy.yml`:
 
 ```yaml
 deploy:
-  environment: production  # Require approval in Settings → Environments
+  # environment: production
+  # Note: If enabled, configure OIDC subject as
+  # repo:<org>/<repo>:environment:production in Entra ID
 ```
 
 ### Scheduled Deployments

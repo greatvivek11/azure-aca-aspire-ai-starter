@@ -61,6 +61,51 @@ az ad sp create-for-rbac \
 - `appId` → Set as `AZURE_CLIENT_ID`
 - `tenant` → Set as `AZURE_TENANT_ID`
 
+### 1.1 Required RBAC for CI Service Principal
+
+This repository's Bicep template creates `Microsoft.Authorization/roleAssignments`
+for Container Apps managed identities (AcrPull on ACR). Because of that, the CI
+service principal used by `azure/login` must have role-assignment write
+permissions at the deployment scope.
+
+Minimum required roles on the target resource group (recommended):
+- `Contributor`
+- `User Access Administrator`
+
+Broader alternative:
+- `Owner`
+
+Example (resource-group scope):
+
+```bash
+SUBSCRIPTION_ID="<subscription-id>"
+RESOURCE_GROUP="<resource-group>"
+APP_ID="<AZURE_CLIENT_ID>"
+
+SP_OBJECT_ID=$(az ad sp show --id "$APP_ID" --query id -o tsv)
+
+az role assignment create \
+  --assignee-object-id "$SP_OBJECT_ID" \
+  --assignee-principal-type ServicePrincipal \
+  --role "Contributor" \
+  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP"
+
+az role assignment create \
+  --assignee-object-id "$SP_OBJECT_ID" \
+  --assignee-principal-type ServicePrincipal \
+  --role "User Access Administrator" \
+  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP"
+```
+
+Verify:
+
+```bash
+az role assignment list \
+  --assignee-object-id "$SP_OBJECT_ID" \
+  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP" \
+  -o table
+```
+
 ### 2. Configure OIDC Trust (Recommended)
 
 Instead of storing credentials, use OIDC for secure, keyless authentication:

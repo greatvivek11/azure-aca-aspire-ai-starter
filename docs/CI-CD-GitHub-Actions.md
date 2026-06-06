@@ -169,6 +169,22 @@ The workflow uses **OpenID Connect (OIDC)** with `azure/login@v2` instead of sto
 
 **Setup**: See [GitHub-Secrets-Setup.md](./GitHub-Secrets-Setup.md) → "Configure OIDC Trust"
 
+### Required RBAC for CI Principal
+
+The workflow provisions infrastructure that includes role assignments for
+Container Apps to pull from ACR using managed identity. The CI service principal
+must therefore be allowed to create role assignments at deployment scope.
+
+Required on the target resource group:
+- `Contributor`
+- `User Access Administrator`
+
+Alternative:
+- `Owner`
+
+If this is missing, `azd provision` fails during validation with an error similar
+to: `Microsoft.Authorization/roleAssignments/write` not permitted.
+
 ---
 
 ## Pre-deployment Validation

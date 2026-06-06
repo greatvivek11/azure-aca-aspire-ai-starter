@@ -1,0 +1,128 @@
+name: Deploy to Azure Container Apps
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZD_ENVIRONMENT_NAME: ${{ secrets.AZD_ENVIRONMENT_NAME || 'copilot-maf-sbx' }}
+
+jobs:
+  validate:
+    name: Validate and Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Restore dependencies
+        run: dotnet restore copilot-sk.sln
+
+      - name: Build Backend
+        run: dotnet build copilot-sk.sln --configuration Release --no-restore
+
+      - name: Run Architecture Tests
+        run: dotnet test src/Backend.Tests/Backend.Tests.csproj --configuration Release --no-build --verbosity normal
+
+      - name: Build Frontend
+        working-directory: src/frontend
+        run: |
+          npm install
+          npm run build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            src/backend/bin/Release/
+            src/frontend/dist/
+            src/aspire/bin/Release/
+            src/worker/bin/Release/
+
+  deploy:
+    name: Deploy to Azure
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Azure Developer CLI
+        uses: Azure/setup-azd@v0
+        with:
+          version: latest
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Log in to Azure using OIDC
+        run: |
+          azd auth login `
+            --client-id "${{ secrets.AZURE_CLIENT_ID }}" `
+            --tenant-id "${{ secrets.AZURE_TENANT_ID }}" `
+            --use-oidc
+        shell: pwsh
+
+      - name: Validate Azure Environment
+        run: |
+          bash scripts/validate-azure-env.sh \
+            "${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+            "aihub-rg"
+
+      - name: Deploy with Azure Developer CLI
+        run: azd up --no-prompt
+        env:
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_MODEL_ID: ${{ secrets.AZURE_OPENAI_MODEL_ID }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+
+      - name: Get Deployment Summary
+        if: success()
+        run: |
+          echo "✅ Deployment successful!"
+          echo "Environment: ${{ env.AZD_ENVIRONMENT_NAME }}"
+          echo "Subscription: ${{ env.AZURE_SUBSCRIPTION_ID }}"
+
+      - name: Notify Deployment Status
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ job.status }}' === 'success' ? '✅ Success' : '❌ Failed';
+            console.log(`Deployment ${status}`);

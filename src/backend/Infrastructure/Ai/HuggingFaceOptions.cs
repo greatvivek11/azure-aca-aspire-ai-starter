@@ -1,9 +1,9 @@
 namespace AIHub.Backend.Infrastructure.Ai;
 
-public class HuggingFaceOptions
+public class AzureOpenAiOptions
 {
-    public const string SectionName = "HuggingFace";
-    
+    public const string SectionName = "AzureOpenAI";
+
     public string ApiKey { get; set; } = string.Empty;
     public string ModelId { get; set; } = string.Empty;
     public string Endpoint { get; set; } = string.Empty;

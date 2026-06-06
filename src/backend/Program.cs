@@ -1,13 +1,16 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Dapr.AspNetCore;
+using Microsoft.Data.SqlClient;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using AIHub.Backend.Features.Health;
 using AIHub.Backend.Features.AiPing;
 using AIHub.Backend.Infrastructure.Ai;
+using System.IO;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,31 +21,25 @@ builder.Services.AddDaprClient();
 builder.Services.AddHealthChecks();
 
 // Register configuration options
-builder.Services.Configure<AIHub.Backend.Infrastructure.Ai.HuggingFaceOptions>(
-    builder.Configuration.GetSection(AIHub.Backend.Infrastructure.Ai.HuggingFaceOptions.SectionName));
+builder.Services.Configure<AIHub.Backend.Infrastructure.Ai.AzureOpenAiOptions>(
+    builder.Configuration.GetSection(AIHub.Backend.Infrastructure.Ai.AzureOpenAiOptions.SectionName));
+
+// Validate Azure OpenAI settings during startup so misconfiguration fails fast.
+var azureOpenAiSettings = ResolveAzureOpenAiSettings(builder.Configuration);
+Console.WriteLine("Azure OpenAI Configuration:");
+Console.WriteLine("API Key: Set");
+Console.WriteLine($"Model ID: {azureOpenAiSettings.ModelId}");
+Console.WriteLine($"Endpoint: {azureOpenAiSettings.Endpoint}");
 
 // Add Semantic Kernel
 builder.Services.AddKernel();
-builder.Services.AddSingleton<Kernel>(sp =>
+builder.Services.AddSingleton<Kernel>(_ =>
 {
-    // Configure Semantic Kernel to use Hugging Face Inference Router
-    var options = sp.GetRequiredService<IOptions<AIHub.Backend.Infrastructure.Ai.HuggingFaceOptions>>().Value;
-    
-    // Prioritize environment variables over configuration options
-    var huggingFaceApiKey = Environment.GetEnvironmentVariable("HUGGINGFACE_API_KEY") ?? options.ApiKey;
-    var huggingFaceModelId = Environment.GetEnvironmentVariable("HUGGINGFACE_MODEL_ID") ?? options.ModelId;
-    var huggingFaceEndpoint = Environment.GetEnvironmentVariable("HUGGINGFACE_ENDPOINT") ?? options.Endpoint;
-    
-    Console.WriteLine($"Hugging Face Configuration:");
-    Console.WriteLine($"API Key: {(!string.IsNullOrEmpty(huggingFaceApiKey) ? "Set" : "Not set")}");
-    Console.WriteLine($"Model ID: {huggingFaceModelId}");
-    Console.WriteLine($"Endpoint: {huggingFaceEndpoint}");
-    
     var kernel = Kernel.CreateBuilder()
         .AddOpenAIChatCompletion(
-            modelId: huggingFaceModelId,
-            apiKey: huggingFaceApiKey,
-            endpoint: new Uri(huggingFaceEndpoint))
+            modelId: azureOpenAiSettings.ModelId,
+            apiKey: azureOpenAiSettings.ApiKey,
+            endpoint: azureOpenAiSettings.Endpoint)
         .Build();
     
     return kernel;
@@ -52,6 +49,8 @@ builder.Services.AddSingleton<Kernel>(sp =>
 builder.Services.AddSingleton<IAiService, SemanticKernelService>();
 
 var app = builder.Build();
+var sqlConnectionString = GetSqlConnectionString(app.Configuration);
+await EnsureSqlSchemaAsync(sqlConnectionString);
 
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
@@ -67,6 +66,227 @@ app.MapSubscribeHandler();
 app.MapHealthEndpoint();
 app.MapAiPingEndpoint();
 
+app.MapGet("/v1/customers", async () =>
+{
+    var customers = await GetCustomersAsync(sqlConnectionString);
+    return Results.Ok(customers);
+});
+
+app.MapPost("/v1/customers", async (CreateCustomerRequest request) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Name)
+        || string.IsNullOrWhiteSpace(request.Email)
+        || string.IsNullOrWhiteSpace(request.City)
+        || string.IsNullOrWhiteSpace(request.Status))
+    {
+        return Results.BadRequest("Name, email, city, and status are required.");
+    }
+
+    var id = await CreateCustomerAsync(sqlConnectionString, request);
+    return Results.Created($"/v1/customers/{id}", new { id });
+});
+
+app.MapPut("/v1/customers/{id:int}", async (int id, UpdateCustomerRequest request) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Name)
+        || string.IsNullOrWhiteSpace(request.Email)
+        || string.IsNullOrWhiteSpace(request.City)
+        || string.IsNullOrWhiteSpace(request.Status))
+    {
+        return Results.BadRequest("Name, email, city, and status are required.");
+    }
+
+    var updated = await UpdateCustomerAsync(sqlConnectionString, id, request);
+    return updated ? Results.NoContent() : Results.NotFound();
+});
+
+app.MapDelete("/v1/customers/{id:int}", async (int id) =>
+{
+    var deleted = await DeleteCustomerAsync(sqlConnectionString, id);
+    return deleted ? Results.NoContent() : Results.NotFound();
+});
+
 app.MapGet("/", () => "AI Hub Backend is running!");
 
 app.Run();
+
+static AzureOpenAiSettings ResolveAzureOpenAiSettings(IConfiguration configuration)
+{
+    var apiKey = Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY")
+        ?? configuration[$"{AzureOpenAiOptions.SectionName}:ApiKey"];
+    var modelId = Environment.GetEnvironmentVariable("AZURE_OPENAI_MODEL_ID")
+        ?? configuration[$"{AzureOpenAiOptions.SectionName}:ModelId"];
+    var endpointText = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")
+        ?? configuration[$"{AzureOpenAiOptions.SectionName}:Endpoint"];
+
+    var issues = new List<string>();
+
+    if (string.IsNullOrWhiteSpace(apiKey))
+    {
+        issues.Add("AZURE_OPENAI_API_KEY is missing");
+    }
+
+    if (string.IsNullOrWhiteSpace(modelId))
+    {
+        issues.Add("AZURE_OPENAI_MODEL_ID is missing");
+    }
+
+    if (string.IsNullOrWhiteSpace(endpointText))
+    {
+        issues.Add("AZURE_OPENAI_ENDPOINT is missing");
+    }
+
+    if (!string.IsNullOrWhiteSpace(endpointText) && !Uri.TryCreate(endpointText, UriKind.Absolute, out _))
+    {
+        issues.Add("AZURE_OPENAI_ENDPOINT is not a valid absolute URI");
+    }
+
+    if (issues.Count > 0)
+    {
+        throw new InvalidOperationException(
+            "Azure OpenAI configuration is invalid: "
+            + string.Join("; ", issues)
+            + ". Configure these values in Aspire parameters, environment variables, or appsettings.");
+    }
+
+    return new AzureOpenAiSettings(
+        apiKey!,
+        modelId!,
+        new Uri(endpointText!, UriKind.Absolute));
+}
+
+static string GetSqlConnectionString(IConfiguration configuration)
+{
+    var connectionString = configuration.GetConnectionString("SqlServer")
+        ?? Environment.GetEnvironmentVariable("ConnectionStrings__SqlServer");
+
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException(
+            "SQL connection string is missing. Set ConnectionStrings:SqlServer or ConnectionStrings__SqlServer.");
+    }
+
+    return connectionString;
+}
+
+static async Task EnsureSqlSchemaAsync(string connectionString)
+{
+    var connectionBuilder = new SqlConnectionStringBuilder(connectionString);
+    var databaseName = connectionBuilder.InitialCatalog;
+
+    if (string.IsNullOrWhiteSpace(databaseName))
+    {
+        throw new InvalidOperationException("SQL connection string must include a database name.");
+    }
+
+    var masterConnectionBuilder = new SqlConnectionStringBuilder(connectionString)
+    {
+        InitialCatalog = "master"
+    };
+
+    await using (var masterConnection = new SqlConnection(masterConnectionBuilder.ConnectionString))
+    {
+        await masterConnection.OpenAsync();
+        var safeDatabaseName = databaseName.Replace("'", "''");
+        await using var createDatabaseCommand = masterConnection.CreateCommand();
+        createDatabaseCommand.CommandText =
+            $"IF DB_ID(N'{safeDatabaseName}') IS NULL CREATE DATABASE [{databaseName.Replace("]", "]]" )}];";
+        await createDatabaseCommand.ExecuteNonQueryAsync();
+    }
+
+    await using var connection = new SqlConnection(connectionString);
+    await connection.OpenAsync();
+
+    var seedScriptPath = Path.Combine(AppContext.BaseDirectory, "Infrastructure", "Sql", "seed.sql");
+    var seedScript = await File.ReadAllTextAsync(seedScriptPath);
+
+    await using var seedCommand = connection.CreateCommand();
+    seedCommand.CommandText = seedScript;
+    await seedCommand.ExecuteNonQueryAsync();
+}
+
+static async Task<List<CustomerRecord>> GetCustomersAsync(string connectionString)
+{
+    var customers = new List<CustomerRecord>();
+    await using var connection = new SqlConnection(connectionString);
+    await connection.OpenAsync();
+
+    await using var command = connection.CreateCommand();
+    command.CommandText = @"
+SELECT Id, Name, Email, City, Status
+FROM dbo.Customers
+ORDER BY Id;";
+
+    await using var reader = await command.ExecuteReaderAsync();
+    while (await reader.ReadAsync())
+    {
+        customers.Add(new CustomerRecord(
+            reader.GetInt32(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetString(4)));
+    }
+
+    return customers;
+}
+
+static async Task<int> CreateCustomerAsync(string connectionString, CreateCustomerRequest request)
+{
+    await using var connection = new SqlConnection(connectionString);
+    await connection.OpenAsync();
+
+    await using var command = connection.CreateCommand();
+    command.CommandText = @"
+INSERT INTO dbo.Customers (Name, Email, City, Status)
+OUTPUT INSERTED.Id
+VALUES (@name, @email, @city, @status);";
+    command.Parameters.AddWithValue("@name", request.Name.Trim());
+    command.Parameters.AddWithValue("@email", request.Email.Trim());
+    command.Parameters.AddWithValue("@city", request.City.Trim());
+    command.Parameters.AddWithValue("@status", request.Status.Trim());
+
+    var result = await command.ExecuteScalarAsync();
+    return Convert.ToInt32(result);
+}
+
+static async Task<bool> UpdateCustomerAsync(string connectionString, int id, UpdateCustomerRequest request)
+{
+    await using var connection = new SqlConnection(connectionString);
+    await connection.OpenAsync();
+
+    await using var command = connection.CreateCommand();
+    command.CommandText = @"
+UPDATE dbo.Customers
+SET Name = @name,
+    Email = @email,
+    City = @city,
+    Status = @status
+WHERE Id = @id;";
+    command.Parameters.AddWithValue("@id", id);
+    command.Parameters.AddWithValue("@name", request.Name.Trim());
+    command.Parameters.AddWithValue("@email", request.Email.Trim());
+    command.Parameters.AddWithValue("@city", request.City.Trim());
+    command.Parameters.AddWithValue("@status", request.Status.Trim());
+
+    var affected = await command.ExecuteNonQueryAsync();
+    return affected > 0;
+}
+
+static async Task<bool> DeleteCustomerAsync(string connectionString, int id)
+{
+    await using var connection = new SqlConnection(connectionString);
+    await connection.OpenAsync();
+
+    await using var command = connection.CreateCommand();
+    command.CommandText = "DELETE FROM dbo.Customers WHERE Id = @id;";
+    command.Parameters.AddWithValue("@id", id);
+
+    var affected = await command.ExecuteNonQueryAsync();
+    return affected > 0;
+}
+
+internal sealed record AzureOpenAiSettings(string ApiKey, string ModelId, Uri Endpoint);
+internal sealed record CustomerRecord(int Id, string Name, string Email, string City, string Status);
+internal sealed record CreateCustomerRequest(string Name, string Email, string City, string Status);
+internal sealed record UpdateCustomerRequest(string Name, string Email, string City, string Status);

@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/devcontainers/dotnet:dev-9.0-noble
+FROM mcr.microsoft.com/devcontainers/dotnet:dev-10.0-noble
 
 
 # Install SQL Tools: SQLPackage and sqlcmd

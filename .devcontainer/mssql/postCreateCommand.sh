@@ -1,64 +1,60 @@
 #!/bin/bash
-dacpac="false"
-sqlfiles="false"
+set -euo pipefail
+
 SApassword=$1
 dacpath=$2
 sqlpath=$3
+SQLSERVER_HOST=${SQLSERVER_HOST:-db}
+SQLSERVER_PORT=${SQLSERVER_PORT:-1433}
+SQLSERVER="${SQLSERVER_HOST},${SQLSERVER_PORT}"
 
-echo "SELECT * FROM SYS.DATABASES" | dd of=testsqlconnection.sql
-for i in {1..60};
-do
-    /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P $SApassword -d master -i testsqlconnection.sql > /dev/null
-    if [ $? -eq 0 ]
-    then
-        echo "SQL server ready"
+SQLCMD=""
+if command -v sqlcmd >/dev/null 2>&1; then
+    SQLCMD=$(command -v sqlcmd)
+elif [ -x /opt/mssql-tools18/bin/sqlcmd ]; then
+    SQLCMD=/opt/mssql-tools18/bin/sqlcmd
+elif [ -x /opt/mssql-tools/bin/sqlcmd ]; then
+    SQLCMD=/opt/mssql-tools/bin/sqlcmd
+fi
+
+if [ -z "$SQLCMD" ]; then
+    echo "sqlcmd is not available. Skipping local SQL initialization."
+    exit 0
+fi
+
+cat <<'EOF' > testsqlconnection.sql
+SELECT name FROM sys.databases;
+EOF
+
+for i in {1..60}; do
+    if "$SQLCMD" -S "$SQLSERVER" -U sa -P "$SApassword" -d master -i testsqlconnection.sql >/dev/null 2>&1; then
+        echo "SQL server ready at ${SQLSERVER}."
         break
-    else
-        echo "Not ready yet..."
-        sleep 1
     fi
-done
-rm testsqlconnection.sql
 
-for f in $dacpath/*
-do
-    if [ $f == $dacpath/*".dacpac" ]
-    then
-        dacpac="true"
-        echo "Found dacpac $f"
+    if [ "$i" -eq 60 ]; then
+        echo "SQL server did not become ready in time."
+        rm -f testsqlconnection.sql
+        exit 1
     fi
+
+    echo "Waiting for SQL server at ${SQLSERVER}..."
+    sleep 1
 done
 
-for f in $sqlpath/*
-do
-    if [ $f == $sqlpath/*".sql" ]
-    then
-        sqlfiles="true"
-        echo "Found SQL file $f"
-    fi
+rm -f testsqlconnection.sql
+
+shopt -s nullglob
+sql_files=("$sqlpath"/*.sql)
+dacpac_files=("$dacpath"/*.dacpac)
+
+for f in "${sql_files[@]}"; do
+    echo "Executing $f"
+    "$SQLCMD" -S "$SQLSERVER" -U sa -P "$SApassword" -d master -i "$f"
 done
 
-if [ $sqlfiles == "true" ]
-then
-    for f in $sqlpath/*
-    do
-        if [ $f == $sqlpath/*".sql" ]
-        then
-            echo "Executing $f"
-            /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P $SApassword -d master -i $f
-        fi
-    done
-fi
-
-if [ $dacpac == "true" ]
-then
-    for f in $dacpath/*
-    do
-        if [ $f == $dacpath/*".dacpac" ]
-        then
-            dbname=$(basename $f ".dacpac")
-            echo "Deploying dacpac $f"
-            /opt/sqlpackage/sqlpackage /Action:Publish /SourceFile:$f /TargetServerName:localhost /TargetDatabaseName:$dbname /TargetUser:sa /TargetPassword:$SApassword
-        fi
-    done
-fi
+for f in "${dacpac_files[@]}"; do
+    dbname=$(basename "$f" ".dacpac")
+    echo "Deploying dacpac $f"
+    /opt/sqlpackage/sqlpackage /Action:Publish /SourceFile:"$f" /TargetServerName:"$SQLSERVER_HOST" /TargetDatabaseName:"$dbname" /TargetUser:sa /TargetPassword:"$SApassword"
+done

@@ -1,62 +1,61 @@
 {
-  "name": ".NET Aspire Development Environment",
-  "dockerComposeFile": "docker-compose.yml",
-  "service": "app",
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
-  
-  "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {
-      "enableNonRootDocker": true,
-      "moby": true
-    },
-    "ghcr.io/devcontainers/features/node:1": {
-      "version": "lts"
-    },
-    "ghcr.io/dapr/cli/dapr-cli:0": {},
-    "ghcr.io/devcontainers-extra/features/typescript:2": {}
-  },
-  
-  "hostRequirements": {
-    "cpus": 8,
-    "memory": "11gb",
-    "storage": "64gb"
-  },
-  
-  "onCreateCommand": "dotnet new install Aspire.ProjectTemplates --force",
-  "postCreateCommand": "bash .devcontainer/mssql/postCreateCommand.sh 'P@ssw0rd' './bin/Debug/' './.devcontainer/mssql/' && dapr init && dotnet dev-certs https --trust",
-  "postStartCommand": "dotnet dev-certs https --trust",
-  
-  "customizations": {
-    "vscode": {
-      "settings": {
-        "mssql.connections": [
-          {
-            "server": "localhost,1433",
-            "database": "",
-            "authenticationType": "SqlLogin",
-            "user": "sa",
-            "password": "P@ssw0rd",
-            "emptyPasswordInput": false,
-            "savePassword": false,
-            "profileName": "mssql-container"
-          }
-        ]
-      },
-      "extensions": [
-        "ms-dotnettools.csdevkit",
-        "ms-dotnettools.csharp",
-        "ms-mssql.mssql",
-        "ms-azuretools.vscode-docker",
-        "ms-vscode-remote.remote-containers",
-        "biomejs.biome",
-        "kilocode.kilo-code"
-      ]
-    }
-  },
-  
-  "forwardPorts": [],
-  "portsAttributes": {
-    "8443": { "label": "Frontend" },
-    "1433": { "label": "SQL Server" }
-  }
+	"name": ".NET Aspire Development Environment",
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "app",
+	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+
+	"features": {
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {
+			"enableNonRootDocker": true,
+			"moby": true
+		},
+		"ghcr.io/devcontainers/features/node:1": {
+			"version": "lts"
+		},
+		"ghcr.io/dapr/cli/dapr-cli:0": {},
+		"ghcr.io/devcontainers-extra/features/typescript:2": {}
+	},
+
+	"hostRequirements": {
+		"cpus": 8,
+		"memory": "11gb",
+		"storage": "64gb"
+	},
+
+	"onCreateCommand": "dotnet new install Aspire.ProjectTemplates --force",
+	"postCreateCommand": "bash .devcontainer/install-dev-tools.sh && (test -x \"$HOME/.dapr/bin/daprd\" || dapr init --slim) && dotnet dev-certs https --trust",
+	"postStartCommand": "dotnet dev-certs https --trust",
+
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"mssql.connections": [
+					{
+						"server": "localhost,1433",
+						"database": "",
+						"authenticationType": "SqlLogin",
+						"user": "sa",
+						"password": "P@ssw0rd",
+						"emptyPasswordInput": false,
+						"savePassword": false,
+						"profileName": "mssql-container"
+					}
+				]
+			},
+			"extensions": [
+				"ms-dotnettools.csdevkit",
+				"ms-dotnettools.csharp",
+				"ms-mssql.mssql",
+				"ms-azuretools.vscode-docker",
+				"ms-vscode-remote.remote-containers",
+				"biomejs.biome"
+			]
+		}
+	},
+
+	"forwardPorts": [1433],
+	"portsAttributes": {
+		"8443": { "label": "Frontend" },
+		"1433": { "label": "SQL Server" }
+	}
 }

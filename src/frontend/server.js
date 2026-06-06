@@ -1,78 +1,112 @@
-const express = require('express');
-const app = express();
-const port = 3000;
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { serve } from "@hono/node-server";
+import { serveStatic } from "@hono/node-server/serve-static";
+import { Hono } from "hono";
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'Healthy', service: 'Frontend' });
+const app = new Hono();
+const port = Number(process.env.PORT || 3000);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const indexHtmlPath = path.join(__dirname, "dist", "index.html");
+
+const backendApiCandidates = [
+	process.env.BACKEND_API_BASE_URL,
+	process.env.BACKEND_DAPR_BASE_URL,
+	"http://localhost:3500/v1.0/invoke/aihub-backend/method",
+	"http://backend:8080",
+	"http://localhost:8080",
+	"http://host.docker.internal:8080"
+].filter(Boolean);
+
+async function proxyToBackend(pathSuffix, options) {
+	let lastError = null;
+
+	for (const baseUrl of backendApiCandidates) {
+		try {
+			const response = await fetch(`${baseUrl}${pathSuffix}`, options);
+			return response;
+		} catch (error) {
+			lastError = error;
+		}
+	}
+
+	const attempted = backendApiCandidates.join(", ");
+	throw lastError ?? new Error(`No backend API base URLs configured. Tried: ${attempted}`);
+}
+
+app.get("/health", (c) => c.json({ status: "Healthy", service: "Frontend" }));
+
+app.get("/api/customers", async (c) => {
+	try {
+		const response = await proxyToBackend("/v1/customers");
+		const responseBody = await response.text();
+		return c.body(responseBody, response.status, {
+			"content-type": response.headers.get("content-type") ?? "application/json"
+		});
+	} catch (error) {
+		return c.json({ message: "Failed to fetch customers", error: error.message }, 500);
+	}
 });
 
-// Endpoint to check backend health via Dapr
-app.get('/check-backend-health', async (req, res) => {
-  try {
-    // Using Dapr service invocation to call backend health endpoint
-    const response = await fetch('http://localhost:3500/v1.0/invoke/aihub-backend/method/v1/health');
-    const data = await response.text();
-    res.json({ 
-      status: 'Backend Health Check Successful', 
-      backendResponse: data 
-    });
-  } catch (error) {
-    res.status(500).json({ 
-      status: 'Backend Health Check Failed', 
-      error: error.message 
-    });
-  }
+app.post("/api/customers", async (c) => {
+	try {
+		const body = await c.req.json();
+		const response = await proxyToBackend("/v1/customers", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(body)
+		});
+		const responseBody = await response.text();
+		return c.body(responseBody, response.status, {
+			"content-type": response.headers.get("content-type") ?? "application/json"
+		});
+	} catch (error) {
+		return c.json({ message: "Failed to create customer", error: error.message }, 500);
+	}
 });
 
-// Endpoint to check worker health via Dapr
-app.get('/check-worker-health', async (req, res) => {
-  try {
-    // Using Dapr service invocation to call worker health endpoint
-    const response = await fetch('http://localhost:3500/v1.0/invoke/aihub-worker/method/v1/health');
-    const data = await response.text();
-    res.json({ 
-      status: 'Worker Health Check Successful', 
-      workerResponse: data 
-    });
-  } catch (error) {
-    res.status(500).json({ 
-      status: 'Worker Health Check Failed', 
-      error: error.message 
-    });
-  }
+app.put("/api/customers/:id", async (c) => {
+	try {
+		const body = await c.req.json();
+		const id = c.req.param("id");
+		const response = await proxyToBackend(`/v1/customers/${id}`, {
+			method: "PUT",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(body)
+		});
+		const responseBody = await response.text();
+		return c.body(responseBody, response.status, {
+			"content-type": response.headers.get("content-type") ?? "application/json"
+		});
+	} catch (error) {
+		return c.json({ message: "Failed to update customer", error: error.message }, 500);
+	}
 });
 
-// Main page
-app.get('/', (req, res) => {
-  res.send(`
-    <h1>AI Hub - System Status</h1>
-    <div>
-      <h2>Backend API Status</h2>
-      <button onclick="checkBackendHealth()">Check Backend Health</button>
-      <div id="backend-status"></div>
-    </div>
-    <div>
-      <h2>Worker Service Status</h2>
-      <button onclick="checkWorkerHealth()">Check Worker Health</button>
-      <div id="worker-status"></div>
-    </div>
-    <script>
-      async function checkBackendHealth() {
-        const response = await fetch('/check-backend-health');
-        const data = await response.json();
-        document.getElementById('backend-status').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
-      }
-      
-      async function checkWorkerHealth() {
-        const response = await fetch('/check-worker-health');
-        const data = await response.json();
-        document.getElementById('worker-status').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
-      }
-    </script>
-  `);
+app.delete("/api/customers/:id", async (c) => {
+	try {
+		const id = c.req.param("id");
+		const response = await proxyToBackend(`/v1/customers/${id}`, {
+			method: "DELETE"
+		});
+		const responseBody = await response.text();
+		return c.body(responseBody, response.status, {
+			"content-type": response.headers.get("content-type") ?? "application/json"
+		});
+	} catch (error) {
+		return c.json({ message: "Failed to delete customer", error: error.message }, 500);
+	}
 });
 
-app.listen(port, () => {
-  console.log('Frontend server running at http://localhost:' + port);
+app.use("/*", serveStatic({ root: "./dist" }));
+
+app.get("*", async (c) => {
+	const html = await readFile(indexHtmlPath, "utf8");
+	return c.html(html);
+});
+
+serve({ fetch: app.fetch, port }, (info) => {
+	console.log(`Frontend server running at http://localhost:${info.port}`);
 });

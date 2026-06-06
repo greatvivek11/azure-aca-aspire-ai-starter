@@ -1,0 +1,24 @@
+name: copilot-sk-azure
+metadata:
+  template: copilot-sk-azure@0.1.0
+
+infra:
+  provider: bicep
+  path: infra
+
+services:
+  backend:
+    project: ./src/backend
+    host: containerapp
+    language: dotnet
+  frontend:
+    project: ./src/frontend
+    host: containerapp
+    language: js
+  worker:
+    project: ./src/worker
+    host: containerapp
+    language: dotnet
+
+pipeline:
+  provider: github

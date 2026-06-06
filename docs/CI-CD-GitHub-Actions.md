@@ -43,10 +43,11 @@ The CI/CD pipeline automates:
 │  │ 3. Setup .NET 10 SDK                                │   │
 │  │ 4. Setup Node.js 20                                 │   │
 │  │ 5. Authenticate to Azure via OIDC                   │   │
-│  │ 6. Validate Azure environment                       │   │
-│  │ 7. Run: azd up --no-prompt                          │   │
-│  │ 8. Inject Azure OpenAI secrets                      │   │
-│  │ 9. Display deployment summary                       │   │
+│  │ 6. Configure azd to use Azure CLI auth              │   │
+│  │ 7. Validate Azure environment                        │   │
+│  │ 8. Run: azd up --no-prompt                           │   │
+│  │ 9. Inject Azure OpenAI secrets                       │   │
+│  │ 10. Display deployment summary                       │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -89,6 +90,7 @@ deploy:
   steps:
     - Setup tools (azd, .NET, Node.js)
     - Authenticate to Azure (OpenID Connect)
+    - Configure azd to use Azure CLI auth
     - Validate Azure environment
     - Run: azd up --no-prompt
     - Inject secrets from GitHub Secrets
@@ -138,6 +140,15 @@ These become Container Apps environment variables and are passed to the backend 
 ---
 
 ## Azure Authentication (OIDC)
+
+`azure/login` authenticates Azure CLI for the current job. `azd` uses its own auth
+mode unless configured, so the workflow sets:
+
+```bash
+azd config set auth.useAzCliAuth true
+```
+
+This makes `azd up` reuse the Azure CLI OIDC session from `azure/login`.
 
 The workflow uses **OpenID Connect (OIDC)** with `azure/login@v2` instead of storing credentials:
 

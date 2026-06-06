@@ -177,6 +177,7 @@ Edit `scripts/validate-azure-env.sh` or `.ps1` to add more checks.
 |-------|----------|
 | **Secrets not found in workflow** | Go to Settings → Secrets and verify all secrets are configured |
 | **"OIDC authentication failed"** | Check that service principal has Contributor role on resource group |
+| **"azd not logged in"** | Add `azd config set auth.useAzCliAuth true` after `azure/login` in workflow |
 | **"azd up failed"** | Check `AZD_ENVIRONMENT_NAME` environment variable; run validation script first |
 | **Tests fail in CI but pass locally** | Ensure Release configuration: `dotnet test --configuration Release` |
 | **Deployment times out** | Check Azure Portal → Container Apps for errors; review Dapr sidecars |

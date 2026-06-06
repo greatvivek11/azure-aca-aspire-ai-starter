@@ -95,6 +95,12 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Configure azd to use Azure CLI auth
+        run: azd config set auth.useAzCliAuth true
+
+      - name: Verify Azure CLI context
+        run: az account show --output table
+
       - name: Validate Azure Environment
         run: |
           bash scripts/validate-azure-env.sh \

@@ -15,9 +15,10 @@ var acrPullRoleDefinitionId = subscriptionResourceId(
   '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 )
 var defaultContainerImage = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
-var backendAppName = '${baseName}-backend'
-var frontendAppName = '${baseName}-frontend'
-var workerAppName = '${baseName}-worker'
+var shortId = take(uniqueString(resourceGroup().id), 6)
+var backendAppName = 'backend-${shortId}'
+var frontendAppName = 'frontend-${shortId}'
+var workerAppName = 'worker-${shortId}'
 
 // Log Analytics is required for ACA diagnostics and troubleshooting.
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {

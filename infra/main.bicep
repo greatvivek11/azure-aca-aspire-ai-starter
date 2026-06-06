@@ -86,12 +86,6 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
         targetPort: 8080
         transport: 'auto'
       }
-      registries: [
-        {
-          server: containerRegistry.properties.loginServer
-          identity: 'system'
-        }
-      ]
     }
     template: {
       containers: [
@@ -105,7 +99,7 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       scale: {
-        minReplicas: 1
+        minReplicas: 0
         maxReplicas: 2
       }
     }
@@ -131,12 +125,6 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
         targetPort: 3000
         transport: 'auto'
       }
-      registries: [
-        {
-          server: containerRegistry.properties.loginServer
-          identity: 'system'
-        }
-      ]
     }
     template: {
       containers: [
@@ -156,7 +144,7 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       scale: {
-        minReplicas: 1
+        minReplicas: 0
         maxReplicas: 2
       }
     }
@@ -177,12 +165,6 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
     managedEnvironmentId: acaEnvironment.id
     configuration: {
       activeRevisionsMode: 'Single'
-      registries: [
-        {
-          server: containerRegistry.properties.loginServer
-          identity: 'system'
-        }
-      ]
     }
     template: {
       containers: [
@@ -196,7 +178,7 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       scale: {
-        minReplicas: 1
+        minReplicas: 0
         maxReplicas: 2
       }
     }

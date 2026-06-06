@@ -143,8 +143,7 @@ The workflow uses **OpenID Connect (OIDC)** instead of storing credentials:
 ```powershell
 azd auth login `
   --client-id "${{ secrets.AZURE_CLIENT_ID }}" `
-  --tenant-id "${{ secrets.AZURE_TENANT_ID }}" `
-  --use-oidc
+  --tenant-id "${{ secrets.AZURE_TENANT_ID }}"
 ```
 
 **Benefits:**

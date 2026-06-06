@@ -138,12 +138,15 @@ These become Container Apps environment variables and are passed to the backend 
 
 ## Azure Authentication (OIDC)
 
-The workflow uses **OpenID Connect (OIDC)** instead of storing credentials:
+The workflow uses **OpenID Connect (OIDC)** with `azure/login@v2` instead of storing credentials:
 
-```powershell
-azd auth login `
-  --client-id "${{ secrets.AZURE_CLIENT_ID }}" `
-  --tenant-id "${{ secrets.AZURE_TENANT_ID }}"
+```yaml
+- name: Log in to Azure using OIDC
+  uses: azure/login@v2
+  with:
+    client-id: ${{ secrets.AZURE_CLIENT_ID }}
+    tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+    subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 ```
 
 **Benefits:**

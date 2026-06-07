@@ -72,6 +72,11 @@
 			"netCore": {
 				"appProject": "${workspaceFolder}/src/aspire/aspire.csproj"
 			}
+		},
+		{
+			"label": "noop",
+			"type": "shell",
+			"command": "true"
 		}
 	]
 }

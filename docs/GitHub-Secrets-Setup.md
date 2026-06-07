@@ -37,6 +37,15 @@ These secrets are injected into the Container Apps environment at deployment tim
 | `AZURE_OPENAI_MODEL_ID` | Deployed model name | Azure Portal → OpenAI resource → Model deployments |
 | `AZURE_OPENAI_ENDPOINT` | Azure OpenAI endpoint URL | Azure Portal → OpenAI resource → Keys and Endpoint |
 
+### SQL Credentials (Required for Provisioning)
+
+These secrets are used by Bicep during `azd provision` to create Azure SQL Server/Database and inject the backend SQL connection string into Container Apps secrets.
+
+| Secret Name | Description | Example |
+|---|---|---|
+| `AZURE_SQL_ADMIN_LOGIN` | Azure SQL server admin username | `sqladmincopilot` |
+| `AZURE_SQL_ADMIN_PASSWORD` | Azure SQL server admin password | `Use-a-strong-password-here` |
+
 ### Deployment Configuration (Optional)
 
 | Secret Name | Description | Default |
@@ -168,6 +177,12 @@ AZURE_TENANT_ID: <tenant-from-service-principal>
 AZURE_OPENAI_API_KEY: <your-openai-api-key>
 AZURE_OPENAI_MODEL_ID: <deployed-model-name> (e.g., gpt-4.1)
 AZURE_OPENAI_ENDPOINT: <your-openai-endpoint>
+```
+
+#### SQL Provisioning Secrets:
+```
+AZURE_SQL_ADMIN_LOGIN: <azure-sql-admin-username>
+AZURE_SQL_ADMIN_PASSWORD: <azure-sql-admin-password>
 ```
 
 #### Optional Configuration:

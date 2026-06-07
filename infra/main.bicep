@@ -9,6 +9,16 @@ param environmentName string = 'dev'
 @description('Optional tags applied to all resources.')
 param tags object = {}
 
+@description('SQL admin login for Azure SQL server.')
+param sqlAdminLogin string
+
+@secure()
+@description('SQL admin password for Azure SQL server.')
+param sqlAdminPassword string
+
+@description('Azure SQL database name used by backend API.')
+param sqlDatabaseName string = 'copilotsk'
+
 var baseName = 'aih-${environmentName}-${uniqueString(resourceGroup().id)}'
 var acrPullRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
@@ -20,6 +30,7 @@ var backendAppName = 'backend-${shortId}'
 var frontendAppName = 'frontend-${shortId}'
 var workerAppName = 'worker-${shortId}'
 var containerAppsManagedIdentityName = '${baseName}-cai'
+var sqlServerName = take('${baseName}-sql', 63)
 
 // Log Analytics is required for ACA diagnostics and troubleshooting.
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
@@ -83,6 +94,44 @@ resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-
     principalId: containerAppsManagedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: acrPullRoleDefinitionId
+  }
+}
+
+// Azure SQL logical server for backend transactional data.
+resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = {
+  name: sqlServerName
+  location: location
+  tags: tags
+  properties: {
+    administratorLogin: sqlAdminLogin
+    administratorLoginPassword: sqlAdminPassword
+    publicNetworkAccess: 'Enabled'
+    minimalTlsVersion: '1.2'
+  }
+}
+
+// Allow Azure-hosted workloads (including ACA) to reach Azure SQL public endpoint.
+resource sqlAllowAzureServices 'Microsoft.Sql/servers/firewallRules@2023-08-01-preview' = {
+  parent: sqlServer
+  name: 'AllowAllAzureIPs'
+  properties: {
+    startIpAddress: '0.0.0.0'
+    endIpAddress: '0.0.0.0'
+  }
+}
+
+resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-08-01-preview' = {
+  parent: sqlServer
+  name: sqlDatabaseName
+  location: location
+  tags: tags
+  sku: {
+    name: 'Basic'
+    tier: 'Basic'
+  }
+  properties: {
+    collation: 'SQL_Latin1_General_CP1_CI_AS'
+    maxSizeBytes: 2147483648
   }
 }
 
@@ -249,5 +298,7 @@ output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerRegistry.properties.l
 output BACKEND_CONTAINER_APP_NAME string = backendApp.name
 output FRONTEND_CONTAINER_APP_NAME string = frontendApp.name
 output WORKER_CONTAINER_APP_NAME string = workerApp.name
+output AZURE_SQL_SERVER_NAME string = sqlServer.name
+output AZURE_SQL_DATABASE_NAME string = sqlDatabaseName
 output FRONTEND_URL string = 'https://${frontendApp.properties.configuration.ingress.fqdn}'
 output BACKEND_URL string = 'https://${backendApp.properties.configuration.ingress.fqdn}'

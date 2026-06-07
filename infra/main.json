@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "749103229638486616"
+      "templateHash": "3357600195175766012"
     }
   },
   "parameters": {
@@ -329,6 +329,18 @@
                 {
                   "name": "AZURE_OPENAI_ENDPOINT",
                   "value": "[parameters('azureOpenAiEndpoint')]"
+                },
+                {
+                  "name": "SQL_SERVER",
+                  "value": "[format('{0}{1}', variables('resolvedSqlServerName'), environment().suffixes.sqlServerHostname)]"
+                },
+                {
+                  "name": "SQL_DATABASE",
+                  "value": "[variables('resolvedSqlDatabaseName')]"
+                },
+                {
+                  "name": "AZURE_CLIENT_ID",
+                  "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').clientId]"
                 }
               ],
               "resources": {
@@ -498,6 +510,18 @@
     "BACKEND_CONTAINER_APP_NAME": {
       "type": "string",
       "value": "[variables('backendAppName')]"
+    },
+    "UAMI_CLIENT_ID": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').clientId]"
+    },
+    "UAMI_PRINCIPAL_ID": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').principalId]"
+    },
+    "UAMI_NAME": {
+      "type": "string",
+      "value": "[variables('containerAppsManagedIdentityName')]"
     },
     "FRONTEND_CONTAINER_APP_NAME": {
       "type": "string",

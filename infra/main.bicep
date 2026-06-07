@@ -248,6 +248,20 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'AZURE_OPENAI_ENDPOINT'
               value: azureOpenAiEndpoint
             }
+            // SQL server and database passed as plain env vars; auth uses Managed Identity.
+            {
+              name: 'SQL_SERVER'
+              value: '${resolvedSqlServerName}${environment().suffixes.sqlServerHostname}'
+            }
+            {
+              name: 'SQL_DATABASE'
+              value: resolvedSqlDatabaseName
+            }
+            // UAMI client ID used by SqlClient for Active Directory Managed Identity auth.
+            {
+              name: 'AZURE_CLIENT_ID'
+              value: containerAppsManagedIdentity.properties.clientId
+            }
           ]
           resources: {
             cpu: json('0.5')
@@ -386,6 +400,9 @@ output AZURE_CONTAINER_APPS_ENVIRONMENT_NAME string = acaEnvironment.name
 output AZURE_CONTAINER_REGISTRY_NAME string = containerRegistry.name
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerRegistry.properties.loginServer
 output BACKEND_CONTAINER_APP_NAME string = backendApp.name
+output UAMI_CLIENT_ID string = containerAppsManagedIdentity.properties.clientId
+output UAMI_PRINCIPAL_ID string = containerAppsManagedIdentity.properties.principalId
+output UAMI_NAME string = containerAppsManagedIdentity.name
 output FRONTEND_CONTAINER_APP_NAME string = frontendApp.name
 output WORKER_CONTAINER_APP_NAME string = workerApp.name
 output AZURE_SQL_SERVER_NAME string = resolvedSqlServerName

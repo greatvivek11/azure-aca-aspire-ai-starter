@@ -220,16 +220,39 @@ static AzureOpenAiSettings ResolveAzureOpenAiSettings(IConfiguration configurati
 
 static string GetSqlConnectionString(IConfiguration configuration)
 {
-    var connectionString = configuration.GetConnectionString("SqlServer")
+    // Prefer explicit connection string (local Aspire dev with SQL password).
+    var explicitConnectionString = configuration.GetConnectionString("SqlServer")
         ?? Environment.GetEnvironmentVariable("ConnectionStrings__SqlServer");
 
-    if (string.IsNullOrWhiteSpace(connectionString))
+    if (!string.IsNullOrWhiteSpace(explicitConnectionString))
     {
-        throw new InvalidOperationException(
-            "SQL connection string is missing. Set ConnectionStrings:SqlServer or ConnectionStrings__SqlServer.");
+        return explicitConnectionString;
     }
 
-    return connectionString;
+    // Production path: build connection string using Managed Identity.
+    // SQL_SERVER and SQL_DATABASE are injected by Bicep as plain env vars.
+    // AZURE_CLIENT_ID is the UAMI client ID, also injected by Bicep.
+    // SqlClient v5+ handles token acquisition automatically when
+    // Authentication=Active Directory Managed Identity is set.
+    var sqlServer = Environment.GetEnvironmentVariable("SQL_SERVER");
+    var sqlDatabase = Environment.GetEnvironmentVariable("SQL_DATABASE");
+    var uamiClientId = Environment.GetEnvironmentVariable("AZURE_CLIENT_ID");
+
+    var missing = new List<string>();
+    if (string.IsNullOrWhiteSpace(sqlServer)) missing.Add("SQL_SERVER");
+    if (string.IsNullOrWhiteSpace(sqlDatabase)) missing.Add("SQL_DATABASE");
+    if (string.IsNullOrWhiteSpace(uamiClientId)) missing.Add("AZURE_CLIENT_ID");
+
+    if (missing.Count > 0)
+    {
+        throw new InvalidOperationException(
+            $"SQL configuration is incomplete. Missing: {string.Join(", ", missing)}. "
+            + "Set ConnectionStrings:SqlServer for local dev, or SQL_SERVER + SQL_DATABASE + AZURE_CLIENT_ID for Azure.");
+    }
+
+    return $"Server=tcp:{sqlServer},1433;Initial Catalog={sqlDatabase};"
+         + $"Authentication=Active Directory Managed Identity;User Id={uamiClientId};"
+         + "Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;";
 }
 
 static async Task EnsureSqlSchemaAsync(string connectionString)

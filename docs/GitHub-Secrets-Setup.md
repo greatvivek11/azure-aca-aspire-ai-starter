@@ -46,11 +46,43 @@ These secrets are used by Bicep during `azd provision` to create Azure SQL Serve
 | `AZURE_SQL_ADMIN_LOGIN` | Azure SQL server admin username | `sqladmincopilot` |
 | `AZURE_SQL_ADMIN_PASSWORD` | Azure SQL server admin password | `Use-a-strong-password-here` |
 
+### SQL Entra AD Authentication (Optional)
+
+For mixed authentication (SQL login + Entra AD), optionally set these secrets:
+
+| Secret Name | Description | Example |
+|---|---|---|
+| `AZURE_SQL_ENTRA_ADMIN_LOGIN` | Entra AD admin email | `yourname@outlook.com` |
+| `AZURE_SQL_ENTRA_ADMIN_OBJECT_ID` | Azure AD object ID of the admin user | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
+
+**To find your Entra AD object ID:**
+```bash
+az ad user show --id "yourname@outlook.com" --query id -o tsv
+```
+
+**Note**: If these secrets are not set, only SQL authentication (login/password) will be available; Entra AD admin will not be configured.
+
+### SQL Provisioning Mode (Optional, Recommended for Free-Tier Reuse)
+
+Use these secrets when you want CI/CD to use a pre-created SQL database (for example, your free-lifetime offer) instead of provisioning a new one.
+
+| Secret Name | Description | Default |
+|---|---|---|
+| `SQL_PROVISIONING_MODE` | `provision` or `existing` | `provision` |
+| `AZURE_SQL_EXISTING_SERVER_NAME` | Existing SQL server name (without `.database.windows.net`) | empty |
+| `AZURE_SQL_EXISTING_DATABASE_NAME` | Existing SQL database name | empty |
+
+Behavior:
+- `provision`: Bicep creates SQL Server + DB and pipeline uses those outputs.
+- `existing`: Bicep skips SQL creation and pipeline configures backend using your existing server/database values.
+
+When `SQL_PROVISIONING_MODE=existing`, both existing-name secrets are required.
+
 ### Deployment Configuration (Optional)
 
 | Secret Name | Description | Default |
 |---|---|---|
-| `AZD_ENVIRONMENT_NAME` | Azure Developer CLI environment name | `copilot-maf-sbx` |
+| `AZD_ENVIRONMENT_NAME` | Azure Developer CLI environment name | `copilot-sk-azure` |
 
 ---
 
@@ -187,7 +219,11 @@ AZURE_SQL_ADMIN_PASSWORD: <azure-sql-admin-password>
 
 #### Optional Configuration:
 ```
-AZD_ENVIRONMENT_NAME: copilot-maf-sbx
+AZD_ENVIRONMENT_NAME: copilot-sk-azure
+SQL_PROVISIONING_MODE: provision
+# Required only when SQL_PROVISIONING_MODE=existing
+AZURE_SQL_EXISTING_SERVER_NAME: <existing-sql-server-name>
+AZURE_SQL_EXISTING_DATABASE_NAME: <existing-database-name>
 ```
 
 ---

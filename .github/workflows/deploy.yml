@@ -24,7 +24,10 @@ env:
   AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
   AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
   AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-  AZD_ENVIRONMENT_NAME: ${{ secrets.AZD_ENVIRONMENT_NAME || 'copilot-maf-sbx' }}
+  AZD_ENVIRONMENT_NAME: ${{ secrets.AZD_ENVIRONMENT_NAME || 'copilot-sk-azure' }}
+  SQL_PROVISIONING_MODE: ${{ secrets.SQL_PROVISIONING_MODE || 'provision' }}
+  AZURE_SQL_EXISTING_SERVER_NAME: ${{ secrets.AZURE_SQL_EXISTING_SERVER_NAME || '' }}
+  AZURE_SQL_EXISTING_DATABASE_NAME: ${{ secrets.AZURE_SQL_EXISTING_DATABASE_NAME || '' }}
 
 jobs:
   validate:
@@ -135,6 +138,31 @@ jobs:
             exit 1
           fi
 
+      - name: Validate SQL provisioning mode inputs
+        shell: bash
+        env:
+          SQL_PROVISIONING_MODE: ${{ env.SQL_PROVISIONING_MODE }}
+          AZURE_SQL_EXISTING_SERVER_NAME: ${{ env.AZURE_SQL_EXISTING_SERVER_NAME }}
+          AZURE_SQL_EXISTING_DATABASE_NAME: ${{ env.AZURE_SQL_EXISTING_DATABASE_NAME }}
+        run: |
+          set -euo pipefail
+
+          mode_lower="$(echo "${SQL_PROVISIONING_MODE:-provision}" | tr '[:upper:]' '[:lower:]')"
+
+          if [[ "${mode_lower}" != "provision" && "${mode_lower}" != "existing" ]]; then
+            echo "SQL_PROVISIONING_MODE must be 'provision' or 'existing'."
+            exit 1
+          fi
+
+          if [[ "${mode_lower}" == "existing" ]]; then
+            if [[ -z "${AZURE_SQL_EXISTING_SERVER_NAME:-}" || -z "${AZURE_SQL_EXISTING_DATABASE_NAME:-}" ]]; then
+              echo "When SQL_PROVISIONING_MODE=existing, set AZURE_SQL_EXISTING_SERVER_NAME and AZURE_SQL_EXISTING_DATABASE_NAME."
+              exit 1
+            fi
+          fi
+
+          echo "SQL provisioning mode validated: ${mode_lower}"
+
       - name: Provision Infrastructure with Azure Developer CLI
         run: azd provision --no-prompt
         env:
@@ -143,19 +171,47 @@ jobs:
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
           AZURE_SQL_ADMIN_LOGIN: ${{ secrets.AZURE_SQL_ADMIN_LOGIN }}
           AZURE_SQL_ADMIN_PASSWORD: ${{ secrets.AZURE_SQL_ADMIN_PASSWORD }}
+          AZURE_SQL_ENTRA_ADMIN_LOGIN: ${{ secrets.AZURE_SQL_ENTRA_ADMIN_LOGIN || '' }}
+          AZURE_SQL_ENTRA_ADMIN_OBJECT_ID: ${{ secrets.AZURE_SQL_ENTRA_ADMIN_OBJECT_ID || '' }}
+          SQL_PROVISIONING_MODE: ${{ env.SQL_PROVISIONING_MODE }}
+          AZURE_SQL_EXISTING_SERVER_NAME: ${{ env.AZURE_SQL_EXISTING_SERVER_NAME }}
+          AZURE_SQL_EXISTING_DATABASE_NAME: ${{ env.AZURE_SQL_EXISTING_DATABASE_NAME }}
 
       - name: Configure Backend SQL Connection in ACA
         shell: bash
         env:
           AZURE_SQL_ADMIN_LOGIN: ${{ secrets.AZURE_SQL_ADMIN_LOGIN }}
           AZURE_SQL_ADMIN_PASSWORD: ${{ secrets.AZURE_SQL_ADMIN_PASSWORD }}
+          SQL_PROVISIONING_MODE: ${{ env.SQL_PROVISIONING_MODE }}
+          AZURE_SQL_EXISTING_SERVER_NAME: ${{ env.AZURE_SQL_EXISTING_SERVER_NAME }}
+          AZURE_SQL_EXISTING_DATABASE_NAME: ${{ env.AZURE_SQL_EXISTING_DATABASE_NAME }}
         run: |
           set -euo pipefail
 
           RG_NAME="$(azd env get-value AZURE_RESOURCE_GROUP)"
           BACKEND_APP_NAME="$(azd env get-value BACKEND_CONTAINER_APP_NAME)"
-          SQL_SERVER_NAME="$(azd env get-value AZURE_SQL_SERVER_NAME)"
-          SQL_DATABASE_NAME="$(azd env get-value AZURE_SQL_DATABASE_NAME)"
+
+          mode_lower="$(echo "${SQL_PROVISIONING_MODE:-provision}" | tr '[:upper:]' '[:lower:]')"
+          SQL_SERVER_NAME="$(azd env get-value AZURE_SQL_SERVER_NAME || true)"
+          SQL_DATABASE_NAME="$(azd env get-value AZURE_SQL_DATABASE_NAME || true)"
+
+          if [[ -z "${SQL_SERVER_NAME}" || "${mode_lower}" == "existing" ]]; then
+            SQL_SERVER_NAME="${AZURE_SQL_EXISTING_SERVER_NAME:-${SQL_SERVER_NAME}}"
+          fi
+
+          if [[ -z "${SQL_DATABASE_NAME}" || "${mode_lower}" == "existing" ]]; then
+            SQL_DATABASE_NAME="${AZURE_SQL_EXISTING_DATABASE_NAME:-${SQL_DATABASE_NAME}}"
+          fi
+
+          if [[ -z "${SQL_SERVER_NAME}" || -z "${SQL_DATABASE_NAME}" ]]; then
+            echo "Unable to determine SQL server/database names for backend configuration."
+            echo "Set AZURE_SQL_EXISTING_SERVER_NAME and AZURE_SQL_EXISTING_DATABASE_NAME when using existing mode."
+            exit 1
+          fi
+
+          # Accept either logical server name or FQDN and normalize to logical server name.
+          SQL_SERVER_NAME="${SQL_SERVER_NAME%%.*}"
+
           SQL_HOST_SUFFIX="$(az cloud show --query suffixes.sqlServerHostname -o tsv)"
 
           SQL_CONNECTION_STRING="Server=tcp:${SQL_SERVER_NAME}${SQL_HOST_SUFFIX},1433;Initial Catalog=${SQL_DATABASE_NAME};Persist Security Info=False;User ID=${AZURE_SQL_ADMIN_LOGIN};Password=${AZURE_SQL_ADMIN_PASSWORD};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"

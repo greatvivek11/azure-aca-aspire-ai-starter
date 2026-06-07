@@ -112,7 +112,7 @@ AZURE_TENANT_ID             # Azure Entra ID tenant ID
 AZURE_OPENAI_API_KEY        # OpenAI API key
 AZURE_OPENAI_MODEL_ID       # Deployed model name (e.g., gpt-4.1)
 AZURE_OPENAI_ENDPOINT       # OpenAI endpoint URL
-AZD_ENVIRONMENT_NAME        # Optional: environment name (default: copilot-maf-sbx)
+AZD_ENVIRONMENT_NAME        # Optional: environment name (default: copilot-sk-azure)
 ```
 
 **See**: [GitHub-Secrets-Setup.md](./GitHub-Secrets-Setup.md) for detailed configuration
@@ -123,7 +123,7 @@ AZD_ENVIRONMENT_NAME        # Optional: environment name (default: copilot-maf-s
 AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
 AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-AZD_ENVIRONMENT_NAME: copilot-maf-sbx
+AZD_ENVIRONMENT_NAME: copilot-sk-azure
 ```
 
 ### Azure OpenAI Secrets (Injected at Deploy Time)
@@ -255,7 +255,7 @@ git push origin main
 
 ```
 ✅ Deployment successful!
-Environment: copilot-maf-sbx
+Environment: copilot-sk-azure
 Subscription: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
 

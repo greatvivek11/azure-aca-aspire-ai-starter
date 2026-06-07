@@ -19,6 +19,23 @@ param sqlAdminPassword string
 @description('Azure SQL database name used by backend API.')
 param sqlDatabaseName string = 'copilotsk'
 
+@allowed([
+  'provision'
+  'existing'
+])
+@description('SQL strategy: provision creates SQL resources via IaC; existing uses pre-created SQL resources.')
+param sqlProvisioningMode string = 'provision'
+
+@description('Existing Azure SQL server name (without .database.windows.net). Required when sqlProvisioningMode is existing.')
+param existingSqlServerName string = ''
+
+@description('Existing Azure SQL database name. Required when sqlProvisioningMode is existing.')
+param existingSqlDatabaseName string = ''
+@description('Entra AD admin login (email) for Azure SQL server. Optional.')
+param sqlEntraAdminLogin string = ''
+
+@description('Entra AD admin object ID for Azure SQL server. Required if sqlEntraAdminLogin is provided.')
+param sqlEntraAdminObjectId string = ''
 var baseName = 'aih-${environmentName}-${uniqueString(resourceGroup().id)}'
 var acrPullRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
@@ -31,6 +48,9 @@ var frontendAppName = 'frontend-${shortId}'
 var workerAppName = 'worker-${shortId}'
 var containerAppsManagedIdentityName = '${baseName}-cai'
 var sqlServerName = take('${baseName}-sql', 63)
+var useExistingSql = toLower(sqlProvisioningMode) == 'existing'
+var resolvedSqlServerName = useExistingSql ? existingSqlServerName : sqlServerName
+var resolvedSqlDatabaseName = useExistingSql ? existingSqlDatabaseName : sqlDatabaseName
 
 // Log Analytics is required for ACA diagnostics and troubleshooting.
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
@@ -98,7 +118,7 @@ resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-
 }
 
 // Azure SQL logical server for backend transactional data.
-resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = {
+resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = if (!useExistingSql) {
   name: sqlServerName
   location: location
   tags: tags
@@ -108,10 +128,20 @@ resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = {
     publicNetworkAccess: 'Enabled'
     minimalTlsVersion: '1.2'
   }
-}
 
+  // Entra AD administrator (optional; requires sqlEntraAdminLogin and sqlEntraAdminObjectId)
+  resource entraAdmin 'administrators@2023-08-01-preview' = if (!empty(sqlEntraAdminLogin)) {
+    name: 'ActiveDirectory'
+    properties: {
+      administratorType: 'ActiveDirectory'
+      login: sqlEntraAdminLogin
+      sid: sqlEntraAdminObjectId
+      tenantId: subscription().tenantId
+    }
+  }
+}
 // Allow Azure-hosted workloads (including ACA) to reach Azure SQL public endpoint.
-resource sqlAllowAzureServices 'Microsoft.Sql/servers/firewallRules@2023-08-01-preview' = {
+resource sqlAllowAzureServices 'Microsoft.Sql/servers/firewallRules@2023-08-01-preview' = if (!useExistingSql) {
   parent: sqlServer
   name: 'AllowAllAzureIPs'
   properties: {
@@ -120,18 +150,21 @@ resource sqlAllowAzureServices 'Microsoft.Sql/servers/firewallRules@2023-08-01-p
   }
 }
 
-resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-08-01-preview' = {
+resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-08-01-preview' = if (!useExistingSql) {
   parent: sqlServer
   name: sqlDatabaseName
   location: location
   tags: tags
   sku: {
-    name: 'Basic'
-    tier: 'Basic'
+    name: 'HS_Gen5_2'
+    tier: 'Hyperscale'
+    capacity: 2
+    family: 'Gen5'
   }
   properties: {
     collation: 'SQL_Latin1_General_CP1_CI_AS'
     maxSizeBytes: 2147483648
+    autoPauseDelay: 60
   }
 }
 
@@ -298,7 +331,8 @@ output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerRegistry.properties.l
 output BACKEND_CONTAINER_APP_NAME string = backendApp.name
 output FRONTEND_CONTAINER_APP_NAME string = frontendApp.name
 output WORKER_CONTAINER_APP_NAME string = workerApp.name
-output AZURE_SQL_SERVER_NAME string = sqlServer.name
-output AZURE_SQL_DATABASE_NAME string = sqlDatabaseName
+output AZURE_SQL_SERVER_NAME string = resolvedSqlServerName
+output AZURE_SQL_DATABASE_NAME string = resolvedSqlDatabaseName
+output AZURE_SQL_PROVISIONING_MODE string = sqlProvisioningMode
 output FRONTEND_URL string = 'https://${frontendApp.properties.configuration.ingress.fqdn}'
 output BACKEND_URL string = 'https://${backendApp.properties.configuration.ingress.fqdn}'

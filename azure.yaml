@@ -2,6 +2,9 @@ name: copilot-sk-azure
 metadata:
   template: copilot-sk-azure@0.1.0
 
+env:
+  AZURE_LOCATION: southeastasia
+
 infra:
   provider: bicep
   path: infra

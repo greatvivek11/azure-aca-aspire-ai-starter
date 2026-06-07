@@ -124,7 +124,7 @@ AZURE_TENANT_ID             (Entra ID tenant ID)
 AZURE_OPENAI_API_KEY        (Azure OpenAI API key)
 AZURE_OPENAI_MODEL_ID       (deployed model name, e.g., gpt-4.1)
 AZURE_OPENAI_ENDPOINT       (Azure OpenAI endpoint URL)
-AZD_ENVIRONMENT_NAME        (optional, default: copilot-maf-sbx)
+AZD_ENVIRONMENT_NAME        (optional, default: copilot-sk-azure)
 ```
 
 **Setup instructions**: See [GitHub-Secrets-Setup.md](./docs/GitHub-Secrets-Setup.md)

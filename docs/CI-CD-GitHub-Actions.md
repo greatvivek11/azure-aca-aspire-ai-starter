@@ -8,12 +8,13 @@ The CI/CD pipeline automates:
 - ✅ Building and testing the entire solution
 - ✅ Running architecture tests to ensure code quality
 - ✅ Validating Azure infrastructure prerequisites
-- ✅ Deploying to Azure Container Apps using `azd up`
-- ✅ Injecting secrets into Container Apps environment
+- ✅ Deploying to Azure Container Apps using `azd provision` + `azd deploy`
+- ✅ Using Managed Identity for backend SQL runtime authentication
 
 **Deployment triggers:**
 - Push to `main` branch (automatic)
-- Manual trigger via GitHub Actions UI (on-demand)
+- Pull requests targeting `main` (validation and deploy job checks)
+- Manual trigger via GitHub Actions UI with environment selection (`dev`, `staging`, `prod`)
 
 ---
 
@@ -45,8 +46,8 @@ The CI/CD pipeline automates:
 │  │ 5. Authenticate to Azure via OIDC                   │   │
 │  │ 6. Configure azd to use Azure CLI auth              │   │
 │  │ 7. Validate Azure environment                        │   │
-│  │ 8. Run: azd up --no-prompt                           │   │
-│  │ 9. Inject Azure OpenAI secrets                       │   │
+│  │ 8. Run: azd provision --no-prompt                    │   │
+│  │ 9. Run: azd deploy <service> --no-prompt             │   │
 │  │ 10. Display deployment summary                       │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
@@ -78,22 +79,22 @@ validate:
 
 ### 2. Deployment Job
 
-**Purpose**: Deploy to Azure Container Apps using `azd up`
+**Purpose**: Deploy to Azure Container Apps using `azd provision` and service-level `azd deploy`
 
 ```yaml
 deploy:
   name: Deploy to Azure
   needs: validate  # Wait for validation job to complete
   runs-on: ubuntu-latest
-  # Add environment: production only if your federated credential subject
-  # is configured as repo:<org>/<repo>:environment:production
+  environment:
+    name: dev  # workflow_dispatch can override via input
   steps:
     - Setup tools (azd, .NET, Node.js)
     - Authenticate to Azure (OpenID Connect)
     - Configure azd to use Azure CLI auth
     - Validate Azure environment
-    - Run: azd up --no-prompt
-    - Inject secrets from GitHub Secrets
+    - Run: azd provision --no-prompt
+    - Run: azd deploy backend/frontend/worker --no-prompt
     - Display deployment summary
 ```
 
@@ -116,6 +117,20 @@ AZD_ENVIRONMENT_NAME        # Optional: environment name (default: copilot-sk-az
 ```
 
 **See**: [GitHub-Secrets-Setup.md](./GitHub-Secrets-Setup.md) for detailed configuration
+
+### Required GitHub Environment
+
+The deploy job runs with a GitHub Environment (default: `dev`).
+Create it before first deployment:
+
+```bash
+gh api \
+  --method PUT \
+  -H "Accept: application/vnd.github+json" \
+  /repos/<owner>/<repo>/environments/dev
+```
+
+Environment secrets are optional. Repository secrets still work.
 
 ### Workflow Environment Variables
 
@@ -148,7 +163,7 @@ mode unless configured, so the workflow sets:
 azd config set auth.useAzCliAuth true
 ```
 
-This makes `azd up` reuse the Azure CLI OIDC session from `azure/login`.
+This makes `azd` commands reuse the Azure CLI OIDC session from `azure/login`.
 
 The workflow uses **OpenID Connect (OIDC)** with `azure/login@v2` instead of storing credentials:
 
@@ -166,6 +181,14 @@ The workflow uses **OpenID Connect (OIDC)** with `azure/login@v2` instead of sto
 - ✅ Short-lived tokens (expires in ~1 hour)
 - ✅ Audit trail in Azure Activity Log
 - ✅ Follows security best practices
+
+OIDC subject must match GitHub Environment mode:
+
+- `repo:<owner>/<repo>:environment:dev` (default)
+- `repo:<owner>/<repo>:environment:staging`
+- `repo:<owner>/<repo>:environment:prod`
+
+Use one federated credential per environment subject.
 
 **Setup**: See [GitHub-Secrets-Setup.md](./GitHub-Secrets-Setup.md) → "Configure OIDC Trust"
 
@@ -248,8 +271,8 @@ git push origin main
 - Starts only if validation succeeds
 - Authenticates to Azure
 - Validates infrastructure
-- Runs `azd up` to deploy all containers
-- Injects secrets into Container Apps
+- Runs `azd provision` followed by `azd deploy` per service
+- Uses Managed Identity for backend SQL runtime authentication
 
 ### 4. Deployment Summary
 
@@ -311,6 +334,10 @@ npm run build --prefix src/frontend
 ### ❌ Deployment Job Failed at Authentication
 
 **Check**: Azure credentials (OIDC setup)
+
+Most common root cause after switching to environments: subject mismatch.
+If deploy job uses environment `dev`, federated credential subject must be:
+`repo:<owner>/<repo>:environment:dev`
 
 ```bash
 # Verify service principal

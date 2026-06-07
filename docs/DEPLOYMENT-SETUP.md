@@ -10,9 +10,9 @@ This document summarizes all the changes made to enable automated GitHub Actions
 A complete CI/CD pipeline that:
 - ✅ Triggers on push to `main` or manual dispatch
 - ✅ Validates code (build + tests)
-- ✅ Deploys to Azure Container Apps using `azd up`
+- ✅ Deploys to Azure Container Apps using `azd provision` + `azd deploy`
 - ✅ Authenticates via OIDC (no stored credentials)
-- ✅ Injects GitHub Secrets into Container Apps
+- ✅ Uses Managed Identity for backend SQL runtime auth
 
 **Two-job flow:**
 1. **Validate Job**: Build, test, quality checks (~2-3 min)
@@ -105,8 +105,8 @@ git push origin main
 3. **Deploy Job** runs (if validation passes):
    - Authenticates to Azure
    - Validates environment
-   - Runs `azd up`
-   - Injects secrets
+  - Runs `azd provision`, then deploys each service
+  - Bicep injects non-secret SQL runtime config (`SQL_SERVER`, `SQL_DATABASE`, `AZURE_CLIENT_ID`)
 4. ✅ Deployment complete!
 
 Monitor progress: **GitHub → Actions → Deploy to Azure Container Apps**
@@ -124,7 +124,15 @@ AZURE_TENANT_ID             (Entra ID tenant ID)
 AZURE_OPENAI_API_KEY        (Azure OpenAI API key)
 AZURE_OPENAI_MODEL_ID       (deployed model name, e.g., gpt-4.1)
 AZURE_OPENAI_ENDPOINT       (Azure OpenAI endpoint URL)
+AZURE_SQL_ADMIN_LOGIN       (provision-time SQL admin login)
+AZURE_SQL_ADMIN_PASSWORD    (provision-time SQL admin password)
 AZD_ENVIRONMENT_NAME        (optional, default: copilot-sk-azure)
+```
+
+Optional override only (advanced):
+```
+AZURE_SQL_ENTRA_ADMIN_LOGIN
+AZURE_SQL_ENTRA_ADMIN_OBJECT_ID
 ```
 
 **Setup instructions**: See [GitHub-Secrets-Setup.md](./docs/GitHub-Secrets-Setup.md)
@@ -178,7 +186,7 @@ Edit `scripts/validate-azure-env.sh` or `.ps1` to add more checks.
 | **Secrets not found in workflow** | Go to Settings → Secrets and verify all secrets are configured |
 | **"OIDC authentication failed"** | Check that service principal has Contributor role on resource group |
 | **"azd not logged in"** | Add `azd config set auth.useAzCliAuth true` after `azure/login` in workflow |
-| **"azd up failed"** | Check `AZD_ENVIRONMENT_NAME` environment variable; run validation script first |
+| **"azd provision/deploy failed"** | Check `AZD_ENVIRONMENT_NAME` environment variable; run validation script first |
 | **Tests fail in CI but pass locally** | Ensure Release configuration: `dotnet test --configuration Release` |
 | **Deployment times out** | Check Azure Portal → Container Apps for errors; review Dapr sidecars |
 

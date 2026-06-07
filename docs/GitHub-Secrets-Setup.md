@@ -15,6 +15,33 @@ Currently, we store sensitive credentials in GitHub Secrets instead of Azure Key
 
 ---
 
+## Quick Bootstrap Checklist (5-10 min)
+
+Use this if you want the shortest path to first successful deployment.
+
+1. Create CI service principal and capture IDs.
+2. Grant CI principal RBAC on `aihub-rg`:
+  - `Contributor`
+  - `User Access Administrator`
+3. Create GitHub Environment `dev` (UI or `gh api`).
+4. Add Entra federated credential with environment subject:
+  - `repo:<owner>/<repo>:environment:dev`
+5. Add required repository secrets:
+  - `AZURE_SUBSCRIPTION_ID`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`
+  - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_MODEL_ID`, `AZURE_OPENAI_ENDPOINT`
+  - `AZURE_SQL_ADMIN_LOGIN`, `AZURE_SQL_ADMIN_PASSWORD`
+6. Trigger workflow:
+  - Actions -> Deploy to Azure Container Apps -> Run workflow -> `environment=dev`
+7. If OIDC fails, verify federated credential subject exactly matches environment.
+
+Jump links:
+- SP creation: [Step 1](#1-create-service-principal-for-github-actions)
+- RBAC roles: [Step 1.1](#11-required-rbac-for-ci-service-principal)
+- GitHub Environment: [Step 2](#2-create-github-environment-required-for-environment-based-oidc)
+- OIDC federated credential: [Step 3](#3-configure-oidc-trust-recommended)
+
+---
+
 ## Required GitHub Secrets
 
 ### Azure Authentication (Required for Deployment)
@@ -37,30 +64,28 @@ These secrets are injected into the Container Apps environment at deployment tim
 | `AZURE_OPENAI_MODEL_ID` | Deployed model name | Azure Portal → OpenAI resource → Model deployments |
 | `AZURE_OPENAI_ENDPOINT` | Azure OpenAI endpoint URL | Azure Portal → OpenAI resource → Keys and Endpoint |
 
-### SQL Credentials (Required for Provisioning)
+### SQL Credentials (Required for Provisioning only)
 
-These secrets are used by Bicep during `azd provision` to create Azure SQL Server/Database and inject the backend SQL connection string into Container Apps secrets.
+These secrets are used by Bicep during `azd provision` to create Azure SQL Server/Database.
+Backend runtime SQL auth now uses the Container App User-Assigned Managed Identity (UAMI),
+so SQL username/password is not injected into ACA runtime secrets.
 
 | Secret Name | Description | Example |
 |---|---|---|
 | `AZURE_SQL_ADMIN_LOGIN` | Azure SQL server admin username | `sqladmincopilot` |
 | `AZURE_SQL_ADMIN_PASSWORD` | Azure SQL server admin password | `Use-a-strong-password-here` |
 
-### SQL Entra AD Authentication (Optional)
+### SQL Entra AD Authentication (Automated in provision mode)
 
-For mixed authentication (SQL login + Entra AD), optionally set these secrets:
+No Entra admin secrets are required for new environment provisioning.
 
-| Secret Name | Description | Example |
-|---|---|---|
-| `AZURE_SQL_ENTRA_ADMIN_LOGIN` | Entra AD admin email | `yourname@outlook.com` |
-| `AZURE_SQL_ENTRA_ADMIN_OBJECT_ID` | Azure AD object ID of the admin user | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
+In GitHub Actions provision mode (`SQL_PROVISIONING_MODE=provision`), the workflow automatically:
+1. Resolves the OIDC service principal metadata (`AZURE_CLIENT_ID`) and configures it as SQL Entra admin.
+2. Creates a contained database user for backend UAMI.
+3. Grants `db_datareader`, `db_datawriter`, and `db_ddladmin` roles to the UAMI.
 
-**To find your Entra AD object ID:**
-```bash
-az ad user show --id "yourname@outlook.com" --query id -o tsv
-```
-
-**Note**: If these secrets are not set, only SQL authentication (login/password) will be available; Entra AD admin will not be configured.
+For existing SQL mode (`SQL_PROVISIONING_MODE=existing`), automatic role grants are skipped. In that mode,
+you may need to run the SQL user/role grant commands manually if the existing database is not already configured.
 
 ### SQL Provisioning Mode (Optional, Recommended for Free-Tier Reuse)
 
@@ -73,8 +98,8 @@ Use these secrets when you want CI/CD to use a pre-created SQL database (for exa
 | `AZURE_SQL_EXISTING_DATABASE_NAME` | Existing SQL database name | empty |
 
 Behavior:
-- `provision`: Bicep creates SQL Server + DB and pipeline uses those outputs.
-- `existing`: Bicep skips SQL creation and pipeline configures backend using your existing server/database values.
+- `provision`: Bicep creates SQL Server + DB and backend receives `SQL_SERVER` + `SQL_DATABASE` env vars.
+- `existing`: Bicep skips SQL creation and backend uses your existing server/database values.
 
 When `SQL_PROVISIONING_MODE=existing`, both existing-name secrets are required.
 
@@ -91,11 +116,14 @@ When `SQL_PROVISIONING_MODE=existing`, both existing-name secrets are required.
 ### 1. Create Service Principal for GitHub Actions
 
 ```bash
-# Create a service principal
+# Create a service principal scoped to the deployment resource group
+SUBSCRIPTION_ID="<your-subscription-id>"
+RESOURCE_GROUP="aihub-rg"
+
 az ad sp create-for-rbac \
   --name "github-actions-copilot" \
   --role Contributor \
-  --scope /subscriptions/<YOUR_SUBSCRIPTION_ID>
+  --scopes "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP"
 ```
 
 **Output** will contain:
@@ -120,7 +148,7 @@ Example (resource-group scope):
 
 ```bash
 SUBSCRIPTION_ID="<subscription-id>"
-RESOURCE_GROUP="<resource-group>"
+RESOURCE_GROUP="aihub-rg"
 APP_ID="<AZURE_CLIENT_ID>"
 
 SP_OBJECT_ID=$(az ad sp show --id "$APP_ID" --query id -o tsv)
@@ -147,22 +175,46 @@ az role assignment list \
   -o table
 ```
 
-### 2. Configure OIDC Trust (Recommended)
+### 2. Create GitHub Environment (Required for environment-based OIDC)
+
+The deployment workflow uses a GitHub Environment (default: `dev`) and expects
+an OIDC subject in the format:
+
+`repo:<owner>/<repo>:environment:<environment-name>`
+
+Create it in GitHub UI:
+- Repository -> Settings -> Environments -> New environment -> `dev`
+
+Or with GitHub CLI:
+
+```bash
+gh api \
+  --method PUT \
+  -H "Accept: application/vnd.github+json" \
+  /repos/<owner>/<repo>/environments/dev
+```
+
+Notes:
+- Repository secrets continue to work by default.
+- Environment secrets/variables are optional overrides if you want per-environment values.
+
+### 3. Configure OIDC Trust (Recommended)
 
 Instead of storing credentials, use OIDC for secure, keyless authentication:
 
 ```bash
-GITHUB_ORG="<your-github-org>"
+GITHUB_OWNER="<your-github-owner>"
 GITHUB_REPO="<your-github-repo>"
+GITHUB_ENVIRONMENT="dev"
 AZURE_CLIENT_ID="<appId-from-step-1>"
 
 # Add federated credentials to the Entra application (service principal)
 cat > federated-credential.json <<EOF
 {
-  "name": "github-actions-main",
+  "name": "github-actions-env-${GITHUB_ENVIRONMENT}",
   "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:${GITHUB_ORG}/${GITHUB_REPO}:ref:refs/heads/main",
-  "description": "GitHub Actions main branch",
+  "subject": "repo:${GITHUB_OWNER}/${GITHUB_REPO}:environment:${GITHUB_ENVIRONMENT}",
+  "description": "GitHub Actions environment ${GITHUB_ENVIRONMENT}",
   "audiences": [
     "api://AzureADTokenExchange"
   ]
@@ -174,19 +226,27 @@ az ad app federated-credential create \
   --parameters @federated-credential.json
 ```
 
+If you deploy to multiple environments, create one federated credential per environment
+subject (for example: `dev`, `staging`, `prod`).
+
+Why this is a manual bootstrap step:
+- The workflow cannot create its first federated credential for itself.
+- Azure login requires the federated credential to already exist.
+- After first bootstrap, further automation is possible.
+
 If you intentionally use a User Assigned Managed Identity instead of a service principal, use this command instead (note: identity name must be the managed identity resource name, not appId/clientId):
 
 ```bash
 az identity federated-credential create \
-  --name "github-actions-main" \
+  --name "github-actions-env-${GITHUB_ENVIRONMENT}" \
   --identity-name "<managed-identity-resource-name>" \
   --resource-group "<managed-identity-resource-group>" \
   --issuer "https://token.actions.githubusercontent.com" \
-  --subject "repo:${GITHUB_ORG}/${GITHUB_REPO}:ref:refs/heads/main" \
+  --subject "repo:${GITHUB_OWNER}/${GITHUB_REPO}:environment:${GITHUB_ENVIRONMENT}" \
   --audiences "api://AzureADTokenExchange"
 ```
 
-### 3. Add Secrets to GitHub Repository
+### 4. Add Secrets to GitHub Repository
 
 Go to: **Settings → Secrets and variables → Actions → New repository secret**
 
@@ -211,7 +271,7 @@ AZURE_OPENAI_MODEL_ID: <deployed-model-name> (e.g., gpt-4.1)
 AZURE_OPENAI_ENDPOINT: <your-openai-endpoint>
 ```
 
-#### SQL Provisioning Secrets:
+#### SQL Provisioning Secrets (provision-time only):
 ```
 AZURE_SQL_ADMIN_LOGIN: <azure-sql-admin-username>
 AZURE_SQL_ADMIN_PASSWORD: <azure-sql-admin-password>
@@ -225,6 +285,9 @@ SQL_PROVISIONING_MODE: provision
 AZURE_SQL_EXISTING_SERVER_NAME: <existing-sql-server-name>
 AZURE_SQL_EXISTING_DATABASE_NAME: <existing-database-name>
 ```
+
+#### Entra Admin Secrets:
+Not required for provision mode. Leave unset unless you intentionally override the automated behavior.
 
 ---
 
@@ -251,7 +314,7 @@ Monitor the workflow at: **Actions → Deploy to Azure Container Apps → Latest
 
 1. ✅ **Use OIDC**: Eliminates the need to store credentials in GitHub
 2. ✅ **Rotate Keys Regularly**: Update `AZURE_OPENAI_API_KEY` every 90 days
-3. ✅ **Scope Permissions**: Service Principal should have only `Contributor` role on the resource group, not subscription-wide
+3. ✅ **Scope Permissions**: Service Principal should be resource-group scoped and include only required roles (`Contributor` + `User Access Administrator`)
 4. ✅ **Audit Access**: Review "Secret Audit Log" in GitHub Settings
 5. ✅ **Never Commit Secrets**: Ensure `.env` files are in `.gitignore`
 6. ⚠️ **Future**: Migrate to Azure Key Vault with Managed Identities for production
@@ -263,18 +326,23 @@ Monitor the workflow at: **Actions → Deploy to Azure Container Apps → Latest
 ### ❌ "Insufficient permissions" error in GitHub Actions
 
 **Cause**: Service Principal lacks required permissions  
-**Solution**: Grant `Contributor` role on the resource group:
+**Solution**: Ensure both required roles are granted on the resource group:
 ```bash
 az role assignment create \
   --assignee <appId> \
   --role Contributor \
+  --scope /subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RESOURCE_GROUP>
+
+az role assignment create \
+  --assignee <appId> \
+  --role "User Access Administrator" \
   --scope /subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RESOURCE_GROUP>
 ```
 
 ### ❌ "Azure OpenAI credentials not found" during deployment
 
 **Cause**: Secrets not configured in GitHub  
-**Solution**: Verify all AI Services secrets are set (see Step 3 above)
+**Solution**: Verify all AI Services secrets are set (see Step 4 above)
 
 ### ❌ OIDC "Subject not recognized" error
 
@@ -286,8 +354,8 @@ az ad app federated-credential list \
 ```
 
 Expected `subject` must match the workflow token exactly:
-- If workflow job does not set `environment`, use `repo:<org>/<repo>:ref:refs/heads/main`
-- If workflow job sets `environment: production`, use `repo:<org>/<repo>:environment:production`
+- For this repository workflow, default is `repo:<owner>/<repo>:environment:dev`
+- For manual deploys to staging/prod, create matching subjects for `staging` and `prod`
 
 ### ❌ "ParentResourceNotFound" for userAssignedIdentities/federatedIdentityCredentials
 
@@ -298,7 +366,7 @@ Expected `subject` must match the workflow token exactly:
 
 ## Environment Variable Injection
 
-When you run `azd up` from GitHub Actions, secrets are automatically injected:
+When GitHub Actions runs `azd provision` and `azd deploy`, environment values are passed to workloads:
 
 ```yaml
 env:
@@ -307,7 +375,8 @@ env:
   AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
 ```
 
-These become Container Apps environment variables and are accessible to the backend at runtime.
+These become Container Apps environment variables and are accessible at runtime.
+For SQL, backend now uses Managed Identity with Bicep-provided `SQL_SERVER`, `SQL_DATABASE`, and `AZURE_CLIENT_ID`.
 
 ---
 

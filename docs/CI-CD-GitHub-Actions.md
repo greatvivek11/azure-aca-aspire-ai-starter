@@ -13,7 +13,8 @@ The CI/CD pipeline automates:
 
 **Deployment triggers:**
 - Push to `main` branch (automatic)
-- Manual trigger via GitHub Actions UI (on-demand)
+- Pull requests targeting `main` (validation and deploy job checks)
+- Manual trigger via GitHub Actions UI with environment selection (`dev`, `staging`, `prod`)
 
 ---
 
@@ -85,8 +86,8 @@ deploy:
   name: Deploy to Azure
   needs: validate  # Wait for validation job to complete
   runs-on: ubuntu-latest
-  # Add environment: production only if your federated credential subject
-  # is configured as repo:<org>/<repo>:environment:production
+  environment:
+    name: dev  # workflow_dispatch can override via input
   steps:
     - Setup tools (azd, .NET, Node.js)
     - Authenticate to Azure (OpenID Connect)
@@ -116,6 +117,20 @@ AZD_ENVIRONMENT_NAME        # Optional: environment name (default: copilot-sk-az
 ```
 
 **See**: [GitHub-Secrets-Setup.md](./GitHub-Secrets-Setup.md) for detailed configuration
+
+### Required GitHub Environment
+
+The deploy job runs with a GitHub Environment (default: `dev`).
+Create it before first deployment:
+
+```bash
+gh api \
+  --method PUT \
+  -H "Accept: application/vnd.github+json" \
+  /repos/<owner>/<repo>/environments/dev
+```
+
+Environment secrets are optional. Repository secrets still work.
 
 ### Workflow Environment Variables
 
@@ -166,6 +181,14 @@ The workflow uses **OpenID Connect (OIDC)** with `azure/login@v2` instead of sto
 - ✅ Short-lived tokens (expires in ~1 hour)
 - ✅ Audit trail in Azure Activity Log
 - ✅ Follows security best practices
+
+OIDC subject must match GitHub Environment mode:
+
+- `repo:<owner>/<repo>:environment:dev` (default)
+- `repo:<owner>/<repo>:environment:staging`
+- `repo:<owner>/<repo>:environment:prod`
+
+Use one federated credential per environment subject.
 
 **Setup**: See [GitHub-Secrets-Setup.md](./GitHub-Secrets-Setup.md) → "Configure OIDC Trust"
 
@@ -311,6 +334,10 @@ npm run build --prefix src/frontend
 ### ❌ Deployment Job Failed at Authentication
 
 **Check**: Azure credentials (OIDC setup)
+
+Most common root cause after switching to environments: subject mismatch.
+If deploy job uses environment `dev`, federated credential subject must be:
+`repo:<owner>/<repo>:environment:dev`
 
 ```bash
 # Verify service principal

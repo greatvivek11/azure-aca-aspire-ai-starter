@@ -28,10 +28,6 @@ permissions:
   id-token: write
   contents: read
 
-concurrency:
-  group: deploy-${{ github.ref_name }}
-  cancel-in-progress: true
-
 env:
   AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
   AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -88,6 +84,11 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'dev' }}
+    concurrency:
+      group: deploy-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'dev' }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
 

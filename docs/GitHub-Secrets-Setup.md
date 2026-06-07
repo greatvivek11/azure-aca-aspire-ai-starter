@@ -15,6 +15,33 @@ Currently, we store sensitive credentials in GitHub Secrets instead of Azure Key
 
 ---
 
+## Quick Bootstrap Checklist (5-10 min)
+
+Use this if you want the shortest path to first successful deployment.
+
+1. Create CI service principal and capture IDs.
+2. Grant CI principal RBAC on `aihub-rg`:
+  - `Contributor`
+  - `User Access Administrator`
+3. Create GitHub Environment `dev` (UI or `gh api`).
+4. Add Entra federated credential with environment subject:
+  - `repo:<owner>/<repo>:environment:dev`
+5. Add required repository secrets:
+  - `AZURE_SUBSCRIPTION_ID`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`
+  - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_MODEL_ID`, `AZURE_OPENAI_ENDPOINT`
+  - `AZURE_SQL_ADMIN_LOGIN`, `AZURE_SQL_ADMIN_PASSWORD`
+6. Trigger workflow:
+  - Actions -> Deploy to Azure Container Apps -> Run workflow -> `environment=dev`
+7. If OIDC fails, verify federated credential subject exactly matches environment.
+
+Jump links:
+- SP creation: [Step 1](#1-create-service-principal-for-github-actions)
+- RBAC roles: [Step 1.1](#11-required-rbac-for-ci-service-principal)
+- GitHub Environment: [Step 2](#2-create-github-environment-required-for-environment-based-oidc)
+- OIDC federated credential: [Step 3](#3-configure-oidc-trust-recommended)
+
+---
+
 ## Required GitHub Secrets
 
 ### Azure Authentication (Required for Deployment)
@@ -89,11 +116,14 @@ When `SQL_PROVISIONING_MODE=existing`, both existing-name secrets are required.
 ### 1. Create Service Principal for GitHub Actions
 
 ```bash
-# Create a service principal
+# Create a service principal scoped to the deployment resource group
+SUBSCRIPTION_ID="<your-subscription-id>"
+RESOURCE_GROUP="aihub-rg"
+
 az ad sp create-for-rbac \
   --name "github-actions-copilot" \
   --role Contributor \
-  --scope /subscriptions/<YOUR_SUBSCRIPTION_ID>
+  --scopes "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP"
 ```
 
 **Output** will contain:
@@ -118,7 +148,7 @@ Example (resource-group scope):
 
 ```bash
 SUBSCRIPTION_ID="<subscription-id>"
-RESOURCE_GROUP="<resource-group>"
+RESOURCE_GROUP="aihub-rg"
 APP_ID="<AZURE_CLIENT_ID>"
 
 SP_OBJECT_ID=$(az ad sp show --id "$APP_ID" --query id -o tsv)
@@ -145,22 +175,46 @@ az role assignment list \
   -o table
 ```
 
-### 2. Configure OIDC Trust (Recommended)
+### 2. Create GitHub Environment (Required for environment-based OIDC)
+
+The deployment workflow uses a GitHub Environment (default: `dev`) and expects
+an OIDC subject in the format:
+
+`repo:<owner>/<repo>:environment:<environment-name>`
+
+Create it in GitHub UI:
+- Repository -> Settings -> Environments -> New environment -> `dev`
+
+Or with GitHub CLI:
+
+```bash
+gh api \
+  --method PUT \
+  -H "Accept: application/vnd.github+json" \
+  /repos/<owner>/<repo>/environments/dev
+```
+
+Notes:
+- Repository secrets continue to work by default.
+- Environment secrets/variables are optional overrides if you want per-environment values.
+
+### 3. Configure OIDC Trust (Recommended)
 
 Instead of storing credentials, use OIDC for secure, keyless authentication:
 
 ```bash
-GITHUB_ORG="<your-github-org>"
+GITHUB_OWNER="<your-github-owner>"
 GITHUB_REPO="<your-github-repo>"
+GITHUB_ENVIRONMENT="dev"
 AZURE_CLIENT_ID="<appId-from-step-1>"
 
 # Add federated credentials to the Entra application (service principal)
 cat > federated-credential.json <<EOF
 {
-  "name": "github-actions-main",
+  "name": "github-actions-env-${GITHUB_ENVIRONMENT}",
   "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:${GITHUB_ORG}/${GITHUB_REPO}:ref:refs/heads/main",
-  "description": "GitHub Actions main branch",
+  "subject": "repo:${GITHUB_OWNER}/${GITHUB_REPO}:environment:${GITHUB_ENVIRONMENT}",
+  "description": "GitHub Actions environment ${GITHUB_ENVIRONMENT}",
   "audiences": [
     "api://AzureADTokenExchange"
   ]
@@ -172,19 +226,27 @@ az ad app federated-credential create \
   --parameters @federated-credential.json
 ```
 
+If you deploy to multiple environments, create one federated credential per environment
+subject (for example: `dev`, `staging`, `prod`).
+
+Why this is a manual bootstrap step:
+- The workflow cannot create its first federated credential for itself.
+- Azure login requires the federated credential to already exist.
+- After first bootstrap, further automation is possible.
+
 If you intentionally use a User Assigned Managed Identity instead of a service principal, use this command instead (note: identity name must be the managed identity resource name, not appId/clientId):
 
 ```bash
 az identity federated-credential create \
-  --name "github-actions-main" \
+  --name "github-actions-env-${GITHUB_ENVIRONMENT}" \
   --identity-name "<managed-identity-resource-name>" \
   --resource-group "<managed-identity-resource-group>" \
   --issuer "https://token.actions.githubusercontent.com" \
-  --subject "repo:${GITHUB_ORG}/${GITHUB_REPO}:ref:refs/heads/main" \
+  --subject "repo:${GITHUB_OWNER}/${GITHUB_REPO}:environment:${GITHUB_ENVIRONMENT}" \
   --audiences "api://AzureADTokenExchange"
 ```
 
-### 3. Add Secrets to GitHub Repository
+### 4. Add Secrets to GitHub Repository
 
 Go to: **Settings → Secrets and variables → Actions → New repository secret**
 
@@ -252,7 +314,7 @@ Monitor the workflow at: **Actions → Deploy to Azure Container Apps → Latest
 
 1. ✅ **Use OIDC**: Eliminates the need to store credentials in GitHub
 2. ✅ **Rotate Keys Regularly**: Update `AZURE_OPENAI_API_KEY` every 90 days
-3. ✅ **Scope Permissions**: Service Principal should have only `Contributor` role on the resource group, not subscription-wide
+3. ✅ **Scope Permissions**: Service Principal should be resource-group scoped and include only required roles (`Contributor` + `User Access Administrator`)
 4. ✅ **Audit Access**: Review "Secret Audit Log" in GitHub Settings
 5. ✅ **Never Commit Secrets**: Ensure `.env` files are in `.gitignore`
 6. ⚠️ **Future**: Migrate to Azure Key Vault with Managed Identities for production
@@ -264,18 +326,23 @@ Monitor the workflow at: **Actions → Deploy to Azure Container Apps → Latest
 ### ❌ "Insufficient permissions" error in GitHub Actions
 
 **Cause**: Service Principal lacks required permissions  
-**Solution**: Grant `Contributor` role on the resource group:
+**Solution**: Ensure both required roles are granted on the resource group:
 ```bash
 az role assignment create \
   --assignee <appId> \
   --role Contributor \
+  --scope /subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RESOURCE_GROUP>
+
+az role assignment create \
+  --assignee <appId> \
+  --role "User Access Administrator" \
   --scope /subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RESOURCE_GROUP>
 ```
 
 ### ❌ "Azure OpenAI credentials not found" during deployment
 
 **Cause**: Secrets not configured in GitHub  
-**Solution**: Verify all AI Services secrets are set (see Step 3 above)
+**Solution**: Verify all AI Services secrets are set (see Step 4 above)
 
 ### ❌ OIDC "Subject not recognized" error
 
@@ -287,8 +354,8 @@ az ad app federated-credential list \
 ```
 
 Expected `subject` must match the workflow token exactly:
-- If workflow job does not set `environment`, use `repo:<org>/<repo>:ref:refs/heads/main`
-- If workflow job sets `environment: production`, use `repo:<org>/<repo>:environment:production`
+- For this repository workflow, default is `repo:<owner>/<repo>:environment:dev`
+- For manual deploys to staging/prod, create matching subjects for `staging` and `prod`
 
 ### ❌ "ParentResourceNotFound" for userAssignedIdentities/federatedIdentityCredentials
 

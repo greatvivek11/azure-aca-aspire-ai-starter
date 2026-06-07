@@ -117,6 +117,25 @@ For detailed information, see [Architecture-Tests.md](./docs/Architecture-Tests.
 3. **Azure CLI**: [Install instructions](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
 4. **Azure Developer CLI (azd)**: [Install instructions](https://github.com/Azure/azure-dev)
 
+### Quick Bootstrap Checklist (5-10 min)
+
+1. Create CI service principal and capture `AZURE_CLIENT_ID` + `AZURE_TENANT_ID`.
+2. Grant CI principal RBAC on `aihub-rg`:
+   - `Contributor`
+   - `User Access Administrator`
+3. Create GitHub Environment `dev`.
+4. Add Entra federated credential subject:
+   - `repo:<owner>/<repo>:environment:dev`
+5. Add required repository secrets:
+   - `AZURE_SUBSCRIPTION_ID`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`
+   - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_MODEL_ID`, `AZURE_OPENAI_ENDPOINT`
+   - `AZURE_SQL_ADMIN_LOGIN`, `AZURE_SQL_ADMIN_PASSWORD`
+6. Trigger workflow from GitHub Actions with `environment=dev`.
+
+For full commands and troubleshooting, see:
+- [GitHub-Secrets-Setup.md](./docs/GitHub-Secrets-Setup.md#quick-bootstrap-checklist-5-10-min)
+- [CI-CD-GitHub-Actions.md](./docs/CI-CD-GitHub-Actions.md)
+
 ### Step 1: Configure GitHub Secrets
 
 To enable automatic deployment via GitHub Actions, configure these secrets:

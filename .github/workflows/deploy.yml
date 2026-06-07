@@ -253,7 +253,7 @@ jobs:
 
           $escapedUamiName = $uamiName.Replace("'", "''")
 
-            $sql = @"
+          $sql = @"
             DECLARE @principal sysname = N'$escapedUamiName';
 
             IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = @principal)
@@ -297,7 +297,7 @@ jobs:
               DECLARE @addDdlSql nvarchar(max) = N'ALTER ROLE [db_ddladmin] ADD MEMBER [' + REPLACE(@principal, ']', ']]') + N'];';
               EXEC(@addDdlSql);
             END;
-            "@
+          "@
 
           Add-Type -AssemblyName System.Data
           $conn = New-Object System.Data.SqlClient.SqlConnection $connectionString

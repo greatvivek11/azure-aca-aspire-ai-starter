@@ -212,9 +212,25 @@ jobs:
           # Accept either logical server name or FQDN and normalize to logical server name.
           SQL_SERVER_NAME="${SQL_SERVER_NAME%%.*}"
 
+          SQL_ADMIN_LOGIN_TO_USE="${AZURE_SQL_ADMIN_LOGIN}"
+          ACTUAL_SQL_ADMIN_LOGIN="$(az sql server show \
+            --resource-group "${RG_NAME}" \
+            --name "${SQL_SERVER_NAME}" \
+            --query administratorLogin -o tsv 2>/dev/null || true)"
+
+          if [[ -n "${ACTUAL_SQL_ADMIN_LOGIN}" && "${ACTUAL_SQL_ADMIN_LOGIN}" != "${AZURE_SQL_ADMIN_LOGIN}" ]]; then
+            echo "AZURE_SQL_ADMIN_LOGIN does not match SQL server administratorLogin."
+            echo "Using server administratorLogin '${ACTUAL_SQL_ADMIN_LOGIN}' for backend connection string."
+            SQL_ADMIN_LOGIN_TO_USE="${ACTUAL_SQL_ADMIN_LOGIN}"
+          fi
+
           SQL_HOST_SUFFIX="$(az cloud show --query suffixes.sqlServerHostname -o tsv)"
 
-          SQL_CONNECTION_STRING="Server=tcp:${SQL_SERVER_NAME}${SQL_HOST_SUFFIX},1433;Initial Catalog=${SQL_DATABASE_NAME};Persist Security Info=False;User ID=${AZURE_SQL_ADMIN_LOGIN};Password=${AZURE_SQL_ADMIN_PASSWORD};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+          # Escape any embedded double-quotes and quote credentials to handle special chars like ';'.
+          SQL_ADMIN_LOGIN_ESCAPED="${SQL_ADMIN_LOGIN_TO_USE//\"/\"\"}"
+          SQL_ADMIN_PASSWORD_ESCAPED="${AZURE_SQL_ADMIN_PASSWORD//\"/\"\"}"
+
+          SQL_CONNECTION_STRING="Server=tcp:${SQL_SERVER_NAME}${SQL_HOST_SUFFIX},1433;Initial Catalog=${SQL_DATABASE_NAME};Persist Security Info=False;User ID=\"${SQL_ADMIN_LOGIN_ESCAPED}\";Password=\"${SQL_ADMIN_PASSWORD_ESCAPED}\";MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
 
           az containerapp secret set \
             --resource-group "${RG_NAME}" \
@@ -226,12 +242,85 @@ jobs:
             --name "${BACKEND_APP_NAME}" \
             --set-env-vars ConnectionStrings__SqlServer=secretref:sql-conn
 
+      - name: Test SQL Connectivity
+        shell: bash
+        env:
+          AZURE_SQL_ADMIN_LOGIN: ${{ secrets.AZURE_SQL_ADMIN_LOGIN }}
+          AZURE_SQL_ADMIN_PASSWORD: ${{ secrets.AZURE_SQL_ADMIN_PASSWORD }}
+          SQL_PROVISIONING_MODE: ${{ env.SQL_PROVISIONING_MODE }}
+          AZURE_SQL_EXISTING_SERVER_NAME: ${{ env.AZURE_SQL_EXISTING_SERVER_NAME }}
+          AZURE_SQL_EXISTING_DATABASE_NAME: ${{ env.AZURE_SQL_EXISTING_DATABASE_NAME }}
+        run: |
+          set -euo pipefail
+
+          RG_NAME="$(azd env get-value AZURE_RESOURCE_GROUP)"
+          
+          mode_lower="$(echo "${SQL_PROVISIONING_MODE:-provision}" | tr '[:upper:]' '[:lower:]')"
+          SQL_SERVER_NAME="$(azd env get-value AZURE_SQL_SERVER_NAME || true)"
+          SQL_DATABASE_NAME="$(azd env get-value AZURE_SQL_DATABASE_NAME || true)"
+
+          if [[ -z "${SQL_SERVER_NAME}" || "${mode_lower}" == "existing" ]]; then
+            SQL_SERVER_NAME="${AZURE_SQL_EXISTING_SERVER_NAME:-${SQL_SERVER_NAME}}"
+          fi
+
+          if [[ -z "${SQL_DATABASE_NAME}" || "${mode_lower}" == "existing" ]]; then
+            SQL_DATABASE_NAME="${AZURE_SQL_EXISTING_DATABASE_NAME:-${SQL_DATABASE_NAME}}"
+          fi
+
+          if [[ -z "${SQL_SERVER_NAME}" || -z "${SQL_DATABASE_NAME}" ]]; then
+            echo "Unable to determine SQL server/database names for connectivity test."
+            exit 1
+          fi
+
+          SQL_SERVER_NAME="${SQL_SERVER_NAME%%.*}"
+
+          SQL_ADMIN_LOGIN_TO_USE="${AZURE_SQL_ADMIN_LOGIN}"
+          ACTUAL_SQL_ADMIN_LOGIN="$(az sql server show \
+            --resource-group "${RG_NAME}" \
+            --name "${SQL_SERVER_NAME}" \
+            --query administratorLogin -o tsv 2>/dev/null || true)"
+
+          if [[ -n "${ACTUAL_SQL_ADMIN_LOGIN}" && "${ACTUAL_SQL_ADMIN_LOGIN}" != "${AZURE_SQL_ADMIN_LOGIN}" ]]; then
+            SQL_ADMIN_LOGIN_TO_USE="${ACTUAL_SQL_ADMIN_LOGIN}"
+          fi
+
+          SQL_HOST_SUFFIX="$(az cloud show --query suffixes.sqlServerHostname -o tsv)"
+          SQL_FQDN="${SQL_SERVER_NAME}${SQL_HOST_SUFFIX}"
+
+          echo "Testing SQL connectivity to ${SQL_FQDN}/${SQL_DATABASE_NAME} as ${SQL_ADMIN_LOGIN_TO_USE}..."
+
+          # Use sqlcmd to test connectivity (available in Ubuntu runners).
+          if ! sqlcmd -S "${SQL_FQDN},1433" -d "${SQL_DATABASE_NAME}" -U "${SQL_ADMIN_LOGIN_TO_USE}" -P "${AZURE_SQL_ADMIN_PASSWORD}" -Q "SELECT @@VERSION;" -v ON_ERROR=EXIT 2>&1 | head -20; then
+            echo ""
+            echo "❌ SQL connectivity test FAILED."
+            echo "Verify that:"
+            echo "  - AZURE_SQL_ADMIN_LOGIN matches the SQL server admin login: ${SQL_ADMIN_LOGIN_TO_USE}"
+            echo "  - AZURE_SQL_ADMIN_PASSWORD is correct"
+            echo "  - SQL server ${SQL_FQDN} is reachable and running"
+            echo "  - Database ${SQL_DATABASE_NAME} exists"
+            exit 1
+          fi
+
+          echo "✅ SQL connectivity test passed."
+
       - name: Deploy Backend Service
         run: azd deploy backend --no-prompt
         env:
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
           AZURE_OPENAI_MODEL_ID: ${{ secrets.AZURE_OPENAI_MODEL_ID }}
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+
+      - name: Reapply Backend SQL Connection Env
+        shell: bash
+        run: |
+          set -euo pipefail
+          RG_NAME="$(azd env get-value AZURE_RESOURCE_GROUP)"
+          BACKEND_APP_NAME="$(azd env get-value BACKEND_CONTAINER_APP_NAME)"
+
+          az containerapp update \
+            --resource-group "${RG_NAME}" \
+            --name "${BACKEND_APP_NAME}" \
+            --set-env-vars ConnectionStrings__SqlServer=secretref:sql-conn
 
       - name: Deploy Frontend Service
         run: azd deploy frontend --no-prompt

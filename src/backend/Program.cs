@@ -242,21 +242,8 @@ static async Task EnsureSqlSchemaAsync(string connectionString)
         throw new InvalidOperationException("SQL connection string must include a database name.");
     }
 
-    var masterConnectionBuilder = new SqlConnectionStringBuilder(connectionString)
-    {
-        InitialCatalog = "master"
-    };
-
-    await using (var masterConnection = new SqlConnection(masterConnectionBuilder.ConnectionString))
-    {
-        await masterConnection.OpenAsync();
-        var safeDatabaseName = databaseName.Replace("'", "''");
-        await using var createDatabaseCommand = masterConnection.CreateCommand();
-        createDatabaseCommand.CommandText =
-            $"IF DB_ID(N'{safeDatabaseName}') IS NULL CREATE DATABASE [{databaseName.Replace("]", "]]")}];";
-        await createDatabaseCommand.ExecuteNonQueryAsync();
-    }
-
+    // Database is already provisioned by Bicep IaC during infrastructure deployment.
+    // Skip CREATE DATABASE and connect directly to seed tables/schema.
     await using var connection = new SqlConnection(connectionString);
     await connection.OpenAsync();
 

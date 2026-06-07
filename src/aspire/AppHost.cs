@@ -45,6 +45,7 @@ var redis = builder.AddContainer("redis", "redis:7-alpine")
 var backend = builder.AddDockerfile("backend", "../backend")
     .WaitFor(sql)
     .WaitFor(redis)
+    .WithOtlpExporter()
     .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions
     {
         AppId = "aihub-backend",
@@ -61,6 +62,7 @@ var backend = builder.AddDockerfile("backend", "../backend")
 var worker = builder.AddDockerfile("worker", "../worker")
     .WaitFor(sql)
     .WaitFor(redis)
+    .WithOtlpExporter()
     .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions
     {
         AppId = "aihub-worker",
@@ -74,6 +76,7 @@ var worker = builder.AddDockerfile("worker", "../worker")
 var frontend = builder.AddDockerfile("frontend", "../frontend")
     .WaitFor(backend)
     .WaitFor(redis)
+    .WithOtlpExporter()
     .WithHttpEndpoint(name: "http", port: 3000, targetPort: 3000)
     .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions
     {

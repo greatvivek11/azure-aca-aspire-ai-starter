@@ -36,6 +36,16 @@ param sqlEntraAdminLogin string = ''
 
 @description('Entra AD admin object ID for Azure SQL server. Required if sqlEntraAdminLogin is provided.')
 param sqlEntraAdminObjectId string = ''
+
+@secure()
+@description('Azure OpenAI API key for backend AI calls.')
+param azureOpenAiApiKey string
+
+@description('Azure OpenAI model deployment ID used by backend.')
+param azureOpenAiModelId string
+
+@description('Azure OpenAI endpoint URL used by backend.')
+param azureOpenAiEndpoint string
 var baseName = 'aih-${environmentName}-${uniqueString(resourceGroup().id)}'
 var acrPullRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
@@ -66,6 +76,19 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
       searchVersion: 1
       enableLogAccessUsingOnlyResourcePermissions: true
     }
+  }
+}
+
+// Workspace-based Application Insights receives logs, traces, and custom metrics from all workloads.
+resource applicationInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: '${baseName}-appi'
+  location: location
+  tags: tags
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logAnalytics.id
+    IngestionMode: 'LogAnalytics'
   }
 }
 
@@ -185,6 +208,12 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
     managedEnvironmentId: acaEnvironment.id
     configuration: {
       activeRevisionsMode: 'Single'
+      secrets: [
+        {
+          name: 'azure-openai-api-key'
+          value: azureOpenAiApiKey
+        }
+      ]
       ingress: {
         external: true
         targetPort: 8080
@@ -202,6 +231,24 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'backend'
           image: defaultContainerImage
+          env: [
+            {
+              name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+              value: applicationInsights.properties.ConnectionString
+            }
+            {
+              name: 'AZURE_OPENAI_API_KEY'
+              secretRef: 'azure-openai-api-key'
+            }
+            {
+              name: 'AZURE_OPENAI_MODEL_ID'
+              value: azureOpenAiModelId
+            }
+            {
+              name: 'AZURE_OPENAI_ENDPOINT'
+              value: azureOpenAiEndpoint
+            }
+          ]
           resources: {
             cpu: json('0.5')
             memory: '1Gi'
@@ -255,6 +302,10 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
           image: defaultContainerImage
           env: [
             {
+              name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+              value: applicationInsights.properties.ConnectionString
+            }
+            {
               name: 'BACKEND_API_BASE_URL'
               value: 'https://${backendApp.properties.configuration.ingress.fqdn}'
             }
@@ -305,6 +356,12 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'worker'
           image: defaultContainerImage
+          env: [
+            {
+              name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+              value: applicationInsights.properties.ConnectionString
+            }
+          ]
           resources: {
             cpu: json('0.25')
             memory: '0.5Gi'

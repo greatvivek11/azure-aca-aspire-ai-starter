@@ -1,4 +1,7 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Builder;
+using OpenTelemetry;
+using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -16,6 +19,30 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add Dapr support
 builder.Services.AddDaprClient();
+// Wire structured logs, traces, and metrics via OpenTelemetry.
+// In Aspire, OTEL_EXPORTER_OTLP_ENDPOINT is injected by the AppHost so logs/traces/metrics
+// appear in the local dashboard. APPLICATIONINSIGHTS_CONNECTION_STRING enables Azure Monitor
+// export automatically when deployed to Azure.
+builder.Logging.AddOpenTelemetry(logging =>
+{
+    logging.IncludeFormattedMessage = true;
+    logging.IncludeScopes = true;
+});
+var otelBuilder = builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing => tracing
+        .AddSource("Microsoft.AspNetCore")
+        .AddSource("AIHub.Backend"))
+    .WithMetrics(metrics => metrics
+        .AddMeter("Microsoft.AspNetCore.Hosting")
+        .AddMeter("Microsoft.AspNetCore.Server.Kestrel"));
+otelBuilder.UseOtlpExporter();
+var appInsightsConnectionString =
+    builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]
+    ?? builder.Configuration["ApplicationInsights:ConnectionString"];
+if (!string.IsNullOrWhiteSpace(appInsightsConnectionString))
+{
+    otelBuilder.UseAzureMonitor();
+}
 
 // Add health checks
 builder.Services.AddHealthChecks();
@@ -41,7 +68,7 @@ builder.Services.AddSingleton<Kernel>(_ =>
             apiKey: azureOpenAiSettings.ApiKey,
             endpoint: azureOpenAiSettings.Endpoint)
         .Build();
-    
+
     return kernel;
 });
 
@@ -52,11 +79,47 @@ var app = builder.Build();
 var sqlConnectionString = GetSqlConnectionString(app.Configuration);
 await EnsureSqlSchemaAsync(sqlConnectionString);
 
+app.Logger.LogInformation(
+    "Azure OpenAI configuration loaded. ModelId={ModelId} Endpoint={Endpoint}",
+    azureOpenAiSettings.ModelId,
+    azureOpenAiSettings.Endpoint);
+if (string.IsNullOrWhiteSpace(appInsightsConnectionString))
+{
+    app.Logger.LogInformation(
+        "Application Insights connection string not set. Azure Monitor exporter is disabled for this run.");
+}
+
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
 }
+
+app.Use(async (context, next) =>
+{
+    var started = Stopwatch.GetTimestamp();
+
+    try
+    {
+        await next();
+        app.Logger.LogInformation(
+            "HTTP {Method} {Path} responded {StatusCode} in {ElapsedMilliseconds} ms",
+            context.Request.Method,
+            context.Request.Path,
+            context.Response.StatusCode,
+            Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(
+            ex,
+            "HTTP {Method} {Path} failed after {ElapsedMilliseconds} ms",
+            context.Request.Method,
+            context.Request.Path,
+            Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        throw;
+    }
+});
 
 // Use Dapr
 app.UseCloudEvents();
@@ -190,7 +253,7 @@ static async Task EnsureSqlSchemaAsync(string connectionString)
         var safeDatabaseName = databaseName.Replace("'", "''");
         await using var createDatabaseCommand = masterConnection.CreateCommand();
         createDatabaseCommand.CommandText =
-            $"IF DB_ID(N'{safeDatabaseName}') IS NULL CREATE DATABASE [{databaseName.Replace("]", "]]" )}];";
+            $"IF DB_ID(N'{safeDatabaseName}') IS NULL CREATE DATABASE [{databaseName.Replace("]", "]]")}];";
         await createDatabaseCommand.ExecuteNonQueryAsync();
     }
 

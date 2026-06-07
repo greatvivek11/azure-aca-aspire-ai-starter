@@ -9,8 +9,10 @@ public static class Endpoint
 {
     public static void MapAiPingEndpoint(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/v1/ping-ai", async (Kernel kernel) =>
+        app.MapGet("/v1/ping-ai", async (Kernel kernel, ILoggerFactory loggerFactory) =>
         {
+            var logger = loggerFactory.CreateLogger("AIHub.Backend.Features.AiPing");
+
             try
             {
                 // Invoke a simple prompt to test the connection
@@ -19,9 +21,7 @@ public static class Endpoint
             }
             catch (Exception ex)
             {
-                // Log the exception details
-                Console.WriteLine($"AI Ping failed: {ex.Message}");
-                Console.WriteLine($"Exception details: {ex}");
+                logger.LogError(ex, "AI ping failed");
                 return Results.StatusCode(503);
             }
         })

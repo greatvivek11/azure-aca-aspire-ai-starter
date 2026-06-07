@@ -16,6 +16,11 @@
 			},
 			"env": {
 				"ASPNETCORE_ENVIRONMENT": "Development"
+			},
+			"justMyCode": true,
+			"logging": {
+				"moduleLoad": false,
+				"programOutput": true
 			}
 		}
 	],

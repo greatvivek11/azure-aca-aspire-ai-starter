@@ -20,6 +20,15 @@
     "sqlEntraAdminObjectId": {
       "value": "${AZURE_SQL_ENTRA_ADMIN_OBJECT_ID}"
     },
+    "azureOpenAiApiKey": {
+      "value": "${AZURE_OPENAI_API_KEY}"
+    },
+    "azureOpenAiModelId": {
+      "value": "${AZURE_OPENAI_MODEL_ID}"
+    },
+    "azureOpenAiEndpoint": {
+      "value": "${AZURE_OPENAI_ENDPOINT}"
+    },
     "sqlProvisioningMode": {
       "value": "${SQL_PROVISIONING_MODE}"
     },

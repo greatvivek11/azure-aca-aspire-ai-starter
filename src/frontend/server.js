@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
+import appInsights from "applicationinsights";
 import { Hono } from "hono";
 
 const app = new Hono();
@@ -11,13 +12,72 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const indexHtmlPath = path.join(__dirname, "dist", "index.html");
 
+const connectionString = process.env.APPLICATIONINSIGHTS_CONNECTION_STRING;
+if (connectionString) {
+	appInsights
+		.setup(connectionString)
+		.setAutoCollectRequests(true)
+		.setAutoCollectDependencies(true)
+		.setAutoCollectExceptions(true)
+		.setAutoCollectConsole(true, true)
+		.setUseDiskRetryCaching(true)
+		.start();
+}
+
+const telemetryClient = appInsights.defaultClient;
+
+function trackTrace(message, properties = {}) {
+	telemetryClient?.trackTrace({ message, properties });
+}
+
+function trackException(error, properties = {}) {
+	telemetryClient?.trackException({ exception: error, properties });
+}
+
+function toError(error) {
+	if (error instanceof Error) {
+		return error;
+	}
+
+	return new Error(typeof error === "string" ? error : JSON.stringify(error));
+}
+
+function logFrontendException(error, properties = {}) {
+	const normalizedError = toError(error);
+	const logRecord = {
+		timestamp: new Date().toISOString(),
+		severity: "Error",
+		eventName: "FrontendException",
+		service: "frontend",
+		message: normalizedError.message,
+		route: properties.route ?? "unknown",
+		method: properties.method ?? "unknown",
+		stack: normalizedError.stack,
+	};
+
+	console.error(JSON.stringify(logRecord));
+	trackException(normalizedError, properties);
+}
+
+process.on("uncaughtException", (error) => {
+	logFrontendException(error, { route: "process", method: "UNCAUGHT_EXCEPTION" });
+});
+
+process.on("unhandledRejection", (reason) => {
+	logFrontendException(reason, { route: "process", method: "UNHANDLED_REJECTION" });
+});
+
+trackTrace("Frontend server booting", {
+	port: String(Number(process.env.PORT || 3000)),
+});
+
 const backendApiCandidates = [
 	process.env.BACKEND_API_BASE_URL,
 	process.env.BACKEND_DAPR_BASE_URL,
 	"http://localhost:3500/v1.0/invoke/aihub-backend/method",
 	"http://backend:8080",
 	"http://localhost:8080",
-	"http://host.docker.internal:8080"
+	"http://host.docker.internal:8080",
 ].filter(Boolean);
 
 async function proxyToBackend(pathSuffix, options) {
@@ -33,7 +93,10 @@ async function proxyToBackend(pathSuffix, options) {
 	}
 
 	const attempted = backendApiCandidates.join(", ");
-	throw lastError ?? new Error(`No backend API base URLs configured. Tried: ${attempted}`);
+	throw (
+		lastError ??
+		new Error(`No backend API base URLs configured. Tried: ${attempted}`)
+	);
 }
 
 app.get("/health", (c) => c.json({ status: "Healthy", service: "Frontend" }));
@@ -43,10 +106,15 @@ app.get("/api/customers", async (c) => {
 		const response = await proxyToBackend("/v1/customers");
 		const responseBody = await response.text();
 		return c.body(responseBody, response.status, {
-			"content-type": response.headers.get("content-type") ?? "application/json"
+			"content-type":
+				response.headers.get("content-type") ?? "application/json",
 		});
 	} catch (error) {
-		return c.json({ message: "Failed to fetch customers", error: error.message }, 500);
+		logFrontendException(error, { route: "/api/customers", method: "GET" });
+		return c.json(
+			{ message: "Failed to fetch customers", error: error.message },
+			500,
+		);
 	}
 });
 
@@ -56,14 +124,19 @@ app.post("/api/customers", async (c) => {
 		const response = await proxyToBackend("/v1/customers", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify(body)
+			body: JSON.stringify(body),
 		});
 		const responseBody = await response.text();
 		return c.body(responseBody, response.status, {
-			"content-type": response.headers.get("content-type") ?? "application/json"
+			"content-type":
+				response.headers.get("content-type") ?? "application/json",
 		});
 	} catch (error) {
-		return c.json({ message: "Failed to create customer", error: error.message }, 500);
+		logFrontendException(error, { route: "/api/customers", method: "POST" });
+		return c.json(
+			{ message: "Failed to create customer", error: error.message },
+			500,
+		);
 	}
 });
 
@@ -74,14 +147,19 @@ app.put("/api/customers/:id", async (c) => {
 		const response = await proxyToBackend(`/v1/customers/${id}`, {
 			method: "PUT",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify(body)
+			body: JSON.stringify(body),
 		});
 		const responseBody = await response.text();
 		return c.body(responseBody, response.status, {
-			"content-type": response.headers.get("content-type") ?? "application/json"
+			"content-type":
+				response.headers.get("content-type") ?? "application/json",
 		});
 	} catch (error) {
-		return c.json({ message: "Failed to update customer", error: error.message }, 500);
+		logFrontendException(error, { route: "/api/customers/:id", method: "PUT" });
+		return c.json(
+			{ message: "Failed to update customer", error: error.message },
+			500,
+		);
 	}
 });
 
@@ -89,14 +167,19 @@ app.delete("/api/customers/:id", async (c) => {
 	try {
 		const id = c.req.param("id");
 		const response = await proxyToBackend(`/v1/customers/${id}`, {
-			method: "DELETE"
+			method: "DELETE",
 		});
 		const responseBody = await response.text();
 		return c.body(responseBody, response.status, {
-			"content-type": response.headers.get("content-type") ?? "application/json"
+			"content-type":
+				response.headers.get("content-type") ?? "application/json",
 		});
 	} catch (error) {
-		return c.json({ message: "Failed to delete customer", error: error.message }, 500);
+		logFrontendException(error, { route: "/api/customers/:id", method: "DELETE" });
+		return c.json(
+			{ message: "Failed to delete customer", error: error.message },
+			500,
+		);
 	}
 });
 
@@ -108,5 +191,6 @@ app.get("*", async (c) => {
 });
 
 serve({ fetch: app.fetch, port }, (info) => {
+	trackTrace("Frontend server running", { port: String(info.port) });
 	console.log(`Frontend server running at http://localhost:${info.port}`);
 });

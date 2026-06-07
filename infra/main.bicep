@@ -19,6 +19,7 @@ var shortId = take(uniqueString(resourceGroup().id), 6)
 var backendAppName = 'backend-${shortId}'
 var frontendAppName = 'frontend-${shortId}'
 var workerAppName = 'worker-${shortId}'
+var containerAppsManagedIdentityName = '${baseName}-cai'
 
 // Log Analytics is required for ACA diagnostics and troubleshooting.
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
@@ -67,12 +68,33 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' =
   }
 }
 
+// User-assigned managed identity for Container Apps to pull images from ACR.
+resource containerAppsManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: containerAppsManagedIdentityName
+  location: location
+  tags: tags
+}
+
+// Grant AcrPull role to the managed identity on the container registry.
+resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(containerRegistry.id, containerAppsManagedIdentity.id, 'AcrPull')
+  scope: containerRegistry
+  properties: {
+    principalId: containerAppsManagedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: acrPullRoleDefinitionId
+  }
+}
+
 // Backend API container app. azd deploy locates this by azd-service-name tag.
 resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: backendAppName
   location: location
   identity: {
-    type: 'SystemAssigned'
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${containerAppsManagedIdentity.id}': {}
+    }
   }
   tags: union(tags, {
     'azd-service-name': 'backend'
@@ -86,6 +108,12 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
         targetPort: 8080
         transport: 'auto'
       }
+      registries: [
+        {
+          server: containerRegistry.properties.loginServer
+          identity: containerAppsManagedIdentity.id
+        }
+      ]
     }
     template: {
       containers: [
@@ -99,11 +127,14 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       scale: {
-        minReplicas: 0
+        minReplicas: 1
         maxReplicas: 2
       }
     }
   }
+  dependsOn: [
+    acrPullRoleAssignment
+  ]
 }
 
 // Frontend web container app. azd deploy locates this by azd-service-name tag.
@@ -111,7 +142,10 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: frontendAppName
   location: location
   identity: {
-    type: 'SystemAssigned'
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${containerAppsManagedIdentity.id}': {}
+    }
   }
   tags: union(tags, {
     'azd-service-name': 'frontend'
@@ -125,6 +159,12 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
         targetPort: 3000
         transport: 'auto'
       }
+      registries: [
+        {
+          server: containerRegistry.properties.loginServer
+          identity: containerAppsManagedIdentity.id
+        }
+      ]
     }
     template: {
       containers: [
@@ -144,11 +184,14 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       scale: {
-        minReplicas: 0
+        minReplicas: 1
         maxReplicas: 2
       }
     }
   }
+  dependsOn: [
+    acrPullRoleAssignment
+  ]
 }
 
 // Worker container app. azd deploy locates this by azd-service-name tag.
@@ -156,7 +199,10 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: workerAppName
   location: location
   identity: {
-    type: 'SystemAssigned'
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${containerAppsManagedIdentity.id}': {}
+    }
   }
   tags: union(tags, {
     'azd-service-name': 'worker'
@@ -165,6 +211,12 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
     managedEnvironmentId: acaEnvironment.id
     configuration: {
       activeRevisionsMode: 'Single'
+      registries: [
+        {
+          server: containerRegistry.properties.loginServer
+          identity: containerAppsManagedIdentity.id
+        }
+      ]
     }
     template: {
       containers: [
@@ -178,41 +230,14 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       scale: {
-        minReplicas: 0
+        minReplicas: 1
         maxReplicas: 2
       }
     }
   }
-}
-
-resource backendAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(containerRegistry.id, backendApp.id, 'AcrPull')
-  scope: containerRegistry
-  properties: {
-    principalId: backendApp.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: acrPullRoleDefinitionId
-  }
-}
-
-resource frontendAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(containerRegistry.id, frontendApp.id, 'AcrPull')
-  scope: containerRegistry
-  properties: {
-    principalId: frontendApp.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: acrPullRoleDefinitionId
-  }
-}
-
-resource workerAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(containerRegistry.id, workerApp.id, 'AcrPull')
-  scope: containerRegistry
-  properties: {
-    principalId: workerApp.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: acrPullRoleDefinitionId
-  }
+  dependsOn: [
+    acrPullRoleAssignment
+  ]
 }
 
 output AZURE_LOCATION string = location

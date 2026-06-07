@@ -8,8 +8,8 @@ The CI/CD pipeline automates:
 - ✅ Building and testing the entire solution
 - ✅ Running architecture tests to ensure code quality
 - ✅ Validating Azure infrastructure prerequisites
-- ✅ Deploying to Azure Container Apps using `azd up`
-- ✅ Injecting secrets into Container Apps environment
+- ✅ Deploying to Azure Container Apps using `azd provision` + `azd deploy`
+- ✅ Using Managed Identity for backend SQL runtime authentication
 
 **Deployment triggers:**
 - Push to `main` branch (automatic)
@@ -45,8 +45,8 @@ The CI/CD pipeline automates:
 │  │ 5. Authenticate to Azure via OIDC                   │   │
 │  │ 6. Configure azd to use Azure CLI auth              │   │
 │  │ 7. Validate Azure environment                        │   │
-│  │ 8. Run: azd up --no-prompt                           │   │
-│  │ 9. Inject Azure OpenAI secrets                       │   │
+│  │ 8. Run: azd provision --no-prompt                    │   │
+│  │ 9. Run: azd deploy <service> --no-prompt             │   │
 │  │ 10. Display deployment summary                       │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
@@ -78,7 +78,7 @@ validate:
 
 ### 2. Deployment Job
 
-**Purpose**: Deploy to Azure Container Apps using `azd up`
+**Purpose**: Deploy to Azure Container Apps using `azd provision` and service-level `azd deploy`
 
 ```yaml
 deploy:
@@ -92,8 +92,8 @@ deploy:
     - Authenticate to Azure (OpenID Connect)
     - Configure azd to use Azure CLI auth
     - Validate Azure environment
-    - Run: azd up --no-prompt
-    - Inject secrets from GitHub Secrets
+    - Run: azd provision --no-prompt
+    - Run: azd deploy backend/frontend/worker --no-prompt
     - Display deployment summary
 ```
 
@@ -148,7 +148,7 @@ mode unless configured, so the workflow sets:
 azd config set auth.useAzCliAuth true
 ```
 
-This makes `azd up` reuse the Azure CLI OIDC session from `azure/login`.
+This makes `azd` commands reuse the Azure CLI OIDC session from `azure/login`.
 
 The workflow uses **OpenID Connect (OIDC)** with `azure/login@v2` instead of storing credentials:
 
@@ -248,8 +248,8 @@ git push origin main
 - Starts only if validation succeeds
 - Authenticates to Azure
 - Validates infrastructure
-- Runs `azd up` to deploy all containers
-- Injects secrets into Container Apps
+- Runs `azd provision` followed by `azd deploy` per service
+- Uses Managed Identity for backend SQL runtime authentication
 
 ### 4. Deployment Summary
 

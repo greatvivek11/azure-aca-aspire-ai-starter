@@ -131,6 +131,14 @@ To enable automatic deployment via GitHub Actions, configure these secrets:
 - `AZURE_OPENAI_MODEL_ID`
 - `AZURE_OPENAI_ENDPOINT`
 
+**SQL Provisioning + Entra Setup:**
+- `AZURE_SQL_ADMIN_LOGIN`
+- `AZURE_SQL_ADMIN_PASSWORD`
+
+**Optional Entra Override (advanced):**
+- `AZURE_SQL_ENTRA_ADMIN_LOGIN`
+- `AZURE_SQL_ENTRA_ADMIN_OBJECT_ID`
+
 For detailed setup instructions, see [GitHub-Secrets-Setup.md](./docs/GitHub-Secrets-Setup.md)
 
 ### Step 2: Commit and Push

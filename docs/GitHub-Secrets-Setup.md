@@ -37,30 +37,28 @@ These secrets are injected into the Container Apps environment at deployment tim
 | `AZURE_OPENAI_MODEL_ID` | Deployed model name | Azure Portal → OpenAI resource → Model deployments |
 | `AZURE_OPENAI_ENDPOINT` | Azure OpenAI endpoint URL | Azure Portal → OpenAI resource → Keys and Endpoint |
 
-### SQL Credentials (Required for Provisioning)
+### SQL Credentials (Required for Provisioning only)
 
-These secrets are used by Bicep during `azd provision` to create Azure SQL Server/Database and inject the backend SQL connection string into Container Apps secrets.
+These secrets are used by Bicep during `azd provision` to create Azure SQL Server/Database.
+Backend runtime SQL auth now uses the Container App User-Assigned Managed Identity (UAMI),
+so SQL username/password is not injected into ACA runtime secrets.
 
 | Secret Name | Description | Example |
 |---|---|---|
 | `AZURE_SQL_ADMIN_LOGIN` | Azure SQL server admin username | `sqladmincopilot` |
 | `AZURE_SQL_ADMIN_PASSWORD` | Azure SQL server admin password | `Use-a-strong-password-here` |
 
-### SQL Entra AD Authentication (Optional)
+### SQL Entra AD Authentication (Automated in provision mode)
 
-For mixed authentication (SQL login + Entra AD), optionally set these secrets:
+No Entra admin secrets are required for new environment provisioning.
 
-| Secret Name | Description | Example |
-|---|---|---|
-| `AZURE_SQL_ENTRA_ADMIN_LOGIN` | Entra AD admin email | `yourname@outlook.com` |
-| `AZURE_SQL_ENTRA_ADMIN_OBJECT_ID` | Azure AD object ID of the admin user | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
+In GitHub Actions provision mode (`SQL_PROVISIONING_MODE=provision`), the workflow automatically:
+1. Resolves the OIDC service principal metadata (`AZURE_CLIENT_ID`) and configures it as SQL Entra admin.
+2. Creates a contained database user for backend UAMI.
+3. Grants `db_datareader`, `db_datawriter`, and `db_ddladmin` roles to the UAMI.
 
-**To find your Entra AD object ID:**
-```bash
-az ad user show --id "yourname@outlook.com" --query id -o tsv
-```
-
-**Note**: If these secrets are not set, only SQL authentication (login/password) will be available; Entra AD admin will not be configured.
+For existing SQL mode (`SQL_PROVISIONING_MODE=existing`), automatic role grants are skipped. In that mode,
+you may need to run the SQL user/role grant commands manually if the existing database is not already configured.
 
 ### SQL Provisioning Mode (Optional, Recommended for Free-Tier Reuse)
 
@@ -73,8 +71,8 @@ Use these secrets when you want CI/CD to use a pre-created SQL database (for exa
 | `AZURE_SQL_EXISTING_DATABASE_NAME` | Existing SQL database name | empty |
 
 Behavior:
-- `provision`: Bicep creates SQL Server + DB and pipeline uses those outputs.
-- `existing`: Bicep skips SQL creation and pipeline configures backend using your existing server/database values.
+- `provision`: Bicep creates SQL Server + DB and backend receives `SQL_SERVER` + `SQL_DATABASE` env vars.
+- `existing`: Bicep skips SQL creation and backend uses your existing server/database values.
 
 When `SQL_PROVISIONING_MODE=existing`, both existing-name secrets are required.
 
@@ -211,7 +209,7 @@ AZURE_OPENAI_MODEL_ID: <deployed-model-name> (e.g., gpt-4.1)
 AZURE_OPENAI_ENDPOINT: <your-openai-endpoint>
 ```
 
-#### SQL Provisioning Secrets:
+#### SQL Provisioning Secrets (provision-time only):
 ```
 AZURE_SQL_ADMIN_LOGIN: <azure-sql-admin-username>
 AZURE_SQL_ADMIN_PASSWORD: <azure-sql-admin-password>
@@ -225,6 +223,9 @@ SQL_PROVISIONING_MODE: provision
 AZURE_SQL_EXISTING_SERVER_NAME: <existing-sql-server-name>
 AZURE_SQL_EXISTING_DATABASE_NAME: <existing-database-name>
 ```
+
+#### Entra Admin Secrets:
+Not required for provision mode. Leave unset unless you intentionally override the automated behavior.
 
 ---
 
@@ -298,7 +299,7 @@ Expected `subject` must match the workflow token exactly:
 
 ## Environment Variable Injection
 
-When you run `azd up` from GitHub Actions, secrets are automatically injected:
+When GitHub Actions runs `azd provision` and `azd deploy`, environment values are passed to workloads:
 
 ```yaml
 env:
@@ -307,7 +308,8 @@ env:
   AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
 ```
 
-These become Container Apps environment variables and are accessible to the backend at runtime.
+These become Container Apps environment variables and are accessible at runtime.
+For SQL, backend now uses Managed Identity with Bicep-provided `SQL_SERVER`, `SQL_DATABASE`, and `AZURE_CLIENT_ID`.
 
 ---
 

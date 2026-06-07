@@ -242,6 +242,17 @@ jobs:
             --name "${BACKEND_APP_NAME}" \
             --set-env-vars ConnectionStrings__SqlServer=secretref:sql-conn
 
+      - name: Install sqlcmd client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y curl gnupg apt-transport-https
+          curl -sSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/ubuntu/22.04/prod jammy main" | sudo tee /etc/apt/sources.list.d/microsoft-prod.list
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
+
       - name: Test SQL Connectivity
         shell: bash
         env:
@@ -252,6 +263,8 @@ jobs:
           AZURE_SQL_EXISTING_DATABASE_NAME: ${{ env.AZURE_SQL_EXISTING_DATABASE_NAME }}
         run: |
           set -euo pipefail
+
+          echo "::group::Resolve SQL target"
 
           RG_NAME="$(azd env get-value AZURE_RESOURCE_GROUP)"
           
@@ -287,10 +300,20 @@ jobs:
           SQL_HOST_SUFFIX="$(az cloud show --query suffixes.sqlServerHostname -o tsv)"
           SQL_FQDN="${SQL_SERVER_NAME}${SQL_HOST_SUFFIX}"
 
+          echo "Resolved SQL server: ${SQL_FQDN}"
+          echo "Resolved SQL database: ${SQL_DATABASE_NAME}"
+          echo "Resolved SQL login: ${SQL_ADMIN_LOGIN_TO_USE}"
+          echo "::endgroup::"
+
           echo "Testing SQL connectivity to ${SQL_FQDN}/${SQL_DATABASE_NAME} as ${SQL_ADMIN_LOGIN_TO_USE}..."
 
-          # Use sqlcmd to test connectivity (available in Ubuntu runners).
-          if ! sqlcmd -S "${SQL_FQDN},1433" -d "${SQL_DATABASE_NAME}" -U "${SQL_ADMIN_LOGIN_TO_USE}" -P "${AZURE_SQL_ADMIN_PASSWORD}" -Q "SELECT @@VERSION;" -v ON_ERROR=EXIT 2>&1 | head -20; then
+          SQLCMD_PATH="/opt/mssql-tools18/bin/sqlcmd"
+          if [[ ! -x "${SQLCMD_PATH}" ]]; then
+            echo "❌ sqlcmd is not installed at ${SQLCMD_PATH}."
+            exit 1
+          fi
+
+          if ! "${SQLCMD_PATH}" -S "${SQL_FQDN},1433" -d "${SQL_DATABASE_NAME}" -U "${SQL_ADMIN_LOGIN_TO_USE}" -P "${AZURE_SQL_ADMIN_PASSWORD}" -Q "SELECT @@VERSION;" -b 2>&1 | head -20; then
             echo ""
             echo "❌ SQL connectivity test FAILED."
             echo "Verify that:"
@@ -350,3 +373,18 @@ jobs:
           script: |
             const status = '${{ job.status }}' === 'success' ? '✅ Success' : '❌ Failed';
             console.log(`Deployment ${status}`);
+
+      - name: Deployment Summary Report
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Deployment Run Summary"
+            echo ""
+            echo "- Job status: ${{ job.status }}"
+            echo "- Workflow: ${{ github.workflow }}"
+            echo "- Run ID: ${{ github.run_id }}"
+            echo "- Commit: ${{ github.sha }}"
+            echo ""
+            echo "If this run failed, inspect the first failed step in the Actions UI and expand its logs."
+          } >> "$GITHUB_STEP_SUMMARY"

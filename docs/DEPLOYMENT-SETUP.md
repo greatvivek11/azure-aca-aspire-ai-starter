@@ -10,7 +10,8 @@ This document summarizes all the changes made to enable automated GitHub Actions
 A complete CI/CD pipeline that:
 - ✅ Triggers on push to `main` or manual dispatch
 - ✅ Validates code (build + tests)
-- ✅ Deploys to Azure Container Apps using `azd provision` + `azd deploy`
+- ✅ Deploys to Azure Container Apps with **public GHCR images by default**
+- ✅ Supports **managed ACR** as an opt-in deployment mode
 - ✅ Authenticates via OIDC (no stored credentials)
 - ✅ Uses Managed Identity for backend SQL runtime auth
 
@@ -50,7 +51,7 @@ dotnet test src/Backend.Tests/Backend.Tests.csproj --configuration Release
 **What they check**:
 - ✅ Resource group exists (creates if missing)
 - ✅ SQL Server/Database status
-- ✅ Container Registry status
+- ✅ Container Registry status (optional when using external/public images)
 - ✅ Container Apps Environment status
 
 **Usage**:
@@ -69,9 +70,9 @@ pwsh scripts/validate-azure-env.ps1 -SubscriptionId <SUBSCRIPTION_ID> -ResourceG
 
 | File | Purpose |
 |------|---------|
-| [GitHub-Secrets-Setup.md](./docs/GitHub-Secrets-Setup.md) | Configure GitHub Secrets for CI/CD |
-| [CI-CD-GitHub-Actions.md](./docs/CI-CD-GitHub-Actions.md) | GitHub Actions workflow deep-dive |
-| [Architecture-Tests.md](./docs/Architecture-Tests.md) | Architecture testing patterns & examples |
+| [GitHub-Secrets-Setup.md](./GitHub-Secrets-Setup.md) | Configure GitHub Secrets for CI/CD |
+| [CI-CD-GitHub-Actions.md](./CI-CD-GitHub-Actions.md) | GitHub Actions workflow deep-dive |
+| [Architecture-Tests.md](./Architecture-Tests.md) | Architecture testing patterns & examples |
 | [README.md](./README.md) | Updated with deployment section |
 
 ---
@@ -105,7 +106,8 @@ git push origin main
 3. **Deploy Job** runs (if validation passes):
    - Authenticates to Azure
    - Validates environment
-  - Runs `azd provision`, then deploys each service
+  - In external mode, builds and pushes public GHCR images, then runs `azd provision`
+  - In managed mode, provisions ACR-backed infra and deploys each service with `azd deploy`
   - Bicep injects non-secret SQL runtime config (`SQL_SERVER`, `SQL_DATABASE`, `AZURE_CLIENT_ID`)
 4. ✅ Deployment complete!
 
@@ -133,9 +135,18 @@ Optional override only (advanced):
 ```
 AZURE_SQL_ENTRA_ADMIN_LOGIN
 AZURE_SQL_ENTRA_ADMIN_OBJECT_ID
+CONTAINER_REGISTRY_MODE     (optional: external|managed, default: external)
+EXTERNAL_REGISTRY_SERVER    (optional, default: ghcr.io)
+EXTERNAL_REGISTRY_USERNAME  (optional; needed for authenticated non-GHCR registries)
+EXTERNAL_REGISTRY_PASSWORD  (optional; needed for authenticated non-GHCR registries)
+ENABLE_LOG_ANALYTICS        (optional: true|false, default: false)
+ENABLE_ASPIRE_DASHBOARD     (optional: true|false, default: true)
+BACKEND_MIN_REPLICAS        (optional, default: 0)
+FRONTEND_MIN_REPLICAS       (optional, default: 0)
+WORKER_MIN_REPLICAS         (optional, default: 0)
 ```
 
-**Setup instructions**: See [GitHub-Secrets-Setup.md](./docs/GitHub-Secrets-Setup.md)
+**Setup instructions**: See [GitHub-Secrets-Setup.md](./GitHub-Secrets-Setup.md)
 
 ---
 
@@ -187,6 +198,8 @@ Edit `scripts/validate-azure-env.sh` or `.ps1` to add more checks.
 | **"OIDC authentication failed"** | Check that service principal has Contributor role on resource group |
 | **"azd not logged in"** | Add `azd config set auth.useAzCliAuth true` after `azure/login` in workflow |
 | **"azd provision/deploy failed"** | Check `AZD_ENVIRONMENT_NAME` environment variable; run validation script first |
+| **External registry push/login failed** | For GHCR, keep `CONTAINER_REGISTRY_MODE=external` and let the workflow use `GITHUB_TOKEN`; for other registries, set `EXTERNAL_REGISTRY_USERNAME` and `EXTERNAL_REGISTRY_PASSWORD` |
+| **Aspire Dashboard provisioning fails** | Set `ENABLE_ASPIRE_DASHBOARD=false` and redeploy if preview `dotNetComponents` is unavailable in your region/subscription |
 | **Tests fail in CI but pass locally** | Ensure Release configuration: `dotnet test --configuration Release` |
 | **Deployment times out** | Check Azure Portal → Container Apps for errors; review Dapr sidecars |
 
@@ -194,7 +207,7 @@ Edit `scripts/validate-azure-env.sh` or `.ps1` to add more checks.
 
 ## 📚 Next Steps
 
-1. ✅ Configure GitHub Secrets (see [GitHub-Secrets-Setup.md](./docs/GitHub-Secrets-Setup.md))
+1. ✅ Configure GitHub Secrets (see [GitHub-Secrets-Setup.md](./GitHub-Secrets-Setup.md))
 2. ✅ Commit all changes: `git push origin main`
 3. ⏭️ Monitor GitHub Actions deployment
 4. ⏭️ Test the deployed application
@@ -216,9 +229,8 @@ Edit `scripts/validate-azure-env.sh` or `.ps1` to add more checks.
 
 ## 📖 References
 
-- [GitHub Secrets Setup](./docs/GitHub-Secrets-Setup.md)
-- [CI/CD Workflow Details](./docs/CI-CD-GitHub-Actions.md)
-- [Architecture Tests Guide](./docs/Architecture-Tests.md)
+- [GitHub Secrets Setup](./GitHub-Secrets-Setup.md)
+- [CI/CD Workflow Details](./CI-CD-GitHub-Actions.md)
+- [Architecture Tests Guide](./Architecture-Tests.md)
 - [Azure Developer CLI (azd)](https://github.com/Azure/azure-dev)
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
-

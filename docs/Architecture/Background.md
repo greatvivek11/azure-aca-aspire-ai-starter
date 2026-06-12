@@ -6,7 +6,7 @@ An enterprise-grade, AI-powered assistant built on a modern, scalable, and secur
 
 # Background
 
-This project is designed as a **PoC + portfolio showcase** demonstrating modern enterprise AI application development with .NET, React, and Azure. The goal is to validate your skills across **C#/.NET 8, React 19, Azure Container Apps, Dapr, Semantic Kernel, and Hugging Face Inference API** while creating a functional product you can share.
+This project is designed as a **PoC + portfolio showcase** demonstrating modern enterprise AI application development with .NET, React, and Azure. The goal is to validate your skills across **C#/.NET 10, React, Azure Container Apps, Dapr, Semantic Kernel, and Hugging Face Inference API** while creating a functional product you can share.
 
 ## Vision
 
@@ -15,7 +15,7 @@ Build an **AI-Powered Knowledge Hub** combining conversational AI, document retr
 ## Why This Project Matters
 
 * **Enterprise relevance**: Azure-first deployment (ACA, SQL, Blob, Cosmos).
-* **Modern stack**: .NET 8 Minimal APIs **+ .NET Aspire**, React 19 + **Next.js (SSR/BFF)** + Vite + Tailwind v4, Dapr.
+* **Modern stack**: .NET 10 Minimal APIs **+ .NET Aspire**, React + **Vite** + **Hono**, Dapr.
 * **AI integration**: Semantic Kernel + Hugging Face Router via OpenAI connector.
 * **Architecture**: Vertical Slice Architecture, Mediator (source-gen), repository pattern, IaC (Bicep/Terraform).
 * **Showcase**: Demonstrates frontend, backend, AI/ML integration, cloud-native deployment, and CI/CD.
@@ -36,9 +36,9 @@ This application enables employees to:
 
 ### Azure-first, Dapr-enabled
 
-* **Hosting**: Azure Container Apps (ACA) hosts both frontend (SSR) and backend as separate container apps.
-* **Frontend SSR/BFF**: **Next.js (React 19)** server-side rendering for low FCP, secrets on server, and **BFF** route handlers. Optional alternatives: Remix or SolidStart. Client build tooling may still use **Vite** where appropriate.
-* **Backend**: .NET 8 Minimal APIs (Vertical Slice Architecture) with **.NET Aspire** for orchestration, service discovery, and OpenTelemetry.
+* **Hosting**: Azure Container Apps (ACA) hosts both frontend and backend as separate container apps.
+* **Frontend Host**: A **Vite-built React SPA** served by a lightweight **Hono** Node application. The host can expose same-origin proxy routes and operational endpoints without adopting a full SSR framework.
+* **Backend**: .NET 10 Minimal APIs (Vertical Slice Architecture) with **.NET Aspire** for orchestration, service discovery, and OpenTelemetry.
 * **Service Invocation**: Dapr sidecars provide secure FE → BE invocation (FE → Dapr → BE), retries, mTLS, and service discovery.
 * **Data**:
 
@@ -61,7 +61,7 @@ This application enables employees to:
 ### Architectural Updates (Aug 2025)
 
 * **Adopt .NET Aspire** to compose the API and a background **worker** (ingestion/OCR/embeddings) locally and to standardize telemetry and health checks.
-* **Use SSR with Next.js** to reduce FCP, stream responses, and keep all FE secrets server-side. Next route handlers call the backend via Dapr app-id.
+* **Use a lightweight Hono host** to serve the SPA, expose health and proxy routes, and keep sensitive integration logic out of the browser where needed.
 * **Event-Driven (selective)**: Keep chat synchronous; consider **Dapr pub/sub** only for ingestion and batch processing from Phase 2 onward to avoid over-engineering.
 * **Cost-Aware Defaults**: ACA consumption plan, `minReplicas=1` for FE/API to reduce cold starts; worker allowed to scale to zero. LAW/App Insights with sampling to stay within free tier.
 
@@ -70,7 +70,7 @@ This application enables employees to:
 * Cloud-native microservices with ACA + Dapr.
 * Secure data paths (private networking, least privilege, managed identities later).
 * Real-world AI patterns: RAG, multimodal, memory, structured outputs, agents.
-* Modern .NET & React best practices (Vertical Slice, Minimal APIs, **.NET Aspire**, Tailwind v4, **SSR/BFF**).
+* Modern .NET & React best practices (Vertical Slice, Minimal APIs, **.NET Aspire**, Vite-based SPA delivery, lightweight Node hosting).
 
 ## Roadmap
 
@@ -85,7 +85,7 @@ See: [Phased-Plan.md](/docs/plans/Phased_Plan.md) for detailed roadmap and miles
 
 ## Outcomes
 
-* Functional, cloud-hosted application accessible with custom domain (frontend, SSR).
+* Functional, cloud-hosted application accessible with custom domain (frontend SPA served by Hono).
 * Backend internal to ACA, invoked via Dapr; Aspire orchestrates services and observability.
 * Documentation of design decisions, trade-offs, and enterprise-ready recommendations.
 * Resume-ready GitHub repo with clean code, docs, and architecture diagrams.

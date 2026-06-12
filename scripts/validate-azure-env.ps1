@@ -69,7 +69,7 @@ try {
     $acr = az acr list --resource-group $ResourceGroup --query "[0].name" -o tsv 2>$null
     
     if ([string]::IsNullOrEmpty($acr) -or $acr -eq "None") {
-        Write-Host "⚠️  No Container Registry found. It will be provisioned by azd up" -ForegroundColor Yellow
+        Write-Host "⚠️  No Container Registry found. This is expected when using external/public images." -ForegroundColor Yellow
     } else {
         Write-Host "✅ Container Registry '$acr' exists" -ForegroundColor Green
     }
@@ -90,7 +90,7 @@ try {
     Write-Host "📝 Next steps:" -ForegroundColor Cyan
     Write-Host "   1. Ensure AZURE_OPENAI_API_KEY, AZURE_OPENAI_MODEL_ID, and AZURE_OPENAI_ENDPOINT"
     Write-Host "      are set as GitHub Secrets (see docs/GitHub-Secrets-Setup.md)"
-    Write-Host "   2. Run: azd up"
+    Write-Host "   2. Run the GitHub Actions deployment workflow or azd provision/azd deploy as needed"
     Write-Host ""
 }
 catch {

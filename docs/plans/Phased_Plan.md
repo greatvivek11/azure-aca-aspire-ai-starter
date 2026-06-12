@@ -1,221 +1,137 @@
 # Phased Implementation Plan
 
-This plan is intentionally **high-level but actionable**. It defines scope, milestones, acceptance criteria (DoD), and risks for each phase. It is the only place where phases are maintained. Other docs should link here.
+This is the active roadmap for the enterprise copilot app. It replaces the older Cosmos-first/Hugging Face-first planning direction with a **Search-first + Foundry/AI Services** architecture.
 
-> Constraints: PoC/resume project, cost-sensitive (avoid paid services like Private Endpoints, Key Vault, Defender for Cloud). Azure Container Apps (ACA) + Dapr, Azure SQL, Blob Storage, Cosmos DB (vector), Semantic Kernel (SK) + Hugging Face Inference Router via OpenAI connector. Frontend: React 19 + **Next.js SSR/BFF**, Tailwind v4. Backend: .NET 8 Minimal APIs **with .NET Aspire**, Vertical Slice Architecture, **Mediator (source-gen) instead of MediatR**.
+> Active platform direction: **Azure Container Apps + Dapr + Azure SQL + Blob Storage + Azure AI Search + AI Foundry/Azure AI Services**.
 
-## Phase 0 — Cloud Foundation & Scaffolding
+## Phase 0 — Platform Alignment
 
-**Goals**
+**Goal**
 
-* Establish repo, CI/CD, infra, Aspire composition, Dapr service invocation, and SK→HF connectivity.
+Stand up and align foundational infrastructure, runtime config, and deployment automation for the enterprise copilot stack.
 
-**Scope (In)**
+**In Scope**
 
-* Monorepo structure, Dockerfiles, base GitHub Actions.
-* Provision: GHCR, ACA env, ACA apps (FE public with SSR, BE internal), Azure SQL, Blob, Cosmos (vector) — all minimal SKUs/free tiers.
-* Dapr enabled for FE, BE, Worker; FE SSR route handler invokes BE via Dapr app-id.
-* Aspire AppHost runs FE, API, Worker with Dapr locally; provides service discovery + OpenTelemetry.
-* Secrets via GitHub Actions; Managed Identity planned later.
-* Health endpoints and smoke tests.
-
-**Scope (Out)**
-
-* Private Endpoints, Key Vault, Defender for Cloud (documented as optional).
-
-**Key Tasks**
-
-* Repo scaffold: `/frontend`, `/backend`, `/worker`, `/aspire`, `/infra`, `.github/workflows`.
-* Dockerize FE/BE/Worker; local dev with Aspire AppHost + Dapr sidecars.
-* Worker implements basic health checks and integrates with Dapr.
-* Bicep/Terraform: create ACA env + apps, GHCR, SQL (basic), Blob, Cosmos (Mongo vCore + vector).
-* Configure FE public ingress + custom domain (optional), BE internal-only.
-* Add `/v1/health` in API; FE SSR route handler invokes it via Dapr.
-* Kernel bootstrap: SK + HF Router via OpenAI connector.
-* FE “Status” page shows API health.
+* Local orchestration with Aspire for frontend, backend, worker, SQL, Redis.
+* Azure baseline provisioning for ACA, ACR, Log Analytics, App Insights, SQL, Blob, AI Search, and AI Services/Foundry dependencies.
+* Unified runtime configuration for chat, embeddings, search, storage, and security.
 
 **DoD**
 
-* CI builds containers, pushes to GHCR on main.
-* Aspire runs FE/API/Worker with Dapr locally.
-* ACA deploys FE+BE+Worker; FE→Dapr→BE `/v1/health` returns 200; FE→Dapr→Worker `/v1/health` returns 200.
-* Basic OTel traces/logs visible (console/ACA logs).
-
-**Risks & Mitigations**
-
-* Aspire+Dapr config drift → encode in `aspire/AppHost` and IaC.
-* ACA SSR cold starts → set `minReplicas=1` for FE.
+* Local and cloud environments expose consistent configuration surfaces.
+* CI/CD deploys the full baseline stack successfully.
 
 ## Phase 1 — Core Chat Assistant
 
-**Goals**
+**Goal**
 
-* End-to-end chat with streaming, persisted sessions/messages, and telemetry.
+Deliver reliable streaming chat with persistent conversation history and observability.
 
-**Scope (In)**
+**In Scope**
 
-* `/v1/chat` endpoint using SK with HF Router.
-* Streaming responses to FE (Next.js Route Handler with fetch/stream).
-* EF Core + Azure SQL for sessions/messages.
-* **Mediator (source-gen)** for lightweight CQRS per slice (or keep pure VSA).
-
-**Key Tasks**
-
-* Domain: `User`, `Conversation`, `Message` entities; migrations.
-* Feature slice: `Chat/` with `Endpoint`, `Command/Query`, `Handlers`.
-* FE chat UI: SSR page + client hydration; session switcher, message list, regenerate, error states.
-* Observability: correlation id from FE SSR → API, OTel spans.
+* Chat endpoint and frontend chat UI.
+* SQL persistence for sessions/messages.
+* Tracing, correlation, and basic failure handling.
 
 **DoD**
 
-* Multiple concurrent sessions per user.
-* Messages persisted; reload restores history.
-* Streaming works smoothly; FE renders tokens progressively.
+* Users can create/resume conversations with low-friction UX.
+* Streaming responses and persistence work end to end.
 
-**Risks**
+## Phase 2 — Document Ingestion & Grounded RAG
 
-* HF Router rate limits → add backoff + retry in SK service.
+**Goal**
 
-## Phase 2 — Document Ingestion & RAG
+Enable document ingestion and grounded answers with citations.
 
-**Goals**
+**In Scope**
 
-* Upload → extract → chunk → embed → vector store; Q\&A over docs with citations.
-
-**Scope (In)**
-
-* Signed upload to Blob; metadata in SQL.
-* Worker handles extraction & embedding; orchestrated by Aspire.
-* Extraction: text from PDF/DOCX/TXT (OSS libs).
-* Chunking (token-aware) + embeddings via HF models.
-* Cosmos vector upsert; retrieval with citation metadata.
-* FE: upload page with progress; toggle: “Ask about docs”.
-
-**Key Tasks**
-
-* API: `/v1/uploads/signed-url`, `/v1/ingest`.
-* Worker service: extraction & embedding flow.
-* Data model: `Document`, `Chunk` (id, docId, span, vector, sourceUri).
-* FE: doc uploads UI, citations in answers.
+* Blob-based upload flow.
+* Worker extraction/chunking/embedding pipeline.
+* Azure AI Search indexing and retrieval.
+* Foundry/AI Services model usage for embeddings and response synthesis.
 
 **DoD**
 
-* Upload doc; ask a question; see grounded answer with citations.
-* Cosmos vector index populated; acceptable latency.
-
-**Risks**
-
-* Large PDFs → cap file size, offload to ACA Job.
+* Uploaded files become searchable and cited in answers.
+* Retrieval and answer generation are functional in Azure.
 
 ## Phase 3 — Vision & OCR
 
-**Goals**
+**Goal**
 
-* Image analysis and OCR for image-only PDFs; index extracted text for RAG.
+Index scanned and image-based content into the same retrieval system.
 
-**Scope (In)**
+**In Scope**
 
-* Image ingestion to Blob; OCR (Tesseract/PaddleOCR container) or HF vision model.
-* Extracted text piped into Phase-2 ingestion.
-* FE: image preview + extracted text snippet.
-
-**DoD**
-
-* Upload image; ask about its content; see citations referencing image/page.
-
-**Risks**
-
-* OCR accuracy → allow re-run or correction.
-
-## Phase 4 — Sentiment & Insights
-
-**Goals**
-
-* Batch sentiment/classification and a small insights dashboard.
-
-**Scope (In)**
-
-* `/v1/sentiment/batch` endpoint; HF classifier.
-* Store scores + aggregates in SQL.
-* FE dashboard with charts, filters.
+* OCR/scanned-document processing path.
+* Image description/multimodal enrichment.
+* Citation UX for image/page evidence.
 
 **DoD**
 
-* Upload CSV/JSON; run analysis; view trends and distributions.
+* Users can retrieve facts from scanned/image assets with citations.
 
-**Risks**
+## Phase 4 — Insights & Analysis Workflows
 
-* Model noise → show confidence.
+**Goal**
+
+Support enterprise analysis workloads beyond chat.
+
+**In Scope**
+
+* Batch summarization/classification/sentiment and related analysis jobs.
+* Persisted job results and insights views in frontend.
+
+**DoD**
+
+* Users can run repeatable analysis workflows and review saved results.
 
 ## Phase 5 — Long-Term Memory
 
-**Goals**
+**Goal**
 
-* Summarize and store conversation memories; personalize retrieval context.
+Build durable memory with controlled retrieval.
 
-**Scope (In)**
+**In Scope**
 
-* Worker job: scheduled summary per conversation; memory vectors in Cosmos.
-* API loads relevant snippets into SK system prompt.
+* Conversation summarization job.
+* Memory indexing/retrieval using AI Search plus SQL metadata.
+* Prompt augmentation with scoped memory context.
 
 **DoD**
 
-* Returning session leverages prior memory context.
-
-**Risks**
-
-* Prompt bloat → cap/summarize aggressively.
+* New conversations can leverage relevant prior context safely.
 
 ## Phase 6 — Agents & Tooling
 
-**Goals**
+**Goal**
 
-* Tool-augmented assistant with a few safe, auditable tools.
+Evolve from Q&A to enterprise task completion using safe tools.
 
-**Scope (In)**
+**In Scope**
 
-* SK tools: `blob.lookup`, `sql.readonly.query`, `csv.export`.
-* Planner/routing logic.
-* FE timeline shows tool calls and results.
-
-**DoD**
-
-* Assistant invokes a tool, displays reasoning and result.
-
-**Risks**
-
-* Tool abuse → strict input validation.
-
-## Phase 7 — Hardening & Optimization
-
-**Goals**
-
-* Enterprise polish while staying cost-aware.
-
-**Scope (In)**
-
-* Entra ID authN/Z (optional PoC).
-* Managed Identity to Blob/Cosmos/SQL.
-* Response caching, quotas, prompt/temperature tuning.
+* Tool catalog (search lookup, document retrieval, SQL read-only query, exports).
+* Tool-aware assistant/agent execution path.
+* Frontend transparency for tool calls and outcomes.
 
 **DoD**
 
-* Security and cost model documented.
+* Multi-step enterprise tasks execute with clear auditability.
 
-**Risks**
+## Phase 7 — Hardening & Production Readiness
 
-* Over-engineering → keep optional by default.
+**Goal**
 
-## Cross-Cutting: Testing & Quality
+Harden security, quality, and operational maturity.
 
-* **Unit**: handlers, services, chunking, embeddings adapter.
-* **Integration**: FE SSR route → Dapr → BE; SQL/Blob/Cosmos adapters.
-* **Smoke**: health checks; simple chat/upload flows post-deploy.
-* **AI Eval**: prompt regression, RAG hit-rate sampling.
+**In Scope**
 
-## Project Ops
+* Entra authentication/authorization.
+* Managed identity and least-privilege RBAC.
+* Evaluation and monitoring for retrieval quality, grounding, latency, and cost.
 
-* **GitHub Labels**: `phase:p0`..`phase:p7`, `area:fe`, `area:be`, `infra`, `ai`, `docs`.
-* **Milestones**: P0..P7 with DoD copied.
-* **Docs**: Each phase updates `DECISIONS.md`.
-* **Cost Guardrails**: monitor ingestion volume; enable sampling.
+**DoD**
+
+* Security posture, reliability, and quality gates are documented and enforceable.
+

@@ -9,6 +9,22 @@ BEGIN
     );
 END;
 
+IF OBJECT_ID(N'dbo.DocumentIngestionJobs', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.DocumentIngestionJobs (
+        DocumentId UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+        FileName NVARCHAR(260) NOT NULL,
+        BlobName NVARCHAR(512) NOT NULL,
+        Status NVARCHAR(40) NOT NULL,
+        ProgressPercent INT NOT NULL CONSTRAINT DF_DocumentIngestionJobs_Progress DEFAULT (0),
+        TotalChunks INT NULL,
+        ErrorMessage NVARCHAR(MAX) NULL,
+        CreatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_DocumentIngestionJobs_CreatedAt DEFAULT (SYSUTCDATETIME()),
+        UpdatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_DocumentIngestionJobs_UpdatedAt DEFAULT (SYSUTCDATETIME()),
+        ReadyAtUtc DATETIME2 NULL
+    );
+END;
+
 IF NOT EXISTS (SELECT 1 FROM dbo.Customers)
 BEGIN
     INSERT INTO dbo.Customers (Name, Email, City, Status)

@@ -47,7 +47,7 @@ docker run -p 8080:8080 aihub-backend
 The application can be configured using appsettings.json files or environment variables:
 
 - `AZURE_OPENAI_API_KEY` - API key for Azure AI Foundry/Azure OpenAI (recommended to use environment variable for security)
-- `AZURE_OPENAI_MODEL_ID` - Deployed model name (default: gpt-4.1)
+- `AZURE_OPENAI_MODEL_ID` - Deployed model name (default: gpt-5-mini)
 - `AZURE_OPENAI_ENDPOINT` - Azure OpenAI endpoint (default: https://your-foundry-resource.openai.azure.com/)
 
 ### Setting Credentials

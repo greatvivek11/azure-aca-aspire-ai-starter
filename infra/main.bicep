@@ -39,13 +39,56 @@ param sqlEntraAdminObjectId string = ''
 
 @secure()
 @description('Azure OpenAI API key for backend AI calls.')
-param azureOpenAiApiKey string
+param azureOpenAiApiKey string = ''
 
 @description('Azure OpenAI model deployment ID used by backend.')
-param azureOpenAiModelId string
+param azureOpenAiModelId string = ''
 
 @description('Azure OpenAI endpoint URL used by backend.')
-param azureOpenAiEndpoint string
+param azureOpenAiEndpoint string = ''
+
+@allowed([
+  'external'
+  'provision'
+])
+@description('AI services strategy: external uses provided endpoint/key; provision creates an Azure OpenAI resource and uses its endpoint/key.')
+param aiServicesProvisioningMode string = 'external'
+
+@description('Azure OpenAI account name when aiServicesProvisioningMode is provision. Leave empty to auto-generate.')
+param aiServicesAccountName string = ''
+
+@description('Chat model deployment name. When provisioning, this deployment is created and used as AZURE_OPENAI_MODEL_ID.')
+param openAiChatDeploymentName string = 'gpt-5-mini'
+
+@description('Chat model catalog name for Azure OpenAI deployment.')
+param openAiChatModelName string = 'gpt-5-mini'
+
+@description('Chat model version for Azure OpenAI deployment.')
+param openAiChatModelVersion string = ''
+
+@description('Embeddings model deployment name provisioned for ingestion/RAG.')
+param openAiEmbeddingDeploymentName string = 'text-embedding-3-small'
+
+@description('Embeddings model catalog name.')
+param openAiEmbeddingModelName string = 'text-embedding-3-small'
+
+@description('Embeddings model version.')
+param openAiEmbeddingModelVersion string = '1'
+
+@description('Embedding vector dimensions for the embeddings deployment used by Azure AI Search vector field.')
+param openAiEmbeddingDimensions int = 1536
+
+@description('Storage account name override. Leave empty to auto-generate.')
+param storageAccountName string = ''
+
+@description('Blob container name used for uploaded documents.')
+param documentsContainerName string = 'documents'
+
+@description('Azure AI Search service name override. Leave empty to auto-generate.')
+param searchServiceName string = ''
+
+@description('Azure AI Search index name for document chunks.')
+param searchIndexName string = 'documents-index'
 
 @allowed([
   'managed'
@@ -93,6 +136,10 @@ var acrPullRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 )
+var storageBlobDataContributorRoleDefinitionId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+)
 var backendAppName = 'backend'
 var frontendAppName = 'frontend'
 var workerAppName = 'worker'
@@ -101,6 +148,7 @@ var sqlServerName = take('${baseName}-sql', 63)
 var useExistingSql = toLower(sqlProvisioningMode) == 'existing'
 var useManagedRegistry = toLower(containerRegistryMode) == 'managed'
 var useExternalRegistry = !useManagedRegistry
+var useProvisionedAiServices = toLower(aiServicesProvisioningMode) == 'provision'
 var hasExternalRegistryCredentials = useExternalRegistry && !empty(externalRegistryUsername) && !empty(externalRegistryPassword)
 var logAnalyticsEnabled = toLower(enableLogAnalytics) == 'true'
 var aspireDashboardEnabled = toLower(enableAspireDashboard) == 'true'
@@ -112,6 +160,12 @@ var resolvedFrontendMinReplicas = int(frontendMinReplicas)
 var resolvedWorkerMinReplicas = int(workerMinReplicas)
 var resolvedSqlServerName = useExistingSql ? existingSqlServerName : sqlServerName
 var resolvedSqlDatabaseName = useExistingSql ? existingSqlDatabaseName : sqlDatabaseName
+var generatedStorageAccountName = toLower(take('st${uniqueString(resourceGroup().id, environmentName)}', 24))
+var resolvedStorageAccountName = empty(storageAccountName) ? generatedStorageAccountName : toLower(storageAccountName)
+var generatedSearchServiceName = toLower(take(replace('${baseName}srch', '-', ''), 60))
+var resolvedSearchServiceName = empty(searchServiceName) ? generatedSearchServiceName : toLower(searchServiceName)
+var generatedAiServicesAccountName = toLower(take(replace('${baseName}aoai', '-', ''), 24))
+var resolvedAiServicesAccountName = empty(aiServicesAccountName) ? generatedAiServicesAccountName : toLower(aiServicesAccountName)
 var backendAppId = 'aihub-backend'
 var frontendAppId = 'aihub-frontend'
 var workerAppId = 'aihub-worker'
@@ -183,6 +237,110 @@ resource containerAppsManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIde
   tags: tags
 }
 
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: resolvedStorageAccountName
+  location: location
+  tags: tags
+  sku: {
+    name: 'Standard_LRS'
+  }
+  kind: 'StorageV2'
+  properties: {
+    allowBlobPublicAccess: false
+    minimumTlsVersion: 'TLS1_2'
+    supportsHttpsTrafficOnly: true
+  }
+}
+
+resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+  parent: storageAccount
+  name: 'default'
+}
+
+resource documentsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: documentsContainerName
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+resource blobDataContributorRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storageAccount.id, containerAppsManagedIdentity.id, 'StorageBlobDataContributor')
+  scope: storageAccount
+  properties: {
+    principalId: containerAppsManagedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: storageBlobDataContributorRoleDefinitionId
+  }
+}
+
+resource aiSearch 'Microsoft.Search/searchServices@2023-11-01' = {
+  name: resolvedSearchServiceName
+  location: location
+  tags: tags
+  sku: {
+    name: 'basic'
+  }
+  properties: {
+    replicaCount: 1
+    partitionCount: 1
+    hostingMode: 'default'
+    publicNetworkAccess: 'enabled'
+  }
+}
+
+resource aiServicesAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' = if (useProvisionedAiServices) {
+  name: resolvedAiServicesAccountName
+  location: location
+  tags: tags
+  kind: 'OpenAI'
+  sku: {
+    name: 'S0'
+  }
+  properties: {
+    customSubDomainName: resolvedAiServicesAccountName
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+resource chatModelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = if (useProvisionedAiServices) {
+  parent: aiServicesAccount
+  name: openAiChatDeploymentName
+  sku: {
+    name: 'GlobalStandard'
+    capacity: 1
+  }
+  properties: {
+    model: empty(openAiChatModelVersion)
+      ? {
+          format: 'OpenAI'
+          name: openAiChatModelName
+        }
+      : {
+          format: 'OpenAI'
+          name: openAiChatModelName
+          version: openAiChatModelVersion
+        }
+  }
+}
+
+resource embeddingModelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = if (useProvisionedAiServices) {
+  parent: aiServicesAccount
+  name: openAiEmbeddingDeploymentName
+  sku: {
+    name: 'GlobalStandard'
+    capacity: 1
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: openAiEmbeddingModelName
+      version: openAiEmbeddingModelVersion
+    }
+  }
+}
+
 // ACR is optional. External/public registries avoid fixed monthly charges for low-cost templates.
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' = if (useManagedRegistry) {
   name: toLower(replace('${baseName}acr', '-', ''))
@@ -232,12 +390,27 @@ var workerAppInsightsEnv = logAnalyticsEnabled
       }
     ]
   : []
-var backendRegistrySecrets = [
+var resolvedOpenAiApiKey = useProvisionedAiServices ? aiServicesAccount!.listKeys().key1 : azureOpenAiApiKey
+var resolvedOpenAiEndpoint = useProvisionedAiServices ? aiServicesAccount!.properties.endpoint : azureOpenAiEndpoint
+var resolvedOpenAiModelId = useProvisionedAiServices ? openAiChatDeploymentName : azureOpenAiModelId
+var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
+var searchEndpoint = 'https://${aiSearch.name}.search.windows.net'
+var searchApiKey = aiSearch.listAdminKeys().primaryKey
+var ragRuntimeSecrets = [
   {
     name: 'azure-openai-api-key'
-    value: azureOpenAiApiKey
+    value: resolvedOpenAiApiKey
+  }
+  {
+    name: 'storage-connection-string'
+    value: storageConnectionString
+  }
+  {
+    name: 'search-api-key'
+    value: searchApiKey
   }
 ]
+var backendRegistrySecrets = concat(ragRuntimeSecrets, [])
 var sharedRegistrySecrets = hasExternalRegistryCredentials
   ? [
       {
@@ -373,11 +546,47 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
             }
             {
               name: 'AZURE_OPENAI_MODEL_ID'
-              value: azureOpenAiModelId
+              value: resolvedOpenAiModelId
             }
             {
               name: 'AZURE_OPENAI_ENDPOINT'
-              value: azureOpenAiEndpoint
+              value: resolvedOpenAiEndpoint
+            }
+            {
+              name: 'AZURE_OPENAI_EMBEDDING_MODEL_ID'
+              value: openAiEmbeddingDeploymentName
+            }
+            {
+              name: 'AZURE_OPENAI_EMBEDDING_DIMENSIONS'
+              value: string(openAiEmbeddingDimensions)
+            }
+            {
+              name: 'AZURE_STORAGE_ACCOUNT_NAME'
+              value: storageAccount.name
+            }
+            {
+              name: 'AZURE_STORAGE_CONTAINER_NAME'
+              value: documentsContainer.name
+            }
+            {
+              name: 'AZURE_STORAGE_CONNECTION_STRING'
+              secretRef: 'storage-connection-string'
+            }
+            {
+              name: 'AZURE_SEARCH_ENDPOINT'
+              value: searchEndpoint
+            }
+            {
+              name: 'AZURE_SEARCH_INDEX_NAME'
+              value: searchIndexName
+            }
+            {
+              name: 'AZURE_SEARCH_API_KEY'
+              secretRef: 'search-api-key'
+            }
+            {
+              name: 'WORKER_DAPR_BASE_URL'
+              value: 'http://localhost:3500/v1.0/invoke/${workerAppId}/method'
             }
             // SQL server and database passed as plain env vars; auth uses Managed Identity.
             {
@@ -491,7 +700,7 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
         appPort: 8081
         appProtocol: 'http'
       }
-      secrets: sharedRegistrySecrets
+      secrets: concat(ragRuntimeSecrets, sharedRegistrySecrets)
       ingress: {
         external: false
         targetPort: 8081
@@ -504,7 +713,64 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'worker'
           image: workerImage
-          env: workerAppInsightsEnv
+          env: concat(workerAppInsightsEnv, [
+            {
+              name: 'AZURE_OPENAI_API_KEY'
+              secretRef: 'azure-openai-api-key'
+            }
+            {
+              name: 'AZURE_OPENAI_MODEL_ID'
+              value: resolvedOpenAiModelId
+            }
+            {
+              name: 'AZURE_OPENAI_ENDPOINT'
+              value: resolvedOpenAiEndpoint
+            }
+            {
+              name: 'AZURE_OPENAI_EMBEDDING_MODEL_ID'
+              value: openAiEmbeddingDeploymentName
+            }
+            {
+              name: 'AZURE_OPENAI_EMBEDDING_DIMENSIONS'
+              value: string(openAiEmbeddingDimensions)
+            }
+            {
+              name: 'AZURE_STORAGE_ACCOUNT_NAME'
+              value: storageAccount.name
+            }
+            {
+              name: 'AZURE_STORAGE_CONTAINER_NAME'
+              value: documentsContainer.name
+            }
+            {
+              name: 'AZURE_STORAGE_CONNECTION_STRING'
+              secretRef: 'storage-connection-string'
+            }
+            {
+              name: 'AZURE_SEARCH_ENDPOINT'
+              value: searchEndpoint
+            }
+            {
+              name: 'AZURE_SEARCH_INDEX_NAME'
+              value: searchIndexName
+            }
+            {
+              name: 'AZURE_SEARCH_API_KEY'
+              secretRef: 'search-api-key'
+            }
+            {
+              name: 'SQL_SERVER'
+              value: '${resolvedSqlServerName}${environment().suffixes.sqlServerHostname}'
+            }
+            {
+              name: 'SQL_DATABASE'
+              value: resolvedSqlDatabaseName
+            }
+            {
+              name: 'AZURE_CLIENT_ID'
+              value: containerAppsManagedIdentity.properties.clientId
+            }
+          ])
           resources: {
             cpu: json('0.25')
             memory: '0.5Gi'
@@ -534,6 +800,17 @@ output WORKER_CONTAINER_APP_NAME string = workerApp.name
 output AZURE_SQL_SERVER_NAME string = resolvedSqlServerName
 output AZURE_SQL_DATABASE_NAME string = resolvedSqlDatabaseName
 output AZURE_SQL_PROVISIONING_MODE string = sqlProvisioningMode
+output AZURE_STORAGE_ACCOUNT_NAME string = storageAccount.name
+output AZURE_STORAGE_DOCUMENTS_CONTAINER string = documentsContainer.name
+output AZURE_SEARCH_SERVICE_NAME string = aiSearch.name
+output AZURE_SEARCH_ENDPOINT string = searchEndpoint
+output AZURE_SEARCH_INDEX_NAME string = searchIndexName
+output AZURE_AI_SERVICES_PROVISIONING_MODE string = aiServicesProvisioningMode
+output AZURE_OPENAI_EFFECTIVE_ENDPOINT string = resolvedOpenAiEndpoint
+output AZURE_OPENAI_EFFECTIVE_MODEL_ID string = resolvedOpenAiModelId
+output AZURE_OPENAI_EMBEDDING_MODEL_ID string = openAiEmbeddingDeploymentName
+output AZURE_OPENAI_EMBEDDING_DIMENSIONS int = openAiEmbeddingDimensions
+output AZURE_AI_SERVICES_ACCOUNT_NAME string = useProvisionedAiServices ? aiServicesAccount!.name : ''
 output CONTAINER_REGISTRY_MODE string = containerRegistryMode
 output ENABLE_LOG_ANALYTICS string = enableLogAnalytics
 output ENABLE_ASPIRE_DASHBOARD string = enableAspireDashboard

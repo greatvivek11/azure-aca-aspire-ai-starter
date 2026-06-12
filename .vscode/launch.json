@@ -15,7 +15,8 @@
 				"pattern": "\\bNow listening on:\\s+(https?://\\S+)"
 			},
 			"env": {
-				"ASPNETCORE_ENVIRONMENT": "Development"
+				"ASPNETCORE_ENVIRONMENT": "Development",
+				"ASPIRE_FRONTEND_MODE": "vite-dev"
 			},
 			"justMyCode": true,
 			"logging": {

@@ -37,6 +37,18 @@ env:
   SQL_PROVISIONING_MODE: ${{ secrets.SQL_PROVISIONING_MODE || 'provision' }}
   AZURE_SQL_EXISTING_SERVER_NAME: ${{ secrets.AZURE_SQL_EXISTING_SERVER_NAME || '' }}
   AZURE_SQL_EXISTING_DATABASE_NAME: ${{ secrets.AZURE_SQL_EXISTING_DATABASE_NAME || '' }}
+  AI_SERVICES_PROVISIONING_MODE: ${{ secrets.AI_SERVICES_PROVISIONING_MODE || 'external' }}
+  AZURE_AI_SERVICES_ACCOUNT_NAME: ${{ secrets.AZURE_AI_SERVICES_ACCOUNT_NAME || '' }}
+  AZURE_OPENAI_CHAT_MODEL_NAME: ${{ secrets.AZURE_OPENAI_CHAT_MODEL_NAME || 'gpt-5-mini' }}
+  AZURE_OPENAI_CHAT_MODEL_VERSION: ${{ secrets.AZURE_OPENAI_CHAT_MODEL_VERSION || '' }}
+  AZURE_OPENAI_EMBEDDING_MODEL_ID: ${{ secrets.AZURE_OPENAI_EMBEDDING_MODEL_ID || 'text-embedding-3-small' }}
+  AZURE_OPENAI_EMBEDDING_MODEL_NAME: ${{ secrets.AZURE_OPENAI_EMBEDDING_MODEL_NAME || 'text-embedding-3-small' }}
+  AZURE_OPENAI_EMBEDDING_MODEL_VERSION: ${{ secrets.AZURE_OPENAI_EMBEDDING_MODEL_VERSION || '1' }}
+  AZURE_OPENAI_EMBEDDING_DIMENSIONS: ${{ secrets.AZURE_OPENAI_EMBEDDING_DIMENSIONS || '1536' }}
+  AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME || '' }}
+  AZURE_STORAGE_DOCUMENTS_CONTAINER: ${{ secrets.AZURE_STORAGE_DOCUMENTS_CONTAINER || 'documents' }}
+  AZURE_SEARCH_SERVICE_NAME: ${{ secrets.AZURE_SEARCH_SERVICE_NAME || '' }}
+  AZURE_SEARCH_INDEX_NAME: ${{ secrets.AZURE_SEARCH_INDEX_NAME || 'documents-index' }}
   CONTAINER_REGISTRY_MODE: ${{ secrets.CONTAINER_REGISTRY_MODE || 'external' }}
   EXTERNAL_REGISTRY_SERVER: ${{ secrets.EXTERNAL_REGISTRY_SERVER || 'ghcr.io' }}
   EXTERNAL_REGISTRY_USERNAME: ${{ secrets.EXTERNAL_REGISTRY_USERNAME || '' }}
@@ -146,6 +158,31 @@ jobs:
               exit 1
             fi
           fi
+
+      - name: Validate AI services mode inputs
+        shell: bash
+        env:
+          AI_SERVICES_PROVISIONING_MODE: ${{ env.AI_SERVICES_PROVISIONING_MODE }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_MODEL_ID: ${{ secrets.AZURE_OPENAI_MODEL_ID }}
+        run: |
+          set -euo pipefail
+
+          mode_lower="$(echo "${AI_SERVICES_PROVISIONING_MODE:-external}" | tr '[:upper:]' '[:lower:]')"
+          if [[ "${mode_lower}" != "external" && "${mode_lower}" != "provision" ]]; then
+            echo "AI_SERVICES_PROVISIONING_MODE must be 'external' or 'provision'."
+            exit 1
+          fi
+
+          if [[ "${mode_lower}" == "external" ]]; then
+            if [[ -z "${AZURE_OPENAI_ENDPOINT:-}" || -z "${AZURE_OPENAI_API_KEY:-}" || -z "${AZURE_OPENAI_MODEL_ID:-}" ]]; then
+              echo "External AI mode requires AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, and AZURE_OPENAI_MODEL_ID secrets."
+              exit 1
+            fi
+          fi
+
+          echo "AI services mode validated: ${mode_lower}"
 
       - name: Resolve external image coordinates
         if: env.CONTAINER_REGISTRY_MODE == 'external'
@@ -376,6 +413,18 @@ jobs:
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
           AZURE_OPENAI_MODEL_ID: ${{ secrets.AZURE_OPENAI_MODEL_ID }}
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AI_SERVICES_PROVISIONING_MODE: ${{ env.AI_SERVICES_PROVISIONING_MODE }}
+          AZURE_AI_SERVICES_ACCOUNT_NAME: ${{ env.AZURE_AI_SERVICES_ACCOUNT_NAME }}
+          AZURE_OPENAI_CHAT_MODEL_NAME: ${{ env.AZURE_OPENAI_CHAT_MODEL_NAME }}
+          AZURE_OPENAI_CHAT_MODEL_VERSION: ${{ env.AZURE_OPENAI_CHAT_MODEL_VERSION }}
+          AZURE_OPENAI_EMBEDDING_MODEL_ID: ${{ env.AZURE_OPENAI_EMBEDDING_MODEL_ID }}
+          AZURE_OPENAI_EMBEDDING_MODEL_NAME: ${{ env.AZURE_OPENAI_EMBEDDING_MODEL_NAME }}
+          AZURE_OPENAI_EMBEDDING_MODEL_VERSION: ${{ env.AZURE_OPENAI_EMBEDDING_MODEL_VERSION }}
+          AZURE_OPENAI_EMBEDDING_DIMENSIONS: ${{ env.AZURE_OPENAI_EMBEDDING_DIMENSIONS }}
+          AZURE_STORAGE_ACCOUNT_NAME: ${{ env.AZURE_STORAGE_ACCOUNT_NAME }}
+          AZURE_STORAGE_DOCUMENTS_CONTAINER: ${{ env.AZURE_STORAGE_DOCUMENTS_CONTAINER }}
+          AZURE_SEARCH_SERVICE_NAME: ${{ env.AZURE_SEARCH_SERVICE_NAME }}
+          AZURE_SEARCH_INDEX_NAME: ${{ env.AZURE_SEARCH_INDEX_NAME }}
           AZURE_SQL_ADMIN_LOGIN: ${{ secrets.AZURE_SQL_ADMIN_LOGIN }}
           AZURE_SQL_ADMIN_PASSWORD: ${{ secrets.AZURE_SQL_ADMIN_PASSWORD }}
           AZURE_SQL_ENTRA_ADMIN_LOGIN: ${{ env.AZURE_SQL_ENTRA_ADMIN_LOGIN }}

@@ -29,6 +29,45 @@
     "azureOpenAiEndpoint": {
       "value": "${AZURE_OPENAI_ENDPOINT}"
     },
+    "aiServicesProvisioningMode": {
+      "value": "${AI_SERVICES_PROVISIONING_MODE}"
+    },
+    "aiServicesAccountName": {
+      "value": "${AZURE_AI_SERVICES_ACCOUNT_NAME}"
+    },
+    "openAiChatDeploymentName": {
+      "value": "${AZURE_OPENAI_MODEL_ID}"
+    },
+    "openAiChatModelName": {
+      "value": "${AZURE_OPENAI_CHAT_MODEL_NAME}"
+    },
+    "openAiChatModelVersion": {
+      "value": "${AZURE_OPENAI_CHAT_MODEL_VERSION}"
+    },
+    "openAiEmbeddingDeploymentName": {
+      "value": "${AZURE_OPENAI_EMBEDDING_MODEL_ID}"
+    },
+    "openAiEmbeddingModelName": {
+      "value": "${AZURE_OPENAI_EMBEDDING_MODEL_NAME}"
+    },
+    "openAiEmbeddingModelVersion": {
+      "value": "${AZURE_OPENAI_EMBEDDING_MODEL_VERSION}"
+    },
+    "openAiEmbeddingDimensions": {
+      "value": "${AZURE_OPENAI_EMBEDDING_DIMENSIONS}"
+    },
+    "storageAccountName": {
+      "value": "${AZURE_STORAGE_ACCOUNT_NAME}"
+    },
+    "documentsContainerName": {
+      "value": "${AZURE_STORAGE_DOCUMENTS_CONTAINER}"
+    },
+    "searchServiceName": {
+      "value": "${AZURE_SEARCH_SERVICE_NAME}"
+    },
+    "searchIndexName": {
+      "value": "${AZURE_SEARCH_INDEX_NAME}"
+    },
     "containerRegistryMode": {
       "value": "${CONTAINER_REGISTRY_MODE}"
     },

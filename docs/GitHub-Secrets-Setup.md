@@ -65,6 +65,20 @@ These secrets are injected into the Container Apps environment at deployment tim
 | `AZURE_OPENAI_MODEL_ID` | Deployed model name | Azure Portal → OpenAI resource → Model deployments |
 | `AZURE_OPENAI_ENDPOINT` | Azure OpenAI endpoint URL | Azure Portal → OpenAI resource → Keys and Endpoint |
 
+### AI Services Provisioning (Optional, for zero-manual bootstrap)
+
+Use these when you want infrastructure to provision Azure OpenAI account/model deployments instead of relying only on an existing endpoint.
+
+| Secret Name | Description | Default |
+|---|---|---|
+| `AI_SERVICES_PROVISIONING_MODE` | `external` or `provision` | `external` |
+| `AZURE_AI_SERVICES_ACCOUNT_NAME` | Optional Azure OpenAI account name override | empty (auto-generated) |
+| `AZURE_OPENAI_CHAT_MODEL_NAME` | Chat model catalog name for deployment | `gpt-5-mini` |
+| `AZURE_OPENAI_CHAT_MODEL_VERSION` | Chat model version (optional, provider/region dependent) | empty |
+| `AZURE_OPENAI_EMBEDDING_MODEL_ID` | Embeddings deployment name | `text-embedding-3-small` |
+| `AZURE_OPENAI_EMBEDDING_MODEL_NAME` | Embeddings model catalog name | `text-embedding-3-small` |
+| `AZURE_OPENAI_EMBEDDING_MODEL_VERSION` | Embeddings model version | `1` |
+
 ### SQL Credentials (Required for Provisioning only)
 
 These secrets are used by Bicep during `azd provision` to create Azure SQL Server/Database.
@@ -118,6 +132,10 @@ When `SQL_PROVISIONING_MODE=existing`, both existing-name secrets are required.
 | `BACKEND_MIN_REPLICAS` | Backend minimum replicas | `0` |
 | `FRONTEND_MIN_REPLICAS` | Frontend minimum replicas | `0` |
 | `WORKER_MIN_REPLICAS` | Worker minimum replicas | `0` |
+| `AZURE_STORAGE_ACCOUNT_NAME` | Optional storage account name override | empty (auto-generated) |
+| `AZURE_STORAGE_DOCUMENTS_CONTAINER` | Blob container for document uploads | `documents` |
+| `AZURE_SEARCH_SERVICE_NAME` | Optional AI Search service name override | empty (auto-generated) |
+| `AZURE_SEARCH_INDEX_NAME` | AI Search index name for chunks | `documents-index` |
 
 Default behavior:
 - `CONTAINER_REGISTRY_MODE=external` builds and pushes **public GHCR** images in GitHub Actions, then provisions ACA with those images.
@@ -287,7 +305,7 @@ AZURE_TENANT_ID: <tenant-from-service-principal>
 
 ```
 AZURE_OPENAI_API_KEY: <your-openai-api-key>
-AZURE_OPENAI_MODEL_ID: <deployed-model-name> (e.g., gpt-4.1)
+AZURE_OPENAI_MODEL_ID: <deployed-model-name> (e.g., gpt-5-mini or gpt-5-nano)
 AZURE_OPENAI_ENDPOINT: <your-openai-endpoint>
 ```
 

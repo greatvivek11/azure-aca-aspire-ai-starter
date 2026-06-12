@@ -200,6 +200,7 @@ Edit `scripts/validate-azure-env.sh` or `.ps1` to add more checks.
 | **"azd provision/deploy failed"** | Check `AZD_ENVIRONMENT_NAME` environment variable; run validation script first |
 | **External registry push/login failed** | For GHCR, keep `CONTAINER_REGISTRY_MODE=external` and let the workflow use `GITHUB_TOKEN`; for other registries, set `EXTERNAL_REGISTRY_USERNAME` and `EXTERNAL_REGISTRY_PASSWORD` |
 | **Aspire Dashboard provisioning fails** | Set `ENABLE_ASPIRE_DASHBOARD=false` and redeploy if preview `dotNetComponents` is unavailable in your region/subscription |
+| **`AppLogsConfiguration.Destination` invalid when Aspire Dashboard is enabled** | Keep `ENABLE_LOG_ANALYTICS=true`, or leave it `false` and use the updated template that automatically switches destination to `azure-monitor` when Aspire Dashboard is on |
 | **Tests fail in CI but pass locally** | Ensure Release configuration: `dotnet test --configuration Release` |
 | **Deployment times out** | Check Azure Portal → Container Apps for errors; review Dapr sidecars |
 

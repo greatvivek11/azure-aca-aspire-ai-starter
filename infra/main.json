@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "257415571872265821"
+      "templateHash": "10326091902372820172"
     }
   },
   "parameters": {
@@ -209,6 +209,7 @@
     "hasExternalRegistryCredentials": "[and(and(variables('useExternalRegistry'), not(empty(parameters('externalRegistryUsername')))), not(empty(parameters('externalRegistryPassword'))))]",
     "logAnalyticsEnabled": "[equals(toLower(parameters('enableLogAnalytics')), 'true')]",
     "aspireDashboardEnabled": "[equals(toLower(parameters('enableAspireDashboard')), 'true')]",
+    "appLogsDestination": "[if(variables('logAnalyticsEnabled'), 'log-analytics', if(variables('aspireDashboardEnabled'), 'azure-monitor', 'none'))]",
     "resolvedBackendMinReplicas": "[int(parameters('backendMinReplicas'))]",
     "resolvedFrontendMinReplicas": "[int(parameters('frontendMinReplicas'))]",
     "resolvedWorkerMinReplicas": "[int(parameters('workerMinReplicas'))]",
@@ -283,7 +284,7 @@
       "location": "[parameters('location')]",
       "tags": "[parameters('tags')]",
       "properties": {
-        "appLogsConfiguration": "[if(variables('logAnalyticsEnabled'), createObject('destination', 'log-analytics', 'logAnalyticsConfiguration', createObject('customerId', reference(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName'))), '2023-09-01').customerId, 'sharedKey', listKeys(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName'))), '2023-09-01').primarySharedKey)), createObject('destination', 'none'))]",
+        "appLogsConfiguration": "[if(equals(variables('appLogsDestination'), 'log-analytics'), createObject('destination', variables('appLogsDestination'), 'logAnalyticsConfiguration', createObject('customerId', reference(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName'))), '2023-09-01').customerId, 'sharedKey', listKeys(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName'))), '2023-09-01').primarySharedKey)), createObject('destination', variables('appLogsDestination')))]",
         "daprAIConnectionString": "[if(variables('logAnalyticsEnabled'), reference(resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName'))), '2020-02-02').ConnectionString, null())]"
       },
       "dependsOn": [

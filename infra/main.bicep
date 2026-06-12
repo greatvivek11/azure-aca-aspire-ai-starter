@@ -104,6 +104,9 @@ var useExternalRegistry = !useManagedRegistry
 var hasExternalRegistryCredentials = useExternalRegistry && !empty(externalRegistryUsername) && !empty(externalRegistryPassword)
 var logAnalyticsEnabled = toLower(enableLogAnalytics) == 'true'
 var aspireDashboardEnabled = toLower(enableAspireDashboard) == 'true'
+var appLogsDestination = logAnalyticsEnabled
+  ? 'log-analytics'
+  : (aspireDashboardEnabled ? 'azure-monitor' : 'none')
 var resolvedBackendMinReplicas = int(backendMinReplicas)
 var resolvedFrontendMinReplicas = int(frontendMinReplicas)
 var resolvedWorkerMinReplicas = int(workerMinReplicas)
@@ -149,16 +152,16 @@ resource acaEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   location: location
   tags: tags
   properties: {
-    appLogsConfiguration: logAnalyticsEnabled
+    appLogsConfiguration: appLogsDestination == 'log-analytics'
       ? {
-          destination: 'log-analytics'
+          destination: appLogsDestination
           logAnalyticsConfiguration: {
             customerId: logAnalytics!.properties.customerId
             sharedKey: logAnalytics!.listKeys().primarySharedKey
           }
         }
       : {
-          destination: 'none'
+          destination: appLogsDestination
         }
     daprAIConnectionString: logAnalyticsEnabled ? applicationInsights!.properties.ConnectionString : null
   }

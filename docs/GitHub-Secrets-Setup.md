@@ -124,7 +124,7 @@ Default behavior:
 - `CONTAINER_REGISTRY_MODE=managed` provisions Azure Container Registry and keeps the older `azd deploy` source-build path.
 - `ENABLE_ASPIRE_DASHBOARD=true` creates the Aspire Dashboard component in the ACA environment on first deploy.
 - Replica defaults are `0`, so ACA can scale all three apps down to zero when idle.
-- `ENABLE_LOG_ANALYTICS=false` avoids always-on Log Analytics charges by default.
+- `ENABLE_LOG_ANALYTICS=false` avoids always-on Log Analytics workspace charges by default. When Aspire Dashboard is enabled, ACA uses `azure-monitor` app logs destination instead of `none` to satisfy platform validation.
 - Container app names are fixed for PoC readability: `backend`, `frontend`, `worker`.
 
 Important GHCR note:

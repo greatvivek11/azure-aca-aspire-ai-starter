@@ -30,6 +30,7 @@ Use this if you want the shortest path to first successful deployment.
   - `AZURE_SUBSCRIPTION_ID`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`
   - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_MODEL_ID`, `AZURE_OPENAI_ENDPOINT`
   - `AZURE_SQL_ADMIN_LOGIN`, `AZURE_SQL_ADMIN_PASSWORD`
+  - Optional cost controls: `CONTAINER_REGISTRY_MODE=external`, `ENABLE_LOG_ANALYTICS=false`, replica counts `0`
 6. Trigger workflow:
   - Actions -> Deploy to Azure Container Apps -> Run workflow -> `environment=dev`
 7. If OIDC fails, verify federated credential subject exactly matches environment.
@@ -108,6 +109,26 @@ When `SQL_PROVISIONING_MODE=existing`, both existing-name secrets are required.
 | Secret Name | Description | Default |
 |---|---|---|
 | `AZD_ENVIRONMENT_NAME` | Azure Developer CLI environment name | `copilot-sk-azure` |
+| `CONTAINER_REGISTRY_MODE` | `external` for public/authenticated external images, `managed` to provision ACR and use `azd deploy` | `external` |
+| `EXTERNAL_REGISTRY_SERVER` | Registry hostname used in external mode | `ghcr.io` |
+| `EXTERNAL_REGISTRY_USERNAME` | Required for authenticated non-GHCR registries | empty |
+| `EXTERNAL_REGISTRY_PASSWORD` | Required for authenticated non-GHCR registries | empty |
+| `ENABLE_LOG_ANALYTICS` | Enable Log Analytics + workspace-based App Insights | `false` |
+| `ENABLE_ASPIRE_DASHBOARD` | Enable ACA Aspire Dashboard component | `true` |
+| `BACKEND_MIN_REPLICAS` | Backend minimum replicas | `0` |
+| `FRONTEND_MIN_REPLICAS` | Frontend minimum replicas | `0` |
+| `WORKER_MIN_REPLICAS` | Worker minimum replicas | `0` |
+
+Default behavior:
+- `CONTAINER_REGISTRY_MODE=external` builds and pushes **public GHCR** images in GitHub Actions, then provisions ACA with those images.
+- `CONTAINER_REGISTRY_MODE=managed` provisions Azure Container Registry and keeps the older `azd deploy` source-build path.
+- `ENABLE_ASPIRE_DASHBOARD=true` creates the Aspire Dashboard component in the ACA environment on first deploy.
+- Replica defaults are `0`, so ACA can scale all three apps down to zero when idle.
+- `ENABLE_LOG_ANALYTICS=false` avoids always-on Log Analytics workspace charges by default. When Aspire Dashboard is enabled, ACA uses `azure-monitor` app logs destination instead of `none` to satisfy platform validation.
+- Container app names are fixed for PoC readability: `backend`, `frontend`, `worker`.
+
+Important GHCR note:
+- The workflow attempts to set GHCR packages to public. If package visibility remains private, ACA pull will fail unless `EXTERNAL_REGISTRY_USERNAME` and `EXTERNAL_REGISTRY_PASSWORD` are set.
 
 ---
 
@@ -133,13 +154,12 @@ az ad sp create-for-rbac \
 ### 1.1 Required RBAC for CI Service Principal
 
 This repository's Bicep template creates `Microsoft.Authorization/roleAssignments`
-for Container Apps managed identities (AcrPull on ACR). Because of that, the CI
-service principal used by `azure/login` must have role-assignment write
-permissions at the deployment scope.
+for Container Apps managed identities **only when `CONTAINER_REGISTRY_MODE=managed`**
+(AcrPull on ACR). In the default `external` mode, no ACR role assignment is created.
 
-Minimum required roles on the target resource group (recommended):
-- `Contributor`
-- `User Access Administrator`
+Minimum required roles on the target resource group:
+- `external` mode: `Contributor`
+- `managed` mode: `Contributor` + `User Access Administrator`
 
 Broader alternative:
 - `Owner`
@@ -280,6 +300,13 @@ AZURE_SQL_ADMIN_PASSWORD: <azure-sql-admin-password>
 #### Optional Configuration:
 ```
 AZD_ENVIRONMENT_NAME: copilot-sk-azure
+CONTAINER_REGISTRY_MODE: external
+EXTERNAL_REGISTRY_SERVER: ghcr.io
+ENABLE_LOG_ANALYTICS: false
+ENABLE_ASPIRE_DASHBOARD: true
+BACKEND_MIN_REPLICAS: 0
+FRONTEND_MIN_REPLICAS: 0
+WORKER_MIN_REPLICAS: 0
 SQL_PROVISIONING_MODE: provision
 # Required only when SQL_PROVISIONING_MODE=existing
 AZURE_SQL_EXISTING_SERVER_NAME: <existing-sql-server-name>
@@ -366,7 +393,7 @@ Expected `subject` must match the workflow token exactly:
 
 ## Environment Variable Injection
 
-When GitHub Actions runs `azd provision` and `azd deploy`, environment values are passed to workloads:
+When GitHub Actions runs `azd provision` (and `azd deploy` only in managed ACR mode), environment values are passed to the infra template and workloads:
 
 ```yaml
 env:

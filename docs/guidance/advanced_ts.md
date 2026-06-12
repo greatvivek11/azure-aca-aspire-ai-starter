@@ -118,36 +118,4 @@ const config = {
 function Controller(prefix: string) {
   return (target: Function) => Reflect.defineMetadata("prefix", prefix, target);
 }
-
-@Controller("/users")
-class UserController {}
 ```
-
-* Consider **ts-morph** or AST transforms for advanced use cases.
-
-## Interop with JavaScript
-
-* Use `declare module` to extend typings.
-* Use `any` only as a **last resort**.
-* Prefer **`unknown` over `any`** when the type is not known.
-
-## Performance of Types
-
-* Avoid deeply recursive types that blow up compiler.
-* Split complex types into smaller utilities.
-* Use `as const` for literal inference instead of giant unions.
-
-## Tooling & Practices
-
-* Enable **`strict` mode** in `tsconfig.json`.
-* Use linters (ESLint with `@typescript-eslint`).
-* Use type coverage tools (`ts-prune`, `ts-unused-exports`).
-* Keep build fast: exclude generated files from type-checking.
-
-## Anti-Patterns
-
-* Overengineering with types that confuse readers.
-* Using `any` everywhere.
-* Exporting giant union types instead of enums or discriminated unions.
-* Ignoring compiler errors with `// @ts-ignore`.
-* Mixing runtime validation with compile-time types instead of using **Zod/io-ts**.

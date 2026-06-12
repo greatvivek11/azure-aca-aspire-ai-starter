@@ -29,6 +29,42 @@
     "azureOpenAiEndpoint": {
       "value": "${AZURE_OPENAI_ENDPOINT}"
     },
+    "containerRegistryMode": {
+      "value": "${CONTAINER_REGISTRY_MODE}"
+    },
+    "externalRegistryServer": {
+      "value": "${EXTERNAL_REGISTRY_SERVER}"
+    },
+    "externalRegistryUsername": {
+      "value": "${EXTERNAL_REGISTRY_USERNAME}"
+    },
+    "externalRegistryPassword": {
+      "value": "${EXTERNAL_REGISTRY_PASSWORD}"
+    },
+    "enableLogAnalytics": {
+      "value": "${ENABLE_LOG_ANALYTICS}"
+    },
+    "enableAspireDashboard": {
+      "value": "${ENABLE_ASPIRE_DASHBOARD}"
+    },
+    "backendMinReplicas": {
+      "value": "${BACKEND_MIN_REPLICAS}"
+    },
+    "frontendMinReplicas": {
+      "value": "${FRONTEND_MIN_REPLICAS}"
+    },
+    "workerMinReplicas": {
+      "value": "${WORKER_MIN_REPLICAS}"
+    },
+    "backendImage": {
+      "value": "${BACKEND_IMAGE}"
+    },
+    "frontendImage": {
+      "value": "${FRONTEND_IMAGE}"
+    },
+    "workerImage": {
+      "value": "${WORKER_IMAGE}"
+    },
     "sqlProvisioningMode": {
       "value": "${SQL_PROVISIONING_MODE}"
     },

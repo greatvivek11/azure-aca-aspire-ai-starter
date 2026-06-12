@@ -72,8 +72,8 @@ trackTrace("Frontend server booting", {
 });
 
 const backendApiCandidates = [
-	process.env.BACKEND_API_BASE_URL,
 	process.env.BACKEND_DAPR_BASE_URL,
+	process.env.BACKEND_API_BASE_URL,
 	"http://localhost:3500/v1.0/invoke/aihub-backend/method",
 	"http://backend:8080",
 	"http://localhost:8080",

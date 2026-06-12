@@ -1,33 +1,54 @@
 # 🖥️ Frontend Architecture
 
-This document outlines the architectural decisions, technology stack, and design principles for the frontend of the AI-Powered Knowledge Hub. The goal is a clean, minimal, performant, and aesthetically pleasing user interface that showcases modern frontend development practices.
+This document outlines the architectural decisions, technology stack, and design principles for the frontend of the AI-Powered Knowledge Hub. It distinguishes between the current implementation in the repository and the target direction for later phases.
 
 ## 🎯 Core Principles
 
-1. **Performance First**: Given the scale-to-zero nature of Azure Container Apps, we must optimize for a fast First Contentful Paint (FCP) and a snappy user experience, even on a cold start.
-2. **Developer Experience**: The chosen tools should be modern, efficient, and enjoyable to work with, maximizing productivity.
-3. **Component Ownership**: We will favor tools that give us full control over the component code, allowing for easy customization and long-term maintainability.
-4. **Pragmatic State Management**: We will use the simplest, most effective state management solution that meets the project's needs without introducing unnecessary complexity.
-5. **Server-Side Rendering & BFF**: Shift from pure SPA to **Next.js SSR** with **Backend-for-Frontend (BFF)** route handlers. Secrets/config are kept server-side, improving security and initial load performance.
-6. **Streaming-first**: Support real-time token streaming from the backend to the chat UI.
+1. **Performance First**: Given the scale-to-zero nature of Azure Container Apps, optimize for a fast First Contentful Paint (FCP) and predictable cold-start behavior.
+2. **Developer Experience**: Favor a small, understandable toolchain that is easy to build, run, and containerize.
+3. **Thin Frontend Host**: Keep the user experience as a Vite-built SPA while using a small **Hono** Node host for static serving, API proxying, and environment-specific integration.
+4. **Pragmatic State Management**: Use local React state until the UI complexity justifies a dedicated state or data-fetching library.
+5. **Progressive Architecture**: Document future UI and AI-specific patterns explicitly as evolution targets, not as current implementation facts.
 
 ## 🛠️ Technology Stack
 
-This stack is chosen to be modern, performant, and well-suited for building a sophisticated web application.
+This section reflects the current frontend stack checked into the repository.
 
 | Category            | Technology                      | Justification                                                                                                                                                          |
 | ------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Runtime/Toolkit** | **Bun / Node.js**               | Bun remains preferred for local dev speed, but Next.js requires Node.js for SSR in production. Both runtimes are supported in ACA.                                     |
-| **Framework**       | **React 19 + Next.js**          | Next.js enables SSR, streaming, and BFF route handlers. React 19 remains the core library for building interactive UIs.                                                |
-| **Rendering**       | **SSR (Server-Side Rendering)** | SSR improves FCP, SEO, and hides secrets on the server. Route Handlers proxy requests to backend APIs via Dapr.                                                        |
-| **Styling**         | **Tailwind CSS v4 + shadcn/ui** | The perfect combination for a modern, utility-first workflow. `shadcn/ui` provides beautifully designed, unstyled components that we can own and customize completely. |
-| **State (Global)**  | **Zustand**                     | A minimal, fast, and scalable state management solution. Perfect for managing shared state like UI themes or ephemeral state.                                          |
-| **State (Server)**  | **TanStack Query**              | Manages server data fetching, caching, and synchronization. In SSR, queries can be pre-fetched on the server for faster hydration.                                     |
-| **Language**        | **TypeScript**                  | Provides essential type safety, improving code quality and maintainability.                                                                                            |
+| **Runtime/Toolkit** | **Node.js 20 + npm**            | The Docker build and runtime both use Node 20 and npm, matching the checked-in `package-lock.json` and deployment flow.                                               |
+| **UI Framework**    | **React 18.3**                  | The current UI is built as a small React application with hooks and `StrictMode`.                                                                                      |
+| **Build Tool**      | **Vite 5.4**                    | Vite keeps the SPA development loop fast and aligns with the current frontend build and packaging model.                                                               |
+| **Host Layer**      | **Hono 4.x**                    | Hono provides a lightweight Node host for static asset serving, health endpoints, and backend proxy routes without adopting a full SSR framework.                     |
+| **Rendering**       | **Client-rendered SPA**         | The browser renders the application, while the Hono host handles operational endpoints and same-origin integration points.                                             |
+| **Styling**         | **Plain CSS**                   | The current frontend uses `App.css` and does not yet use Tailwind, shadcn/ui, or a broader design-system layer.                                                       |
+| **State**           | **React state/hooks**           | Customer data, form state, saving state, and error state are managed locally inside the app component.                                                                 |
+| **Language**        | **JavaScript (ES Modules)**     | The frontend currently runs as an ESM JavaScript application in both the Vite bundle and the Hono host.                                                               |
 
-## 🎨 UI/UX Vision: A Three-Panel Layout
+## Current Implementation Snapshot
 
-To achieve a clean, intuitive, and scalable interface, we will adopt a three-panel layout common in modern desktop and web applications.
+The current frontend is an operational foundation rather than the final AI product UI.
+
+* The Hono host in `server.js` serves the built Vite assets, exposes `/health`, and proxies CRUD requests under `/api/customers` to the backend.
+* The React app in `src/App.jsx` renders a simple customer records screen with list, create, and delete flows.
+* Data loading uses direct `fetch` calls to same-origin routes exposed by the Hono host.
+* There is no client-side router, auth flow, design-system layer, or dedicated data-fetching library in the current implementation.
+* Application Insights is wired in the host process, not in the browser bundle.
+
+## 🎨 UI Direction
+
+The current UI is intentionally simple so the repository can validate frontend-to-backend connectivity. Later phases can evolve toward a more task-oriented workspace once chat, documents, and insights are implemented.
+
+### Current UI
+
+The current screen is a two-card operational dashboard:
+
+* A customer table that loads records from `/api/customers`
+* A create-record form that posts new entries back through the Hono host to the backend
+
+### Future Direction
+
+As chat, document workflows, and insights land, the frontend can grow into a multi-panel workspace better suited to the product vision.
 
 ```
 +------+-------------------------+-----------------------------------------+
@@ -61,80 +82,56 @@ To achieve a clean, intuitive, and scalable interface, we will adopt a three-pan
 
 ## 📁 Project Structure
 
-The frontend project will be organized by feature, promoting modularity and separation of concerns.
+The current frontend structure is intentionally small.
 
 ```
-/src/AIHub.Frontend/
+/src/frontend/
 |
-├── public/                     // Static assets
-├── src/
-│   ├── api/                    // API hooks using TanStack Query
-│   │   └── chat.ts             // e.g., useGetChatHistory(), useSendMessage()
-│   │
-│   ├── assets/                 // Images, fonts, etc.
-│   │
-│   ├── components/
-│   │   ├── layout/             // Main layout components (Sidebar, Panels, etc.)
-│   │   └── ui/                 // Components from shadcn/ui (Button, Input, etc.)
-│   │
-│   ├── features/
-│   │   ├── chat/               // All components related to the chat feature
-│   │   └── documents/          // All components related to document management
-│   │
-│   ├── hooks/                  // Custom React hooks
-│   │
-│   ├── lib/                    // Utility functions, constants
-│   │
-│   ├── pages/                  // Top-level page components (SSR pages)
-│   │
-│   ├── services/               // Dapr client wrappers, auth services
-│   │
-│   └── stores/
-│       └── useAuthStore.ts     // Zustand store for authentication state
-|
-├── .gitignore
-├── bun.lockb
-├── next.config.js              // Next.js config (SSR, streaming)
-├── package.json
-├── postcss.config.js
-├── tailwind.config.js
-└── tsconfig.json
+├── index.html                  // Vite entry HTML
+├── package.json                // npm scripts and dependencies
+├── package-lock.json           // Locked npm dependency graph
+├── server.js                   // Hono host and backend proxy routes
+├── vite.config.js              // Vite build configuration
+└── src/
+   ├── App.jsx                 // Main React application shell
+   ├── App.css                 // Frontend styles
+   └── main.jsx                // Browser entry point
 ```
 
 ### Key Architectural Decisions
 
-* **API Layer**: All interactions with the backend (via Dapr) will be encapsulated in custom hooks or Next.js route handlers. TanStack Query hydrates data on the client. UI components remain decoupled from fetch logic.
-* **Error Handling**: Robust error handling with React error boundaries and centralized API hook logic.
-* **Authentication**: With SSR, **MSAL for Node.js/NextAuth.js** can be integrated to manage Entra ID tokens on the server. Tokens are never exposed to the browser.
-* **Streaming**: Chat endpoints stream responses progressively to improve UX.
+* **API Layer**: Same-origin routes exposed by the Hono host proxy backend APIs and Dapr-backed service calls, keeping integration logic out of UI components.
+* **Error Handling**: The current UI surfaces request failures in local component state. Error boundaries or centralized fetch wrappers can be added when the UI surface expands.
+* **Authentication**: If server-managed auth is added later, the Hono host is the place to terminate sessions or attach backend tokens without introducing a heavier server-rendered framework.
+* **Streaming**: Streaming remains a future-facing requirement for chat flows; the current customer-records UI does not implement streaming.
 
 ## 🔧 Implementation & Operational Guidance
 
 ### 1. Cold-Start & FCP Optimizations (Azure Container Apps)
 
-* **SSR Advantage**: First request served server-side, reducing bundle size and improving FCP.
-* **Code Splitting**: Still leverage dynamic imports for non-critical components.
-* **Critical Path**: Stream HTML progressively with Next.js streaming SSR.
+* **Cold-start posture**: Keep the Node host lightweight so it can return health and static assets quickly even when ACA cold starts.
+* **Code Splitting**: Introduce dynamic imports only when the UI grows beyond the current single-screen application.
+* **Critical Path**: Minimize the boot path to static asset serving plus API proxy endpoints; add streamed AI responses when chat workflows land.
 * **Asset Caching**: Use CDN edge caching for static assets.
 * **Skeleton UIs**: Provide skeleton loaders to mask latency.
 
-### 2. API Layer & TanStack Query Best Practices
+### 2. API Layer Best Practices
 
-* **Centralized Configuration**: TanStack Query client configured for SSR prefetch + client hydration.
-* **Error Handling**: Global error handling for network/auth failures.
-* **Optimistic Updates**: Still supported for chat/doc interactions.
-* **API Client Wrapper**: Thin wrapper around `fetch` or Next.js `fetch` with Dapr routing.
+* **Centralized Configuration**: Keep backend base URLs and Dapr invocation routes centralized in the Hono host.
+* **Error Handling**: Expand beyond inline component-level error handling only when the UI adds more routes or workflows.
+* **Optimistic Updates**: Optional for future chat or document interactions; not required for the current CRUD foundation.
+* **API Client Wrapper**: A thin wrapper around `fetch` is sufficient if the current inline calls start repeating across screens.
 
-### 3. State Management Patterns (Zustand + TanStack Query)
+### 3. State Management Patterns
 
-* **Clear Separation**: Zustand for ephemeral state, TanStack Query for server state.
-* **Hydration**: Pre-fetched queries hydrated into client cache at SSR time.
+* **Clear Separation**: Use local React state first; add a dedicated state library only when the SPA outgrows simple hooks and component composition.
+* **Data Fetching**: Keep data-access utilities explicit so future migration to a query library remains straightforward.
 
 ### 4. Authentication & Security
 
-* **Server-Side Auth**: Use Next.js route handlers with MSAL/NextAuth.js to acquire and cache Entra ID tokens server-side.
-* **Token Management**: Tokens are attached to requests internally; browser never sees raw tokens.
-* **Secure Headers**: CSP and other headers applied via Next.js middleware/ACA ingress.
+* **Server-Side Auth**: Use the Hono host for any future server-managed auth flow or token exchange.
+* **Token Management**: Prefer server-side attachment of sensitive credentials in host proxy routes rather than exposing them to the browser.
+* **Secure Headers**: CSP and other headers can be applied in the Hono host and reinforced at ACA ingress.
 
 ### 5. Observability & Performance Monitoring
 
@@ -150,7 +147,7 @@ The frontend project will be organized by feature, promoting modularity and sepa
 ### 7. Testing & CI/CD
 
 * **Testing Pyramid**: Vitest + React Testing Library, Playwright for E2E.
-* **SSR Testing**: Validate SSR-rendered output.
+* **Host Testing**: Validate Hono proxy routes, health endpoints, and static asset serving behavior.
 * **CI/CD**: GitHub Actions build → Dockerize → deploy to ACA.
 
 ### 8. Accessibility (A11y) & UX

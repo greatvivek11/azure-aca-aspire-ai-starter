@@ -68,7 +68,7 @@ echo "🔍 Checking Container Registry..."
 ACR=$(az acr list --resource-group "$RESOURCE_GROUP" --query "[0].name" -o tsv 2>/dev/null || echo "")
 
 if [ -z "$ACR" ] || [ "$ACR" == "None" ]; then
-    echo "⚠️  No Container Registry found. It will be provisioned by azd up"
+    echo "⚠️  No Container Registry found. This is expected when using external/public images."
 else
     echo "✅ Container Registry '$ACR' exists"
 fi
@@ -89,5 +89,5 @@ echo ""
 echo "📝 Next steps:"
 echo "   1. Ensure AZURE_OPENAI_API_KEY, AZURE_OPENAI_MODEL_ID, and AZURE_OPENAI_ENDPOINT"
 echo "      are set as GitHub Secrets (see docs/GitHub-Secrets-Setup.md)"
-echo "   2. Run: azd up"
+echo "   2. Run the GitHub Actions deployment workflow or azd provision/azd deploy as needed"
 echo ""

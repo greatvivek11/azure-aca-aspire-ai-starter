@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "3357600195175766012"
+      "templateHash": "10326091902372820172"
     }
   },
   "parameters": {
@@ -105,21 +105,126 @@
       "metadata": {
         "description": "Azure OpenAI endpoint URL used by backend."
       }
+    },
+    "containerRegistryMode": {
+      "type": "string",
+      "defaultValue": "external",
+      "allowedValues": [
+        "managed",
+        "external"
+      ],
+      "metadata": {
+        "description": "Container image registry mode. managed provisions Azure Container Registry; external uses public/authenticated external images such as GHCR."
+      }
+    },
+    "externalRegistryServer": {
+      "type": "string",
+      "defaultValue": "ghcr.io",
+      "metadata": {
+        "description": "External registry server used when containerRegistryMode is external."
+      }
+    },
+    "externalRegistryUsername": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "External registry username used when containerRegistryMode is external and the registry requires authentication."
+      }
+    },
+    "externalRegistryPassword": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "External registry password or token used when containerRegistryMode is external and the registry requires authentication."
+      }
+    },
+    "enableLogAnalytics": {
+      "type": "string",
+      "defaultValue": "false",
+      "metadata": {
+        "description": "Enable Log Analytics and workspace-based Application Insights for the Container Apps environment."
+      }
+    },
+    "enableAspireDashboard": {
+      "type": "string",
+      "defaultValue": "true",
+      "metadata": {
+        "description": "Enable Aspire Dashboard in the Container Apps environment."
+      }
+    },
+    "backendMinReplicas": {
+      "type": "string",
+      "defaultValue": "0",
+      "metadata": {
+        "description": "Minimum replicas for the backend container app."
+      }
+    },
+    "frontendMinReplicas": {
+      "type": "string",
+      "defaultValue": "0",
+      "metadata": {
+        "description": "Minimum replicas for the frontend container app."
+      }
+    },
+    "workerMinReplicas": {
+      "type": "string",
+      "defaultValue": "0",
+      "metadata": {
+        "description": "Minimum replicas for the worker container app."
+      }
+    },
+    "backendImage": {
+      "type": "string",
+      "defaultValue": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
+      "metadata": {
+        "description": "Container image for the backend app."
+      }
+    },
+    "frontendImage": {
+      "type": "string",
+      "defaultValue": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
+      "metadata": {
+        "description": "Container image for the frontend app."
+      }
+    },
+    "workerImage": {
+      "type": "string",
+      "defaultValue": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
+      "metadata": {
+        "description": "Container image for the worker app."
+      }
     }
   },
   "variables": {
     "baseName": "[format('aih-{0}-{1}', parameters('environmentName'), uniqueString(resourceGroup().id))]",
     "acrPullRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
-    "defaultContainerImage": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
-    "shortId": "[take(uniqueString(resourceGroup().id), 6)]",
-    "backendAppName": "[format('backend-{0}', variables('shortId'))]",
-    "frontendAppName": "[format('frontend-{0}', variables('shortId'))]",
-    "workerAppName": "[format('worker-{0}', variables('shortId'))]",
+    "backendAppName": "backend",
+    "frontendAppName": "frontend",
+    "workerAppName": "worker",
     "containerAppsManagedIdentityName": "[format('{0}-cai', variables('baseName'))]",
     "sqlServerName": "[take(format('{0}-sql', variables('baseName')), 63)]",
     "useExistingSql": "[equals(toLower(parameters('sqlProvisioningMode')), 'existing')]",
+    "useManagedRegistry": "[equals(toLower(parameters('containerRegistryMode')), 'managed')]",
+    "useExternalRegistry": "[not(variables('useManagedRegistry'))]",
+    "hasExternalRegistryCredentials": "[and(and(variables('useExternalRegistry'), not(empty(parameters('externalRegistryUsername')))), not(empty(parameters('externalRegistryPassword'))))]",
+    "logAnalyticsEnabled": "[equals(toLower(parameters('enableLogAnalytics')), 'true')]",
+    "aspireDashboardEnabled": "[equals(toLower(parameters('enableAspireDashboard')), 'true')]",
+    "appLogsDestination": "[if(variables('logAnalyticsEnabled'), 'log-analytics', if(variables('aspireDashboardEnabled'), 'azure-monitor', 'none'))]",
+    "resolvedBackendMinReplicas": "[int(parameters('backendMinReplicas'))]",
+    "resolvedFrontendMinReplicas": "[int(parameters('frontendMinReplicas'))]",
+    "resolvedWorkerMinReplicas": "[int(parameters('workerMinReplicas'))]",
     "resolvedSqlServerName": "[if(variables('useExistingSql'), parameters('existingSqlServerName'), variables('sqlServerName'))]",
-    "resolvedSqlDatabaseName": "[if(variables('useExistingSql'), parameters('existingSqlDatabaseName'), parameters('sqlDatabaseName'))]"
+    "resolvedSqlDatabaseName": "[if(variables('useExistingSql'), parameters('existingSqlDatabaseName'), parameters('sqlDatabaseName'))]",
+    "backendAppId": "aihub-backend",
+    "frontendAppId": "aihub-frontend",
+    "workerAppId": "aihub-worker",
+    "backendRegistrySecrets": [
+      {
+        "name": "azure-openai-api-key",
+        "value": "[parameters('azureOpenAiApiKey')]"
+      }
+    ],
+    "sharedRegistrySecrets": "[if(variables('hasExternalRegistryCredentials'), createArray(createObject('name', 'registry-password', 'value', parameters('externalRegistryPassword'))), createArray())]"
   },
   "resources": [
     {
@@ -138,6 +243,7 @@
       ]
     },
     {
+      "condition": "[variables('logAnalyticsEnabled')]",
       "type": "Microsoft.OperationalInsights/workspaces",
       "apiVersion": "2023-09-01",
       "name": "[format('{0}-law', variables('baseName'))]",
@@ -155,6 +261,7 @@
       }
     },
     {
+      "condition": "[variables('logAnalyticsEnabled')]",
       "type": "Microsoft.Insights/components",
       "apiVersion": "2020-02-02",
       "name": "[format('{0}-appi', variables('baseName'))]",
@@ -177,19 +284,37 @@
       "location": "[parameters('location')]",
       "tags": "[parameters('tags')]",
       "properties": {
-        "appLogsConfiguration": {
-          "destination": "log-analytics",
-          "logAnalyticsConfiguration": {
-            "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName'))), '2023-09-01').customerId]",
-            "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName'))), '2023-09-01').primarySharedKey]"
-          }
-        }
+        "appLogsConfiguration": "[if(equals(variables('appLogsDestination'), 'log-analytics'), createObject('destination', variables('appLogsDestination'), 'logAnalyticsConfiguration', createObject('customerId', reference(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName'))), '2023-09-01').customerId, 'sharedKey', listKeys(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName'))), '2023-09-01').primarySharedKey)), createObject('destination', variables('appLogsDestination')))]",
+        "daprAIConnectionString": "[if(variables('logAnalyticsEnabled'), reference(resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName'))), '2020-02-02').ConnectionString, null())]"
       },
       "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName')))]",
         "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName')))]"
       ]
     },
     {
+      "condition": "[variables('aspireDashboardEnabled')]",
+      "type": "Microsoft.App/managedEnvironments/dotNetComponents",
+      "apiVersion": "2025-10-02-preview",
+      "name": "[format('{0}/{1}', format('{0}-acae', variables('baseName')), 'aspire-dashboard')]",
+      "properties": {
+        "componentType": "AspireDashboard",
+        "configurations": [],
+        "serviceBinds": []
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[variables('containerAppsManagedIdentityName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]"
+    },
+    {
+      "condition": "[variables('useManagedRegistry')]",
       "type": "Microsoft.ContainerRegistry/registries",
       "apiVersion": "2023-07-01",
       "name": "[toLower(replace(format('{0}acr', variables('baseName')), '-', ''))]",
@@ -204,13 +329,7 @@
       }
     },
     {
-      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
-      "apiVersion": "2023-01-31",
-      "name": "[variables('containerAppsManagedIdentityName')]",
-      "location": "[parameters('location')]",
-      "tags": "[parameters('tags')]"
-    },
-    {
+      "condition": "[variables('useManagedRegistry')]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
       "scope": "[resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', '')))]",
@@ -290,59 +409,26 @@
         "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
         "configuration": {
           "activeRevisionsMode": "Single",
-          "secrets": [
-            {
-              "name": "azure-openai-api-key",
-              "value": "[parameters('azureOpenAiApiKey')]"
-            }
-          ],
+          "dapr": {
+            "enabled": true,
+            "appId": "[variables('backendAppId')]",
+            "appPort": 8080,
+            "appProtocol": "http"
+          },
+          "secrets": "[concat(variables('backendRegistrySecrets'), variables('sharedRegistrySecrets'))]",
           "ingress": {
             "external": true,
             "targetPort": 8080,
             "transport": "auto"
           },
-          "registries": [
-            {
-              "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), '2023-07-01').loginServer]",
-              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]"
-            }
-          ]
+          "registries": "[if(variables('useManagedRegistry'), createArray(createObject('server', reference(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), '2023-07-01').loginServer, 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')))), if(variables('hasExternalRegistryCredentials'), createArray(createObject('server', parameters('externalRegistryServer'), 'username', parameters('externalRegistryUsername'), 'passwordSecretRef', 'registry-password')), createArray()))]"
         },
         "template": {
           "containers": [
             {
               "name": "backend",
-              "image": "[variables('defaultContainerImage')]",
-              "env": [
-                {
-                  "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
-                  "value": "[reference(resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName'))), '2020-02-02').ConnectionString]"
-                },
-                {
-                  "name": "AZURE_OPENAI_API_KEY",
-                  "secretRef": "azure-openai-api-key"
-                },
-                {
-                  "name": "AZURE_OPENAI_MODEL_ID",
-                  "value": "[parameters('azureOpenAiModelId')]"
-                },
-                {
-                  "name": "AZURE_OPENAI_ENDPOINT",
-                  "value": "[parameters('azureOpenAiEndpoint')]"
-                },
-                {
-                  "name": "SQL_SERVER",
-                  "value": "[format('{0}{1}', variables('resolvedSqlServerName'), environment().suffixes.sqlServerHostname)]"
-                },
-                {
-                  "name": "SQL_DATABASE",
-                  "value": "[variables('resolvedSqlDatabaseName')]"
-                },
-                {
-                  "name": "AZURE_CLIENT_ID",
-                  "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').clientId]"
-                }
-              ],
+              "image": "[parameters('backendImage')]",
+              "env": "[concat(if(variables('logAnalyticsEnabled'), createArray(createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', reference(resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName'))), '2020-02-02').ConnectionString)), createArray()), createArray(createObject('name', 'AZURE_OPENAI_API_KEY', 'secretRef', 'azure-openai-api-key'), createObject('name', 'AZURE_OPENAI_MODEL_ID', 'value', parameters('azureOpenAiModelId')), createObject('name', 'AZURE_OPENAI_ENDPOINT', 'value', parameters('azureOpenAiEndpoint')), createObject('name', 'SQL_SERVER', 'value', format('{0}{1}', variables('resolvedSqlServerName'), environment().suffixes.sqlServerHostname)), createObject('name', 'SQL_DATABASE', 'value', variables('resolvedSqlDatabaseName')), createObject('name', 'AZURE_CLIENT_ID', 'value', reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').clientId)))]",
               "resources": {
                 "cpu": "[json('0.5')]",
                 "memory": "1Gi"
@@ -350,14 +436,13 @@
             }
           ],
           "scale": {
-            "minReplicas": 1,
+            "minReplicas": "[variables('resolvedBackendMinReplicas')]",
             "maxReplicas": 2
           }
         }
       },
       "dependsOn": [
         "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
-        "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), 'AcrPull'))]",
         "[resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName')))]",
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]",
         "[resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', '')))]"
@@ -379,33 +464,26 @@
         "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
         "configuration": {
           "activeRevisionsMode": "Single",
+          "dapr": {
+            "enabled": true,
+            "appId": "[variables('frontendAppId')]",
+            "appPort": 3000,
+            "appProtocol": "http"
+          },
+          "secrets": "[variables('sharedRegistrySecrets')]",
           "ingress": {
             "external": true,
             "targetPort": 3000,
             "transport": "auto"
           },
-          "registries": [
-            {
-              "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), '2023-07-01').loginServer]",
-              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]"
-            }
-          ]
+          "registries": "[if(variables('useManagedRegistry'), createArray(createObject('server', reference(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), '2023-07-01').loginServer, 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')))), if(variables('hasExternalRegistryCredentials'), createArray(createObject('server', parameters('externalRegistryServer'), 'username', parameters('externalRegistryUsername'), 'passwordSecretRef', 'registry-password')), createArray()))]"
         },
         "template": {
           "containers": [
             {
               "name": "frontend",
-              "image": "[variables('defaultContainerImage')]",
-              "env": [
-                {
-                  "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
-                  "value": "[reference(resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName'))), '2020-02-02').ConnectionString]"
-                },
-                {
-                  "name": "BACKEND_API_BASE_URL",
-                  "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', variables('backendAppName')), '2024-03-01').configuration.ingress.fqdn)]"
-                }
-              ],
+              "image": "[parameters('frontendImage')]",
+              "env": "[concat(if(variables('logAnalyticsEnabled'), createArray(createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', reference(resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName'))), '2020-02-02').ConnectionString)), createArray()), createArray(createObject('name', 'BACKEND_DAPR_BASE_URL', 'value', format('http://localhost:3500/v1.0/invoke/{0}/method', variables('backendAppId'))), createObject('name', 'WORKER_DAPR_BASE_URL', 'value', format('http://localhost:3500/v1.0/invoke/{0}/method', variables('workerAppId')))))]",
               "resources": {
                 "cpu": "[json('0.5')]",
                 "memory": "1Gi"
@@ -413,16 +491,14 @@
             }
           ],
           "scale": {
-            "minReplicas": 1,
+            "minReplicas": "[variables('resolvedFrontendMinReplicas')]",
             "maxReplicas": 2
           }
         }
       },
       "dependsOn": [
         "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
-        "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), 'AcrPull'))]",
         "[resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName')))]",
-        "[resourceId('Microsoft.App/containerApps', variables('backendAppName'))]",
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]",
         "[resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', '')))]"
       ]
@@ -443,24 +519,26 @@
         "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
         "configuration": {
           "activeRevisionsMode": "Single",
-          "registries": [
-            {
-              "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), '2023-07-01').loginServer]",
-              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]"
-            }
-          ]
+          "dapr": {
+            "enabled": true,
+            "appId": "[variables('workerAppId')]",
+            "appPort": 8081,
+            "appProtocol": "http"
+          },
+          "secrets": "[variables('sharedRegistrySecrets')]",
+          "ingress": {
+            "external": false,
+            "targetPort": 8081,
+            "transport": "auto"
+          },
+          "registries": "[if(variables('useManagedRegistry'), createArray(createObject('server', reference(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), '2023-07-01').loginServer, 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')))), if(variables('hasExternalRegistryCredentials'), createArray(createObject('server', parameters('externalRegistryServer'), 'username', parameters('externalRegistryUsername'), 'passwordSecretRef', 'registry-password')), createArray()))]"
         },
         "template": {
           "containers": [
             {
               "name": "worker",
-              "image": "[variables('defaultContainerImage')]",
-              "env": [
-                {
-                  "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
-                  "value": "[reference(resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName'))), '2020-02-02').ConnectionString]"
-                }
-              ],
+              "image": "[parameters('workerImage')]",
+              "env": "[if(variables('logAnalyticsEnabled'), createArray(createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', reference(resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName'))), '2020-02-02').ConnectionString)), createArray())]",
               "resources": {
                 "cpu": "[json('0.25')]",
                 "memory": "0.5Gi"
@@ -468,14 +546,13 @@
             }
           ],
           "scale": {
-            "minReplicas": 1,
+            "minReplicas": "[variables('resolvedWorkerMinReplicas')]",
             "maxReplicas": 2
           }
         }
       },
       "dependsOn": [
         "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
-        "[extensionResourceId(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), 'AcrPull'))]",
         "[resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName')))]",
         "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]",
         "[resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', '')))]"
@@ -501,11 +578,11 @@
     },
     "AZURE_CONTAINER_REGISTRY_NAME": {
       "type": "string",
-      "value": "[toLower(replace(format('{0}acr', variables('baseName')), '-', ''))]"
+      "value": "[if(variables('useManagedRegistry'), toLower(replace(format('{0}acr', variables('baseName')), '-', '')), '')]"
     },
     "AZURE_CONTAINER_REGISTRY_ENDPOINT": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), '2023-07-01').loginServer]"
+      "value": "[if(variables('useManagedRegistry'), reference(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), '2023-07-01').loginServer, '')]"
     },
     "BACKEND_CONTAINER_APP_NAME": {
       "type": "string",
@@ -542,6 +619,18 @@
     "AZURE_SQL_PROVISIONING_MODE": {
       "type": "string",
       "value": "[parameters('sqlProvisioningMode')]"
+    },
+    "CONTAINER_REGISTRY_MODE": {
+      "type": "string",
+      "value": "[parameters('containerRegistryMode')]"
+    },
+    "ENABLE_LOG_ANALYTICS": {
+      "type": "string",
+      "value": "[parameters('enableLogAnalytics')]"
+    },
+    "ENABLE_ASPIRE_DASHBOARD": {
+      "type": "string",
+      "value": "[parameters('enableAspireDashboard')]"
     },
     "FRONTEND_URL": {
       "type": "string",

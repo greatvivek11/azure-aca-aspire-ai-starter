@@ -11,8 +11,8 @@ This is the backend service for the AI Hub, built with .NET 10 Minimal API follo
 │   ├── Health/             # Health check endpoint
 │   └── AiPing/             # AI connectivity test endpoint
 ├── Infrastructure/         # External service implementations
-│   └── Ai/                 # AI service abstractions and implementations
-├── Shared/                 # Cross-cutting concerns
+│   ├── Ai/                 # AI service abstractions and implementations
+│   └── Sql/                # Seed script and SQL-related assets
 ├── Program.cs              # Application entry point
 ├── Backend.csproj          # Project file
 └── Dockerfile              # Container definition

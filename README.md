@@ -22,7 +22,7 @@ This project is built to showcase advanced skills in full-stack development, AI 
 This project is built using a modern, distributed architecture designed for scalability, maintainability, and security.
 
 -   **Backend**: A **.NET 10** application built with **ASP.NET Core Minimal APIs** following a **Vertical Slice Architecture (VSA)** with clean, feature-focused code.
--   **Frontend**: A **React 19** Single Page Application (SPA) built with **Vite** and **Bun**, styled with **Tailwind CSS** and **shadcn/ui**.
+-   **Frontend**: A **React** Single Page Application (SPA) built with **Vite**, served by a lightweight **Hono** Node application, and managed with **npm**.
 -   **Cloud Platform**: Hosted entirely on **Azure Container Apps**, with a containerized frontend and backend.
 -   **Service Communication**: **Dapr (Distributed Application Runtime)** is used for secure, internal service-to-service communication.
 -   **AI Orchestration**: **Semantic Kernel** is used to orchestrate calls to the **Hugging Face Inference Router**, providing flexibility in model choice.
@@ -35,9 +35,9 @@ This project is built using a modern, distributed architecture designed for scal
 
 For a deeper dive, please see the detailed architectural documents:
 
--   **[Cloud Architecture](./docs/Cloud-Architecture.md)**: The holistic, end-to-end deployment and security plan.
--   **[Backend Architecture](./docs/Backend-Architecture.md)**: The internal structure of the .NET backend.
--   **[Frontend Architecture](./docs/Frontend-Architecture.md)**: The technology stack and patterns for the React frontend.
+-   **[Cloud Architecture](./docs/Architecture/Cloud-Architecture.md)**: The holistic, end-to-end deployment and security plan.
+-   **[Backend Architecture](./docs/Architecture/Backend-Architecture.md)**: The internal structure of the .NET backend.
+-   **[Frontend Architecture](./docs/Architecture/Frontend-Architecture.md)**: The technology stack and patterns for the React frontend.
 
 ---
 
@@ -46,7 +46,8 @@ For a deeper dive, please see the detailed architectural documents:
 To run this project locally, you will need the following prerequisites installed:
 
 -   [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
--   [Bun](https://bun.sh/)
+-   [Node.js](https://nodejs.org/)
+-   [npm](https://www.npmjs.com/)
 -   [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 -   [Dapr CLI](https://docs.dapr.io/getting-started/install-dapr-cli/)
 -   [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
@@ -71,6 +72,7 @@ Edit `src/aspire/.env` and fill in your actual values for Hugging Face API key a
 Navigate to the Aspire project directory and run the application:
 ```bash
 cd src/aspire
+npm install --prefix ../frontend
 dotnet run
 ```
 
@@ -83,6 +85,7 @@ Note: The `.env` file is gitignored and will not be committed to the repository.
 After completing the setup steps above, you can run the application with:
 ```bash
 cd src/aspire
+npm install --prefix ../frontend
 dotnet run
 ```
 

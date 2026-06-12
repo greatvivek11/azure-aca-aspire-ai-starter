@@ -27,6 +27,7 @@ on:
 permissions:
   id-token: write
   contents: read
+  packages: write
 
 env:
   AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
@@ -36,6 +37,18 @@ env:
   SQL_PROVISIONING_MODE: ${{ secrets.SQL_PROVISIONING_MODE || 'provision' }}
   AZURE_SQL_EXISTING_SERVER_NAME: ${{ secrets.AZURE_SQL_EXISTING_SERVER_NAME || '' }}
   AZURE_SQL_EXISTING_DATABASE_NAME: ${{ secrets.AZURE_SQL_EXISTING_DATABASE_NAME || '' }}
+  CONTAINER_REGISTRY_MODE: ${{ secrets.CONTAINER_REGISTRY_MODE || 'external' }}
+  EXTERNAL_REGISTRY_SERVER: ${{ secrets.EXTERNAL_REGISTRY_SERVER || 'ghcr.io' }}
+  EXTERNAL_REGISTRY_USERNAME: ${{ secrets.EXTERNAL_REGISTRY_USERNAME || '' }}
+  EXTERNAL_REGISTRY_PASSWORD: ${{ secrets.EXTERNAL_REGISTRY_PASSWORD || '' }}
+  ENABLE_LOG_ANALYTICS: ${{ secrets.ENABLE_LOG_ANALYTICS || 'false' }}
+  ENABLE_ASPIRE_DASHBOARD: ${{ secrets.ENABLE_ASPIRE_DASHBOARD || 'true' }}
+  BACKEND_MIN_REPLICAS: ${{ secrets.BACKEND_MIN_REPLICAS || '0' }}
+  FRONTEND_MIN_REPLICAS: ${{ secrets.FRONTEND_MIN_REPLICAS || '0' }}
+  WORKER_MIN_REPLICAS: ${{ secrets.WORKER_MIN_REPLICAS || '0' }}
+  BACKEND_IMAGE: mcr.microsoft.com/azuredocs/containerapps-helloworld:latest
+  FRONTEND_IMAGE: mcr.microsoft.com/azuredocs/containerapps-helloworld:latest
+  WORKER_IMAGE: mcr.microsoft.com/azuredocs/containerapps-helloworld:latest
 
 jobs:
   validate:
@@ -104,6 +117,154 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate container registry mode inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mode_lower="$(echo "${CONTAINER_REGISTRY_MODE:-external}" | tr '[:upper:]' '[:lower:]')"
+          echo "CONTAINER_REGISTRY_MODE=${mode_lower}" >> "$GITHUB_ENV"
+
+          if [[ "${mode_lower}" != "managed" && "${mode_lower}" != "external" ]]; then
+            echo "CONTAINER_REGISTRY_MODE must be 'managed' or 'external'."
+            exit 1
+          fi
+
+          if [[ "${mode_lower}" == "external" ]]; then
+            if [[ -z "${EXTERNAL_REGISTRY_SERVER:-}" ]]; then
+              echo "EXTERNAL_REGISTRY_SERVER is required when CONTAINER_REGISTRY_MODE=external."
+              exit 1
+            fi
+
+            server_lower="$(echo "${EXTERNAL_REGISTRY_SERVER}" | tr '[:upper:]' '[:lower:]')"
+            if [[ "${server_lower}" != "ghcr.io" && ( -z "${EXTERNAL_REGISTRY_USERNAME:-}" || -z "${EXTERNAL_REGISTRY_PASSWORD:-}" ) ]]; then
+              echo "Authenticated external registries require EXTERNAL_REGISTRY_USERNAME and EXTERNAL_REGISTRY_PASSWORD."
+              exit 1
+            fi
+          fi
+
+      - name: Resolve external image coordinates
+        if: env.CONTAINER_REGISTRY_MODE == 'external'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          server_lower="$(echo "${EXTERNAL_REGISTRY_SERVER}" | tr '[:upper:]' '[:lower:]')"
+          owner_lower="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          repo_lower="$(basename "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+
+          echo "EXTERNAL_REGISTRY_SERVER=${server_lower}" >> "$GITHUB_ENV"
+          echo "BACKEND_IMAGE=${server_lower}/${owner_lower}/${repo_lower}-backend:${GITHUB_SHA}" >> "$GITHUB_ENV"
+          echo "FRONTEND_IMAGE=${server_lower}/${owner_lower}/${repo_lower}-frontend:${GITHUB_SHA}" >> "$GITHUB_ENV"
+          echo "WORKER_IMAGE=${server_lower}/${owner_lower}/${repo_lower}-worker:${GITHUB_SHA}" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        if: env.CONTAINER_REGISTRY_MODE == 'external' && env.EXTERNAL_REGISTRY_SERVER == 'ghcr.io'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to external registry
+        if: env.CONTAINER_REGISTRY_MODE == 'external' && env.EXTERNAL_REGISTRY_SERVER != 'ghcr.io'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.EXTERNAL_REGISTRY_SERVER }}
+          username: ${{ env.EXTERNAL_REGISTRY_USERNAME }}
+          password: ${{ env.EXTERNAL_REGISTRY_PASSWORD }}
+
+      - name: Build and push backend image
+        if: env.CONTAINER_REGISTRY_MODE == 'external'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/backend
+          file: ./src/backend/Dockerfile
+          push: true
+          tags: ${{ env.BACKEND_IMAGE }}
+
+      - name: Build and push frontend image
+        if: env.CONTAINER_REGISTRY_MODE == 'external'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/frontend
+          file: ./src/frontend/Dockerfile
+          push: true
+          tags: ${{ env.FRONTEND_IMAGE }}
+
+      - name: Build and push worker image
+        if: env.CONTAINER_REGISTRY_MODE == 'external'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src/worker
+          file: ./src/worker/Dockerfile
+          push: true
+          tags: ${{ env.WORKER_IMAGE }}
+
+      - name: Ensure GHCR package visibility or registry auth fallback
+        if: env.CONTAINER_REGISTRY_MODE == 'external' && env.EXTERNAL_REGISTRY_SERVER == 'ghcr.io'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          owner="${GITHUB_REPOSITORY_OWNER}"
+          repo_lower="$(basename "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          owner_type="$(curl -sS -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "https://api.github.com/users/${owner}" | jq -r '.type')"
+
+          if [[ "${owner_type}" == "Organization" ]]; then
+            scope_path="orgs/${owner}"
+          else
+            scope_path="users/${owner}"
+          fi
+
+          packages=(
+            "${repo_lower}-backend"
+            "${repo_lower}-frontend"
+            "${repo_lower}-worker"
+          )
+
+          for package_name in "${packages[@]}"; do
+            visibility_url="https://api.github.com/${scope_path}/packages/container/${package_name}/visibility"
+            package_url="https://api.github.com/${scope_path}/packages/container/${package_name}"
+
+            status="$(curl -sS -o /tmp/ghcr_visibility_body.txt -w "%{http_code}" \
+              -X PATCH \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "${visibility_url}" \
+              -d '{"visibility":"public"}')"
+
+            if [[ "${status}" != "204" && "${status}" != "422" ]]; then
+              echo "GHCR visibility update for ${package_name} returned HTTP ${status}."
+            fi
+
+            visibility=""
+            for attempt in 1 2 3 4 5; do
+              visibility="$(curl -sS \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                "${package_url}" | jq -r '.visibility // empty')"
+
+              if [[ -n "${visibility}" ]]; then
+                break
+              fi
+              sleep 2
+            done
+
+            if [[ "${visibility}" != "public" ]]; then
+              if [[ -z "${EXTERNAL_REGISTRY_USERNAME:-}" || -z "${EXTERNAL_REGISTRY_PASSWORD:-}" ]]; then
+                echo "GHCR package '${package_name}' is not public and no registry credentials were provided."
+                echo "Either make GHCR packages public or set EXTERNAL_REGISTRY_USERNAME/EXTERNAL_REGISTRY_PASSWORD so ACA can authenticate."
+                exit 1
+              fi
+            fi
+          done
 
       - name: Log in to Azure using OIDC
         uses: azure/login@v2
@@ -222,6 +383,18 @@ jobs:
           SQL_PROVISIONING_MODE: ${{ env.SQL_PROVISIONING_MODE }}
           AZURE_SQL_EXISTING_SERVER_NAME: ${{ env.AZURE_SQL_EXISTING_SERVER_NAME }}
           AZURE_SQL_EXISTING_DATABASE_NAME: ${{ env.AZURE_SQL_EXISTING_DATABASE_NAME }}
+          CONTAINER_REGISTRY_MODE: ${{ env.CONTAINER_REGISTRY_MODE }}
+          EXTERNAL_REGISTRY_SERVER: ${{ env.EXTERNAL_REGISTRY_SERVER }}
+          EXTERNAL_REGISTRY_USERNAME: ${{ env.EXTERNAL_REGISTRY_USERNAME }}
+          EXTERNAL_REGISTRY_PASSWORD: ${{ env.EXTERNAL_REGISTRY_PASSWORD }}
+          ENABLE_LOG_ANALYTICS: ${{ env.ENABLE_LOG_ANALYTICS }}
+          ENABLE_ASPIRE_DASHBOARD: ${{ env.ENABLE_ASPIRE_DASHBOARD }}
+          BACKEND_MIN_REPLICAS: ${{ env.BACKEND_MIN_REPLICAS }}
+          FRONTEND_MIN_REPLICAS: ${{ env.FRONTEND_MIN_REPLICAS }}
+          WORKER_MIN_REPLICAS: ${{ env.WORKER_MIN_REPLICAS }}
+          BACKEND_IMAGE: ${{ env.BACKEND_IMAGE }}
+          FRONTEND_IMAGE: ${{ env.FRONTEND_IMAGE }}
+          WORKER_IMAGE: ${{ env.WORKER_IMAGE }}
 
       - name: Grant backend UAMI SQL roles (provision mode)
         shell: pwsh
@@ -315,6 +488,7 @@ jobs:
           }
 
       - name: Deploy Backend Service
+        if: env.CONTAINER_REGISTRY_MODE == 'managed'
         run: azd deploy backend --no-prompt
         env:
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
@@ -322,6 +496,7 @@ jobs:
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
 
       - name: Deploy Frontend Service
+        if: env.CONTAINER_REGISTRY_MODE == 'managed'
         run: azd deploy frontend --no-prompt
         env:
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
@@ -329,11 +504,21 @@ jobs:
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
 
       - name: Deploy Worker Service
+        if: env.CONTAINER_REGISTRY_MODE == 'managed'
         run: azd deploy worker --no-prompt
         env:
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
           AZURE_OPENAI_MODEL_ID: ${{ secrets.AZURE_OPENAI_MODEL_ID }}
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+
+      - name: Finalize external image deployment
+        if: env.CONTAINER_REGISTRY_MODE == 'external'
+        shell: bash
+        run: |
+          echo "External registry mode provisioned ACA with prebuilt images:"
+          echo "  Backend:  ${BACKEND_IMAGE}"
+          echo "  Frontend: ${FRONTEND_IMAGE}"
+          echo "  Worker:   ${WORKER_IMAGE}"
 
       - name: Get Deployment Summary
         if: success()

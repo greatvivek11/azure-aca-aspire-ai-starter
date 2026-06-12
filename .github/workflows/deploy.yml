@@ -206,10 +206,12 @@ jobs:
           owner_lower="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
           repo_lower="$(basename "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
 
-          echo "EXTERNAL_REGISTRY_SERVER=${server_lower}" >> "$GITHUB_ENV"
-          echo "BACKEND_IMAGE=${server_lower}/${owner_lower}/${repo_lower}-backend:${GITHUB_SHA}" >> "$GITHUB_ENV"
-          echo "FRONTEND_IMAGE=${server_lower}/${owner_lower}/${repo_lower}-frontend:${GITHUB_SHA}" >> "$GITHUB_ENV"
-          echo "WORKER_IMAGE=${server_lower}/${owner_lower}/${repo_lower}-worker:${GITHUB_SHA}" >> "$GITHUB_ENV"
+          {
+            echo "EXTERNAL_REGISTRY_SERVER=${server_lower}"
+            echo "BACKEND_IMAGE=${server_lower}/${owner_lower}/${repo_lower}-backend:${GITHUB_SHA}"
+            echo "FRONTEND_IMAGE=${server_lower}/${owner_lower}/${repo_lower}-frontend:${GITHUB_SHA}"
+            echo "WORKER_IMAGE=${server_lower}/${owner_lower}/${repo_lower}-worker:${GITHUB_SHA}"
+          } >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
         if: env.CONTAINER_REGISTRY_MODE == 'external' && env.EXTERNAL_REGISTRY_SERVER == 'ghcr.io'
@@ -294,7 +296,8 @@ jobs:
             fi
 
             visibility=""
-            for attempt in 1 2 3 4 5; do
+            retries=5
+            while (( retries > 0 )); do
               visibility="$(curl -sS \
                 -H "Authorization: Bearer ${GH_TOKEN}" \
                 -H "Accept: application/vnd.github+json" \
@@ -303,6 +306,7 @@ jobs:
               if [[ -n "${visibility}" ]]; then
                 break
               fi
+              retries=$((retries - 1))
               sleep 2
             done
 

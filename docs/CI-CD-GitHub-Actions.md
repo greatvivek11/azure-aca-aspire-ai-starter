@@ -110,9 +110,10 @@ These must be configured in **Settings → Secrets and variables → Actions**:
 AZURE_SUBSCRIPTION_ID       # Azure subscription ID
 AZURE_CLIENT_ID             # Service Principal client ID
 AZURE_TENANT_ID             # Azure Entra ID tenant ID
-AZURE_OPENAI_API_KEY        # OpenAI API key
-AZURE_OPENAI_MODEL_ID       # Deployed model name (e.g., gpt-5-mini or gpt-5-nano)
-AZURE_OPENAI_ENDPOINT       # OpenAI endpoint URL
+AI_SERVICES_PROVISIONING_MODE  # Optional: provision (default) or external
+AZURE_OPENAI_API_KEY        # Required only when AI_SERVICES_PROVISIONING_MODE=external
+AZURE_OPENAI_MODEL_ID       # Required only when AI_SERVICES_PROVISIONING_MODE=external
+AZURE_OPENAI_ENDPOINT       # Required only when AI_SERVICES_PROVISIONING_MODE=external
 AZD_ENVIRONMENT_NAME        # Optional: environment name (default: copilot-sk-azure)
 ```
 

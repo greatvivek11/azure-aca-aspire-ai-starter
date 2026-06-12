@@ -35,6 +35,9 @@
     "aiServicesAccountName": {
       "value": "${AZURE_AI_SERVICES_ACCOUNT_NAME}"
     },
+    "aiFoundryProjectName": {
+      "value": "${AZURE_AI_FOUNDRY_PROJECT_NAME}"
+    },
     "openAiChatDeploymentName": {
       "value": "${AZURE_OPENAI_MODEL_ID}"
     },
@@ -56,17 +59,29 @@
     "openAiEmbeddingDimensions": {
       "value": "${AZURE_OPENAI_EMBEDDING_DIMENSIONS}"
     },
+    "openAiAuthMode": {
+      "value": "${AZURE_OPENAI_AUTH_MODE}"
+    },
     "storageAccountName": {
       "value": "${AZURE_STORAGE_ACCOUNT_NAME}"
     },
     "documentsContainerName": {
       "value": "${AZURE_STORAGE_DOCUMENTS_CONTAINER}"
     },
+    "blobCorsAllowedOriginsJson": {
+      "value": "${BLOB_CORS_ALLOWED_ORIGINS_JSON}"
+    },
+    "storageAuthMode": {
+      "value": "${AZURE_STORAGE_AUTH_MODE}"
+    },
     "searchServiceName": {
       "value": "${AZURE_SEARCH_SERVICE_NAME}"
     },
     "searchIndexName": {
       "value": "${AZURE_SEARCH_INDEX_NAME}"
+    },
+    "searchAuthMode": {
+      "value": "${AZURE_SEARCH_AUTH_MODE}"
     },
     "containerRegistryMode": {
       "value": "${CONTAINER_REGISTRY_MODE}"

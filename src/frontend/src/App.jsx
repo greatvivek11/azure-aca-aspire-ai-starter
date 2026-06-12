@@ -38,24 +38,31 @@ export default function App() {
 		loadCustomers().catch((err) => setDataError(err.message));
 	}, [loadCustomers]);
 
+	const pendingJobIds = useMemo(
+		() =>
+			ingestionJobs
+				.filter((job) => !terminalStatuses.has(job.status))
+				.map((job) => job.documentId),
+		[ingestionJobs],
+	);
+
 	useEffect(() => {
-		const pendingJobs = ingestionJobs.filter((job) => !terminalStatuses.has(job.status));
-		if (pendingJobs.length === 0) {
+		if (pendingJobIds.length === 0) {
 			return undefined;
 		}
 
 		const intervalId = setInterval(async () => {
 			await Promise.all(
-				pendingJobs.map(async (job) => {
+				pendingJobIds.map(async (documentId) => {
 					try {
-						const response = await fetch(`/api/uploads/${job.documentId}/status`);
+						const response = await fetch(`/api/uploads/${documentId}/status`);
 						if (!response.ok) {
 							return;
 						}
 
 						const latest = await response.json();
 						setIngestionJobs((prev) =>
-							prev.map((item) => (item.documentId === job.documentId ? latest : item)),
+							prev.map((item) => (item.documentId === documentId ? latest : item)),
 						);
 
 						if (latest.status === "Ready") {
@@ -88,7 +95,7 @@ export default function App() {
 		}, 2500);
 
 		return () => clearInterval(intervalId);
-	}, [ingestionJobs]);
+	}, [pendingJobIds]);
 
 	const pendingUploadCount = useMemo(
 		() => ingestionJobs.filter((job) => !terminalStatuses.has(job.status)).length,
@@ -276,7 +283,7 @@ export default function App() {
 				<>
 					<section className="card">
 						<h1>Customer Records</h1>
-						<p className="subtitle">React frontend to Dapr sidecar to backend API to SQL Server</p>
+						<p className="subtitle">React frontend to backend API to SQL Server</p>
 						{dataError ? <div className="error">{dataError}</div> : null}
 						<div className="table-wrap">
 							<table>

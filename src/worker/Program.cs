@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Azure;
@@ -47,41 +48,55 @@ builder.WebHost.UseUrls("http://*:8081");
 var app = builder.Build();
 
 var sqlConnectionString = GetSqlConnectionString(app.Configuration);
+var storageAccountName = Environment.GetEnvironmentVariable("AZURE_STORAGE_ACCOUNT_NAME") ?? string.Empty;
 var storageConnectionString = Environment.GetEnvironmentVariable("AZURE_STORAGE_CONNECTION_STRING") ?? string.Empty;
 var storageContainerName = Environment.GetEnvironmentVariable("AZURE_STORAGE_CONTAINER_NAME") ?? string.Empty;
+var storageAuthMode = (Environment.GetEnvironmentVariable("AZURE_STORAGE_AUTH_MODE") ?? "managed-identity")
+    .Trim()
+    .ToLowerInvariant();
 var searchEndpoint = Environment.GetEnvironmentVariable("AZURE_SEARCH_ENDPOINT") ?? string.Empty;
 var searchIndexName = Environment.GetEnvironmentVariable("AZURE_SEARCH_INDEX_NAME") ?? string.Empty;
 var searchApiKey = Environment.GetEnvironmentVariable("AZURE_SEARCH_API_KEY") ?? string.Empty;
 var openAiEndpointText = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT") ?? string.Empty;
 var openAiApiKey = Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY") ?? string.Empty;
+var openAiAuthMode = (Environment.GetEnvironmentVariable("AZURE_OPENAI_AUTH_MODE") ?? "api-key")
+    .Trim()
+    .ToLowerInvariant();
+var managedIdentityClientId = Environment.GetEnvironmentVariable("AZURE_CLIENT_ID");
 var embeddingModelId = Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_MODEL_ID") ?? string.Empty;
 var embeddingDimensions = int.TryParse(Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_DIMENSIONS"), out var parsed)
     ? parsed
     : 1536;
 var ingestionConfigured =
-    !string.IsNullOrWhiteSpace(storageConnectionString) &&
+    (!string.IsNullOrWhiteSpace(storageConnectionString) || !string.IsNullOrWhiteSpace(storageAccountName)) &&
     !string.IsNullOrWhiteSpace(storageContainerName) &&
     !string.IsNullOrWhiteSpace(searchEndpoint) &&
     !string.IsNullOrWhiteSpace(searchIndexName) &&
     !string.IsNullOrWhiteSpace(searchApiKey) &&
     !string.IsNullOrWhiteSpace(openAiEndpointText) &&
-    !string.IsNullOrWhiteSpace(openAiApiKey) &&
+    (!string.Equals(openAiAuthMode, "api-key", StringComparison.OrdinalIgnoreCase) || !string.IsNullOrWhiteSpace(openAiApiKey)) &&
     !string.IsNullOrWhiteSpace(embeddingModelId);
 
 if (ingestionConfigured)
 {
     await EnsureSearchIndexAsync(searchEndpoint, searchApiKey, searchIndexName, embeddingDimensions);
+    await EnsureWorkerSqlSchemaAsync(sqlConnectionString);
     await RequeueNonTerminalJobsAsync(sqlConnectionString);
     _ = RunIngestionLoopAsync(
         sqlConnectionString,
+        storageAccountName,
         storageConnectionString,
         storageContainerName,
+        storageAuthMode,
         searchEndpoint,
         searchApiKey,
         searchIndexName,
         new Uri(openAiEndpointText, UriKind.Absolute),
         openAiApiKey,
+        openAiAuthMode,
+        managedIdentityClientId,
         embeddingModelId,
+        embeddingDimensions,
         httpClientFactory: app.Services.GetRequiredService<IHttpClientFactory>(),
         app.Logger,
         app.Lifetime.ApplicationStopping);
@@ -145,14 +160,19 @@ app.Run();
 
 static async Task RunIngestionLoopAsync(
     string sqlConnectionString,
+    string storageAccountName,
     string storageConnectionString,
     string storageContainerName,
+    string storageAuthMode,
     string searchEndpoint,
     string searchApiKey,
     string searchIndexName,
     Uri openAiEndpoint,
     string openAiApiKey,
+    string openAiAuthMode,
+    string? managedIdentityClientId,
     string embeddingModelId,
+    int embeddingDimensions,
     IHttpClientFactory httpClientFactory,
     ILogger logger,
     CancellationToken cancellationToken)
@@ -173,14 +193,19 @@ static async Task RunIngestionLoopAsync(
             await ProcessDocumentAsync(
                 claimedJob.DocumentId,
                 sqlConnectionString,
+                storageAccountName,
                 storageConnectionString,
                 storageContainerName,
+                storageAuthMode,
                 searchEndpoint,
                 searchApiKey,
                 searchIndexName,
                 openAiEndpoint,
                 openAiApiKey,
+                openAiAuthMode,
+                managedIdentityClientId,
                 embeddingModelId,
+                embeddingDimensions,
                 httpClientFactory,
                 logger);
         }
@@ -200,14 +225,19 @@ static async Task RunIngestionLoopAsync(
 static async Task ProcessDocumentAsync(
     Guid documentId,
     string sqlConnectionString,
+    string storageAccountName,
     string storageConnectionString,
     string storageContainerName,
+    string storageAuthMode,
     string searchEndpoint,
     string searchApiKey,
     string searchIndexName,
     Uri openAiEndpoint,
     string openAiApiKey,
+    string openAiAuthMode,
+    string? managedIdentityClientId,
     string embeddingModelId,
+    int embeddingDimensions,
     IHttpClientFactory httpClientFactory,
     ILogger logger)
 {
@@ -219,16 +249,14 @@ static async Task ProcessDocumentAsync(
 
     await UpdateDocumentIngestionJobStatusAsync(sqlConnectionString, documentId, "Extracting", 25, null);
 
-    var blobServiceClient = new BlobServiceClient(storageConnectionString);
-    var containerClient = blobServiceClient.GetBlobContainerClient(storageContainerName);
-    var blobClient = containerClient.GetBlobClient(job.BlobName);
-
-    if (!await blobClient.ExistsAsync())
-    {
-        throw new InvalidOperationException($"Blob '{job.BlobName}' was not found.");
-    }
-
-    await using var blobStream = await blobClient.OpenReadAsync();
+    await using var blobStream = await OpenBlobReadStreamAsync(
+        storageAccountName,
+        storageConnectionString,
+        storageContainerName,
+        job.BlobName,
+        storageAuthMode,
+        managedIdentityClientId,
+        httpClientFactory);
     var extractedText = await ExtractTextAsync(job.FileName, blobStream);
     if (string.IsNullOrWhiteSpace(extractedText))
     {
@@ -251,7 +279,10 @@ static async Task ProcessDocumentAsync(
             chunk,
             openAiEndpoint,
             openAiApiKey,
+            openAiAuthMode,
             embeddingModelId,
+            embeddingDimensions,
+            managedIdentityClientId,
             httpClientFactory);
 
         searchDocuments.Add(new SearchChunkDocument
@@ -336,21 +367,124 @@ static async Task EnsureSearchIndexAsync(
 static async Task<float[]> GenerateEmbeddingAsync(
     string text,
     Uri endpoint,
-    string apiKey,
+    string? apiKey,
+    string openAiAuthMode,
     string embeddingDeployment,
+    int embeddingDimensions,
+    string? managedIdentityClientId,
     IHttpClientFactory httpClientFactory)
 {
     using var client = httpClientFactory.CreateClient();
-    client.DefaultRequestHeaders.Add("api-key", apiKey);
+    var usingManagedIdentity = await ConfigureOpenAiAuthAsync(client, apiKey, openAiAuthMode, managedIdentityClientId, httpClientFactory);
 
     var requestUri = BuildEmbeddingsRequestUri(endpoint, embeddingDeployment);
     using var payload = new StringContent(
-        JsonSerializer.Serialize(new { input = text }),
+        JsonSerializer.Serialize(new { input = text, dimensions = embeddingDimensions }),
         Encoding.UTF8,
         "application/json");
     using var response = await client.PostAsync(requestUri, payload);
+    if (IsAuthFailure(response.StatusCode) && usingManagedIdentity && !string.IsNullOrWhiteSpace(apiKey))
+    {
+        using var retryClient = httpClientFactory.CreateClient();
+        retryClient.DefaultRequestHeaders.Add("api-key", apiKey);
+        using var retryPayload = new StringContent(
+            JsonSerializer.Serialize(new { input = text, dimensions = embeddingDimensions }),
+            Encoding.UTF8,
+            "application/json");
+        using var retryResponse = await retryClient.PostAsync(requestUri, retryPayload);
+        retryResponse.EnsureSuccessStatusCode();
+        return await ParseEmbeddingAsync(retryResponse);
+    }
+
+    response.EnsureSuccessStatusCode();
+    return await ParseEmbeddingAsync(response);
+}
+
+static async Task<Stream> OpenBlobReadStreamAsync(
+    string storageAccountName,
+    string storageConnectionString,
+    string storageContainerName,
+    string blobName,
+    string storageAuthMode,
+    string? managedIdentityClientId,
+    IHttpClientFactory httpClientFactory)
+{
+    if (string.Equals(storageAuthMode, "managed-identity", StringComparison.OrdinalIgnoreCase)
+        && !string.IsNullOrWhiteSpace(storageAccountName))
+    {
+        try
+        {
+            var token = await TryAcquireManagedIdentityTokenAsync(
+                "https://storage.azure.com",
+                managedIdentityClientId,
+                httpClientFactory);
+            if (!string.IsNullOrWhiteSpace(token))
+            {
+                return await DownloadBlobWithManagedIdentityAsync(
+                    storageAccountName,
+                    storageContainerName,
+                    blobName,
+                    token,
+                    httpClientFactory);
+            }
+        }
+        catch (HttpRequestException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    var blobServiceClient = new BlobServiceClient(storageConnectionString);
+    var containerClient = blobServiceClient.GetBlobContainerClient(storageContainerName);
+    var blobClient = containerClient.GetBlobClient(blobName);
+    if (!await blobClient.ExistsAsync())
+    {
+        throw new InvalidOperationException($"Blob '{blobName}' was not found.");
+    }
+
+    return await blobClient.OpenReadAsync();
+}
+
+static async Task<Stream> DownloadBlobWithManagedIdentityAsync(
+    string storageAccountName,
+    string storageContainerName,
+    string blobName,
+    string bearerToken,
+    IHttpClientFactory httpClientFactory)
+{
+    using var request = new HttpRequestMessage(
+        HttpMethod.Get,
+        BuildBlobReadUrl(storageAccountName, storageContainerName, blobName));
+    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken);
+    request.Headers.Add("x-ms-version", "2023-11-03");
+
+    using var client = httpClientFactory.CreateClient();
+    using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
     response.EnsureSuccessStatusCode();
 
+    await using var sourceStream = await response.Content.ReadAsStreamAsync();
+    var buffer = new MemoryStream();
+    await sourceStream.CopyToAsync(buffer);
+    buffer.Position = 0;
+    return buffer;
+}
+
+static string BuildBlobReadUrl(string storageAccountName, string storageContainerName, string blobName)
+{
+    var escapedBlobPath = string.Join(
+        "/",
+        blobName.Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Select(Uri.EscapeDataString));
+    return $"https://{storageAccountName}.blob.core.windows.net/{Uri.EscapeDataString(storageContainerName)}/{escapedBlobPath}";
+}
+
+static bool IsAuthFailure(System.Net.HttpStatusCode statusCode) =>
+    statusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden;
+
+static async Task<float[]> ParseEmbeddingAsync(HttpResponseMessage response)
+{
     var json = await response.Content.ReadAsStringAsync();
     using var document = JsonDocument.Parse(json);
     return document.RootElement
@@ -359,6 +493,81 @@ static async Task<float[]> GenerateEmbeddingAsync(
         .EnumerateArray()
         .Select(element => element.GetSingle())
         .ToArray();
+}
+
+static async Task<bool> ConfigureOpenAiAuthAsync(
+    HttpClient client,
+    string? apiKey,
+    string openAiAuthMode,
+    string? managedIdentityClientId,
+    IHttpClientFactory httpClientFactory)
+{
+    if (string.Equals(openAiAuthMode, "managed-identity", StringComparison.OrdinalIgnoreCase))
+    {
+        var token = await TryAcquireManagedIdentityTokenAsync(
+            "https://cognitiveservices.azure.com",
+            managedIdentityClientId,
+            httpClientFactory);
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            return true;
+        }
+    }
+
+    if (string.IsNullOrWhiteSpace(apiKey))
+    {
+        throw new InvalidOperationException(
+            "OpenAI/Foundry authentication is unavailable. Set AZURE_OPENAI_API_KEY or provide managed identity runtime.");
+    }
+
+    client.DefaultRequestHeaders.Add("api-key", apiKey);
+    return false;
+}
+
+static async Task<string?> TryAcquireManagedIdentityTokenAsync(
+    string resource,
+    string? managedIdentityClientId,
+    IHttpClientFactory httpClientFactory)
+{
+    try
+    {
+        var identityEndpoint = Environment.GetEnvironmentVariable("IDENTITY_ENDPOINT");
+        var identityHeader = Environment.GetEnvironmentVariable("IDENTITY_HEADER");
+        if (string.IsNullOrWhiteSpace(identityEndpoint) || string.IsNullOrWhiteSpace(identityHeader))
+        {
+            return null;
+        }
+
+        var requestUri = $"{identityEndpoint}?api-version=2019-08-01&resource={Uri.EscapeDataString(resource)}";
+        if (!string.IsNullOrWhiteSpace(managedIdentityClientId))
+        {
+            requestUri = $"{requestUri}&client_id={Uri.EscapeDataString(managedIdentityClientId)}";
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+        request.Headers.Add("X-IDENTITY-HEADER", identityHeader);
+
+        using var client = httpClientFactory.CreateClient();
+        using var response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        var payload = await response.Content.ReadAsStringAsync();
+        using var document = JsonDocument.Parse(payload);
+        if (!document.RootElement.TryGetProperty("access_token", out var tokenElement))
+        {
+            return null;
+        }
+
+        return tokenElement.GetString();
+    }
+    catch (HttpRequestException)
+    {
+        return null;
+    }
+    catch (InvalidOperationException)
+    {
+        return null;
+    }
 }
 
 static string BuildEmbeddingsRequestUri(Uri endpoint, string embeddingDeployment)
@@ -523,6 +732,32 @@ SET Status = 'Queued',
     ErrorMessage = NULL,
     UpdatedAtUtc = SYSUTCDATETIME()
 WHERE Status IN ('Processing', 'Extracting', 'Chunking', 'Embedding', 'Indexing');
+""";
+    await command.ExecuteNonQueryAsync();
+}
+
+static async Task EnsureWorkerSqlSchemaAsync(string connectionString)
+{
+    await using var connection = new SqlConnection(connectionString);
+    await connection.OpenAsync();
+
+    await using var command = connection.CreateCommand();
+    command.CommandText = """
+IF OBJECT_ID(N'dbo.DocumentIngestionJobs', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.DocumentIngestionJobs (
+        DocumentId UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+        FileName NVARCHAR(260) NOT NULL,
+        BlobName NVARCHAR(512) NOT NULL,
+        Status NVARCHAR(40) NOT NULL,
+        ProgressPercent INT NOT NULL CONSTRAINT DF_DocumentIngestionJobs_Progress DEFAULT (0),
+        TotalChunks INT NULL,
+        ErrorMessage NVARCHAR(MAX) NULL,
+        CreatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_DocumentIngestionJobs_CreatedAt DEFAULT (SYSUTCDATETIME()),
+        UpdatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_DocumentIngestionJobs_UpdatedAt DEFAULT (SYSUTCDATETIME()),
+        ReadyAtUtc DATETIME2 NULL
+    );
+END;
 """;
     await command.ExecuteNonQueryAsync();
 }

@@ -51,11 +51,14 @@ param azureOpenAiEndpoint string = ''
   'external'
   'provision'
 ])
-@description('AI services strategy: external uses provided endpoint/key; provision creates an Azure OpenAI resource and uses its endpoint/key.')
-param aiServicesProvisioningMode string = 'external'
+@description('AI services strategy: external uses provided endpoint/key; provision creates an Azure AI Foundry (AIServices) resource, project, and model deployments.')
+param aiServicesProvisioningMode string = 'provision'
 
-@description('Azure OpenAI account name when aiServicesProvisioningMode is provision. Leave empty to auto-generate.')
+@description('Azure AI Foundry (AIServices) account name when aiServicesProvisioningMode is provision. Leave empty to auto-generate.')
 param aiServicesAccountName string = ''
+
+@description('Azure AI Foundry project name created under the provisioned AI Services account.')
+param aiFoundryProjectName string = 'enterprise-copilot'
 
 @description('Chat model deployment name. When provisioning, this deployment is created and used as AZURE_OPENAI_MODEL_ID.')
 param openAiChatDeploymentName string = 'gpt-5-mini'
@@ -78,17 +81,29 @@ param openAiEmbeddingModelVersion string = '1'
 @description('Embedding vector dimensions for the embeddings deployment used by Azure AI Search vector field.')
 param openAiEmbeddingDimensions int = 1536
 
+@description('OpenAI/Foundry auth mode for backend and worker. managed-identity tries MI first with API-key fallback.')
+param openAiAuthMode string = 'managed-identity'
+
 @description('Storage account name override. Leave empty to auto-generate.')
 param storageAccountName string = ''
 
 @description('Blob container name used for uploaded documents.')
 param documentsContainerName string = 'documents'
 
+@description('JSON array string of allowed origins for browser-based Blob SAS uploads.')
+param blobCorsAllowedOriginsJson string = ''
+
+@description('Storage auth mode for backend/worker. managed-identity tries MI first with connection-string fallback.')
+param storageAuthMode string = 'managed-identity'
+
 @description('Azure AI Search service name override. Leave empty to auto-generate.')
 param searchServiceName string = ''
 
 @description('Azure AI Search index name for document chunks.')
 param searchIndexName string = 'documents-index'
+
+@description('Backend Azure AI Search authentication mode. api-key uses AZURE_SEARCH_API_KEY, managed-identity uses ACA managed identity token with API-key fallback.')
+param searchAuthMode string = 'api-key'
 
 @allowed([
   'managed'
@@ -140,6 +155,14 @@ var storageBlobDataContributorRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 )
+var searchIndexDataReaderRoleDefinitionId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  '1407120a-92aa-4202-b7e9-c0e197c71c8f'
+)
+var cognitiveServicesOpenAiUserRoleDefinitionId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
+)
 var backendAppName = 'backend'
 var frontendAppName = 'frontend'
 var workerAppName = 'worker'
@@ -166,6 +189,7 @@ var generatedSearchServiceName = toLower(take(replace('${baseName}srch', '-', ''
 var resolvedSearchServiceName = empty(searchServiceName) ? generatedSearchServiceName : toLower(searchServiceName)
 var generatedAiServicesAccountName = toLower(take(replace('${baseName}aoai', '-', ''), 24))
 var resolvedAiServicesAccountName = empty(aiServicesAccountName) ? generatedAiServicesAccountName : toLower(aiServicesAccountName)
+var normalizedSearchAuthMode = toLower(searchAuthMode) == 'managed-identity' ? 'managed-identity' : 'api-key'
 var backendAppId = 'aihub-backend'
 var frontendAppId = 'aihub-frontend'
 var workerAppId = 'aihub-worker'
@@ -255,6 +279,41 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
   parent: storageAccount
   name: 'default'
+  properties: {
+    cors: {
+      corsRules: [
+        {
+          allowedOrigins: empty(blobCorsAllowedOriginsJson)
+            ? [
+                'http://localhost:3000'
+                'https://localhost:3000'
+                'https://${frontendAppName}.${acaEnvironment.properties.defaultDomain}'
+              ]
+            : json(blobCorsAllowedOriginsJson)
+          allowedMethods: [
+            'OPTIONS'
+            'PUT'
+            'HEAD'
+          ]
+          allowedHeaders: [
+            'x-ms-blob-type'
+            'content-type'
+            'x-ms-version'
+            'x-ms-date'
+            'x-ms-client-request-id'
+            'origin'
+            'accept'
+          ]
+          exposedHeaders: [
+            'ETag'
+            'x-ms-request-id'
+            'x-ms-version'
+          ]
+          maxAgeInSeconds: 3600
+        }
+      ]
+    }
+  }
 }
 
 resource documentsContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
@@ -287,6 +346,22 @@ resource aiSearch 'Microsoft.Search/searchServices@2023-11-01' = {
     partitionCount: 1
     hostingMode: 'default'
     publicNetworkAccess: 'enabled'
+    disableLocalAuth: false
+    authOptions: {
+      aadOrApiKey: {
+        aadAuthFailureMode: 'http401WithBearerChallenge'
+      }
+    }
+  }
+}
+
+resource searchIndexDataReaderRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aiSearch.id, containerAppsManagedIdentity.id, 'SearchIndexDataReader')
+  scope: aiSearch
+  properties: {
+    principalId: containerAppsManagedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: searchIndexDataReaderRoleDefinitionId
   }
 }
 
@@ -294,13 +369,31 @@ resource aiServicesAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' = i
   name: resolvedAiServicesAccountName
   location: location
   tags: tags
-  kind: 'OpenAI'
+  kind: 'AIServices'
   sku: {
     name: 'S0'
   }
   properties: {
     customSubDomainName: resolvedAiServicesAccountName
     publicNetworkAccess: 'Enabled'
+  }
+}
+
+resource aiFoundryProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = if (useProvisionedAiServices) {
+  parent: aiServicesAccount
+  name: aiFoundryProjectName
+  location: location
+  tags: tags
+  properties: {}
+}
+
+resource aiServicesOpenAiUserRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (useProvisionedAiServices) {
+  name: guid(aiServicesAccount.id, containerAppsManagedIdentity.id, 'CognitiveServicesOpenAiUser')
+  scope: aiServicesAccount
+  properties: {
+    principalId: containerAppsManagedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: cognitiveServicesOpenAiUserRoleDefinitionId
   }
 }
 
@@ -396,6 +489,8 @@ var resolvedOpenAiModelId = useProvisionedAiServices ? openAiChatDeploymentName 
 var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
 var searchEndpoint = 'https://${aiSearch.name}.search.windows.net'
 var searchApiKey = aiSearch.listAdminKeys().primaryKey
+var searchQueryKeys = aiSearch.listQueryKeys().value
+var searchQueryKey = empty(searchQueryKeys) ? searchApiKey : first(searchQueryKeys)!.key
 var ragRuntimeSecrets = [
   {
     name: 'azure-openai-api-key'
@@ -408,6 +503,10 @@ var ragRuntimeSecrets = [
   {
     name: 'search-api-key'
     value: searchApiKey
+  }
+  {
+    name: 'search-query-key'
+    value: searchQueryKey
   }
 ]
 var backendRegistrySecrets = concat(ragRuntimeSecrets, [])
@@ -553,6 +652,10 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
               value: resolvedOpenAiEndpoint
             }
             {
+              name: 'AZURE_OPENAI_AUTH_MODE'
+              value: openAiAuthMode
+            }
+            {
               name: 'AZURE_OPENAI_EMBEDDING_MODEL_ID'
               value: openAiEmbeddingDeploymentName
             }
@@ -573,6 +676,10 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
               secretRef: 'storage-connection-string'
             }
             {
+              name: 'AZURE_STORAGE_AUTH_MODE'
+              value: storageAuthMode
+            }
+            {
               name: 'AZURE_SEARCH_ENDPOINT'
               value: searchEndpoint
             }
@@ -582,7 +689,11 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
             }
             {
               name: 'AZURE_SEARCH_API_KEY'
-              secretRef: 'search-api-key'
+              secretRef: 'search-query-key'
+            }
+            {
+              name: 'AZURE_SEARCH_AUTH_MODE'
+              value: normalizedSearchAuthMode
             }
             {
               name: 'WORKER_DAPR_BASE_URL'
@@ -727,6 +838,10 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
               value: resolvedOpenAiEndpoint
             }
             {
+              name: 'AZURE_OPENAI_AUTH_MODE'
+              value: openAiAuthMode
+            }
+            {
               name: 'AZURE_OPENAI_EMBEDDING_MODEL_ID'
               value: openAiEmbeddingDeploymentName
             }
@@ -745,6 +860,10 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'AZURE_STORAGE_CONNECTION_STRING'
               secretRef: 'storage-connection-string'
+            }
+            {
+              name: 'AZURE_STORAGE_AUTH_MODE'
+              value: storageAuthMode
             }
             {
               name: 'AZURE_SEARCH_ENDPOINT'
@@ -811,6 +930,9 @@ output AZURE_OPENAI_EFFECTIVE_MODEL_ID string = resolvedOpenAiModelId
 output AZURE_OPENAI_EMBEDDING_MODEL_ID string = openAiEmbeddingDeploymentName
 output AZURE_OPENAI_EMBEDDING_DIMENSIONS int = openAiEmbeddingDimensions
 output AZURE_AI_SERVICES_ACCOUNT_NAME string = useProvisionedAiServices ? aiServicesAccount!.name : ''
+output AZURE_AI_FOUNDRY_PROJECT_NAME string = useProvisionedAiServices ? aiFoundryProject!.name : ''
+output AZURE_OPENAI_AUTH_MODE string = openAiAuthMode
+output AZURE_STORAGE_AUTH_MODE string = storageAuthMode
 output CONTAINER_REGISTRY_MODE string = containerRegistryMode
 output ENABLE_LOG_ANALYTICS string = enableLogAnalytics
 output ENABLE_ASPIRE_DASHBOARD string = enableAspireDashboard

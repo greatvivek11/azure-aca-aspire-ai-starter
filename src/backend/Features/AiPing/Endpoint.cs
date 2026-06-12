@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.SemanticKernel;
+using AIHub.Backend.Infrastructure.Ai;
 
 namespace AIHub.Backend.Features.AiPing;
 
@@ -9,15 +9,14 @@ public static class Endpoint
 {
     public static void MapAiPingEndpoint(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/v1/ping-ai", async (Kernel kernel, ILoggerFactory loggerFactory) =>
+        app.MapGet("/v1/ping-ai", async (IAiService aiService, ILoggerFactory loggerFactory) =>
         {
             var logger = loggerFactory.CreateLogger("AIHub.Backend.Features.AiPing");
 
             try
             {
-                // Invoke a simple prompt to test the connection
-                var response = await kernel.InvokePromptAsync("Ping");
-                return Results.Ok(new { response = response.ToString() });
+                var response = await aiService.InvokePromptAsync("Reply with exactly: Pong");
+                return Results.Ok(new { response });
             }
             catch (Exception ex)
             {

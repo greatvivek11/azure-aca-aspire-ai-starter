@@ -28,8 +28,9 @@ Use this if you want the shortest path to first successful deployment.
   - `repo:<owner>/<repo>:environment:dev`
 5. Add required repository secrets:
   - `AZURE_SUBSCRIPTION_ID`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`
-  - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_MODEL_ID`, `AZURE_OPENAI_ENDPOINT`
   - `AZURE_SQL_ADMIN_LOGIN`, `AZURE_SQL_ADMIN_PASSWORD`
+  - `AI_SERVICES_PROVISIONING_MODE` (optional, defaults to `provision`)
+  - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_MODEL_ID`, `AZURE_OPENAI_ENDPOINT` (only when `AI_SERVICES_PROVISIONING_MODE=external`)
   - Optional cost controls: `CONTAINER_REGISTRY_MODE=external`, `ENABLE_LOG_ANALYTICS=false`, replica counts `0`
 6. Trigger workflow:
   - Actions -> Deploy to Azure Container Apps -> Run workflow -> `environment=dev`
@@ -55,7 +56,7 @@ These secrets enable GitHub Actions to authenticate to Azure using OpenID Connec
 | `AZURE_CLIENT_ID` | Service Principal client ID | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
 | `AZURE_TENANT_ID` | Azure Entra ID tenant ID | `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx` |
 
-### AI Services Credentials (Required for Runtime)
+### AI Services Credentials (Required only for external AI mode)
 
 These secrets are injected into the Container Apps environment at deployment time.
 
@@ -65,14 +66,16 @@ These secrets are injected into the Container Apps environment at deployment tim
 | `AZURE_OPENAI_MODEL_ID` | Deployed model name | Azure Portal → OpenAI resource → Model deployments |
 | `AZURE_OPENAI_ENDPOINT` | Azure OpenAI endpoint URL | Azure Portal → OpenAI resource → Keys and Endpoint |
 
+These three secrets are required only when `AI_SERVICES_PROVISIONING_MODE=external`.
+
 ### AI Services Provisioning (Optional, for zero-manual bootstrap)
 
-Use these when you want infrastructure to provision Azure OpenAI account/model deployments instead of relying only on an existing endpoint.
+Use these to control infra behavior. Default behavior provisions a new Azure AI Foundry resource + project + model deployments.
 
 | Secret Name | Description | Default |
 |---|---|---|
-| `AI_SERVICES_PROVISIONING_MODE` | `external` or `provision` | `external` |
-| `AZURE_AI_SERVICES_ACCOUNT_NAME` | Optional Azure OpenAI account name override | empty (auto-generated) |
+| `AI_SERVICES_PROVISIONING_MODE` | `external` (reuse existing) or `provision` (create new Foundry infra) | `provision` |
+| `AZURE_AI_SERVICES_ACCOUNT_NAME` | Optional Azure AI Foundry resource name override | empty (auto-generated) |
 | `AZURE_OPENAI_CHAT_MODEL_NAME` | Chat model catalog name for deployment | `gpt-5-mini` |
 | `AZURE_OPENAI_CHAT_MODEL_VERSION` | Chat model version (optional, provider/region dependent) | empty |
 | `AZURE_OPENAI_EMBEDDING_MODEL_ID` | Embeddings deployment name | `text-embedding-3-small` |

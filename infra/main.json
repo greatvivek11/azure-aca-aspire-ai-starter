@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "17342105740121249745"
+      "templateHash": "14553392983350360613"
     }
   },
   "parameters": {
@@ -150,7 +150,7 @@
     },
     "openAiChatModelVersion": {
       "type": "string",
-      "defaultValue": "",
+      "defaultValue": "2025-08-07",
       "metadata": {
         "description": "Chat model version for Azure OpenAI deployment."
       }
@@ -617,14 +617,18 @@
     {
       "condition": "[variables('useProvisionedAiServices')]",
       "type": "Microsoft.CognitiveServices/accounts/deployments",
-      "apiVersion": "2024-10-01",
+      "apiVersion": "2025-06-01",
       "name": "[format('{0}/{1}', variables('resolvedAiServicesAccountName'), parameters('openAiChatDeploymentName'))]",
       "sku": {
         "name": "GlobalStandard",
         "capacity": 1
       },
       "properties": {
-        "model": "[if(empty(parameters('openAiChatModelVersion')), createObject('format', 'OpenAI', 'name', parameters('openAiChatModelName')), createObject('format', 'OpenAI', 'name', parameters('openAiChatModelName'), 'version', parameters('openAiChatModelVersion')))]"
+        "model": {
+          "format": "OpenAI",
+          "name": "[parameters('openAiChatModelName')]",
+          "version": "[parameters('openAiChatModelVersion')]"
+        }
       },
       "dependsOn": [
         "[resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName'))]"
@@ -633,7 +637,7 @@
     {
       "condition": "[variables('useProvisionedAiServices')]",
       "type": "Microsoft.CognitiveServices/accounts/deployments",
-      "apiVersion": "2024-10-01",
+      "apiVersion": "2025-06-01",
       "name": "[format('{0}/{1}', variables('resolvedAiServicesAccountName'), parameters('openAiEmbeddingDeploymentName'))]",
       "sku": {
         "name": "GlobalStandard",

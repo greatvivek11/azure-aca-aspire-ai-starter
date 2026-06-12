@@ -67,7 +67,7 @@ param openAiChatDeploymentName string = 'gpt-5-mini'
 param openAiChatModelName string = 'gpt-5-mini'
 
 @description('Chat model version for Azure OpenAI deployment.')
-param openAiChatModelVersion string = ''
+param openAiChatModelVersion string = '2025-08-07'
 
 @description('Embeddings model deployment name provisioned for ingestion/RAG.')
 param openAiEmbeddingDeploymentName string = 'text-embedding-3-small'
@@ -397,7 +397,7 @@ resource aiServicesOpenAiUserRoleAssignment 'Microsoft.Authorization/roleAssignm
   }
 }
 
-resource chatModelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = if (useProvisionedAiServices) {
+resource chatModelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = if (useProvisionedAiServices) {
   parent: aiServicesAccount
   name: openAiChatDeploymentName
   sku: {
@@ -405,20 +405,15 @@ resource chatModelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2
     capacity: 1
   }
   properties: {
-    model: empty(openAiChatModelVersion)
-      ? {
-          format: 'OpenAI'
-          name: openAiChatModelName
-        }
-      : {
-          format: 'OpenAI'
-          name: openAiChatModelName
-          version: openAiChatModelVersion
-        }
+    model: {
+      format: 'OpenAI'
+      name: openAiChatModelName
+      version: openAiChatModelVersion
+    }
   }
 }
 
-resource embeddingModelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = if (useProvisionedAiServices) {
+resource embeddingModelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = if (useProvisionedAiServices) {
   parent: aiServicesAccount
   name: openAiEmbeddingDeploymentName
   sku: {

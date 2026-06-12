@@ -29,50 +29,15 @@ permissions:
   contents: read
   packages: write
 
-env:
-  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-  AZD_ENVIRONMENT_NAME: ${{ secrets.AZD_ENVIRONMENT_NAME || 'copilot-sk-azure' }}
-  SQL_PROVISIONING_MODE: ${{ secrets.SQL_PROVISIONING_MODE || 'provision' }}
-  AZURE_SQL_EXISTING_SERVER_NAME: ${{ secrets.AZURE_SQL_EXISTING_SERVER_NAME || '' }}
-  AZURE_SQL_EXISTING_DATABASE_NAME: ${{ secrets.AZURE_SQL_EXISTING_DATABASE_NAME || '' }}
-  AI_SERVICES_PROVISIONING_MODE: ${{ secrets.AI_SERVICES_PROVISIONING_MODE || 'provision' }}
-  AZURE_AI_SERVICES_ACCOUNT_NAME: ${{ secrets.AZURE_AI_SERVICES_ACCOUNT_NAME || '' }}
-  AZURE_AI_FOUNDRY_PROJECT_NAME: ${{ secrets.AZURE_AI_FOUNDRY_PROJECT_NAME || 'enterprise-copilot' }}
-  AZURE_OPENAI_AUTH_MODE: ${{ secrets.AZURE_OPENAI_AUTH_MODE || 'managed-identity' }}
-  AZURE_OPENAI_CHAT_MODEL_NAME: ${{ secrets.AZURE_OPENAI_CHAT_MODEL_NAME || 'gpt-5-mini' }}
-  AZURE_OPENAI_CHAT_MODEL_VERSION: ${{ secrets.AZURE_OPENAI_CHAT_MODEL_VERSION || '' }}
-  AZURE_OPENAI_EMBEDDING_MODEL_ID: ${{ secrets.AZURE_OPENAI_EMBEDDING_MODEL_ID || 'text-embedding-3-small' }}
-  AZURE_OPENAI_EMBEDDING_MODEL_NAME: ${{ secrets.AZURE_OPENAI_EMBEDDING_MODEL_NAME || 'text-embedding-3-small' }}
-  AZURE_OPENAI_EMBEDDING_MODEL_VERSION: ${{ secrets.AZURE_OPENAI_EMBEDDING_MODEL_VERSION || '1' }}
-  AZURE_OPENAI_EMBEDDING_DIMENSIONS: ${{ secrets.AZURE_OPENAI_EMBEDDING_DIMENSIONS || '1536' }}
-  AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME || '' }}
-  AZURE_STORAGE_DOCUMENTS_CONTAINER: ${{ secrets.AZURE_STORAGE_DOCUMENTS_CONTAINER || 'documents' }}
-  AZURE_STORAGE_AUTH_MODE: ${{ secrets.AZURE_STORAGE_AUTH_MODE || 'managed-identity' }}
-  BLOB_CORS_ALLOWED_ORIGINS_JSON: ${{ secrets.BLOB_CORS_ALLOWED_ORIGINS_JSON || '' }}
-  AZURE_SEARCH_SERVICE_NAME: ${{ secrets.AZURE_SEARCH_SERVICE_NAME || '' }}
-  AZURE_SEARCH_INDEX_NAME: ${{ secrets.AZURE_SEARCH_INDEX_NAME || 'documents-index' }}
-  AZURE_SEARCH_AUTH_MODE: ${{ secrets.AZURE_SEARCH_AUTH_MODE || 'api-key' }}
-  CONTAINER_REGISTRY_MODE: ${{ secrets.CONTAINER_REGISTRY_MODE || 'external' }}
-  EXTERNAL_REGISTRY_SERVER: ${{ secrets.EXTERNAL_REGISTRY_SERVER || 'ghcr.io' }}
-  EXTERNAL_REGISTRY_USERNAME: ${{ secrets.EXTERNAL_REGISTRY_USERNAME || '' }}
-  EXTERNAL_REGISTRY_PASSWORD: ${{ secrets.EXTERNAL_REGISTRY_PASSWORD || '' }}
-  ENABLE_LOG_ANALYTICS: ${{ secrets.ENABLE_LOG_ANALYTICS || 'false' }}
-  ENABLE_ASPIRE_DASHBOARD: ${{ secrets.ENABLE_ASPIRE_DASHBOARD || 'true' }}
-  BACKEND_MIN_REPLICAS: ${{ secrets.BACKEND_MIN_REPLICAS || '0' }}
-  FRONTEND_MIN_REPLICAS: ${{ secrets.FRONTEND_MIN_REPLICAS || '0' }}
-  WORKER_MIN_REPLICAS: ${{ secrets.WORKER_MIN_REPLICAS || '0' }}
-  BACKEND_IMAGE: mcr.microsoft.com/azuredocs/containerapps-helloworld:latest
-  FRONTEND_IMAGE: mcr.microsoft.com/azuredocs/containerapps-helloworld:latest
-  WORKER_IMAGE: mcr.microsoft.com/azuredocs/containerapps-helloworld:latest
-
 jobs:
   validate:
     name: Validate and Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Lint GitHub workflows
+        run: bash scripts/lint-workflows.sh
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -113,6 +78,48 @@ jobs:
     name: Deploy to Azure
     needs: validate
     runs-on: ubuntu-latest
+    env:
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZD_ENVIRONMENT_NAME: ${{ secrets.AZD_ENVIRONMENT_NAME || 'copilot-sk-azure' }}
+      SQL_PROVISIONING_MODE: ${{ secrets.SQL_PROVISIONING_MODE || 'provision' }}
+      AZURE_SQL_EXISTING_SERVER_NAME: ${{ secrets.AZURE_SQL_EXISTING_SERVER_NAME || '' }}
+      AZURE_SQL_EXISTING_DATABASE_NAME: ${{ secrets.AZURE_SQL_EXISTING_DATABASE_NAME || '' }}
+      AI_SERVICES_PROVISIONING_MODE: ${{ secrets.AI_SERVICES_PROVISIONING_MODE || 'provision' }}
+      AZURE_AI_SERVICES_ACCOUNT_NAME: ${{ secrets.AZURE_AI_SERVICES_ACCOUNT_NAME || '' }}
+      AZURE_AI_FOUNDRY_PROJECT_NAME: ${{ secrets.AZURE_AI_FOUNDRY_PROJECT_NAME || 'enterprise-copilot' }}
+      AZURE_OPENAI_AUTH_MODE: ${{ secrets.AZURE_OPENAI_AUTH_MODE || 'managed-identity' }}
+      AZURE_OPENAI_CHAT_MODEL_NAME: ${{ secrets.AZURE_OPENAI_CHAT_MODEL_NAME || 'gpt-5-mini' }}
+      AZURE_OPENAI_CHAT_MODEL_VERSION: ${{ secrets.AZURE_OPENAI_CHAT_MODEL_VERSION || '2025-08-07' }}
+      AZURE_OPENAI_EMBEDDING_MODEL_ID: ${{ secrets.AZURE_OPENAI_EMBEDDING_MODEL_ID || 'text-embedding-3-small' }}
+      AZURE_OPENAI_EMBEDDING_MODEL_NAME: ${{ secrets.AZURE_OPENAI_EMBEDDING_MODEL_NAME || 'text-embedding-3-small' }}
+      AZURE_OPENAI_EMBEDDING_MODEL_VERSION: ${{ secrets.AZURE_OPENAI_EMBEDDING_MODEL_VERSION || '1' }}
+      AZURE_OPENAI_EMBEDDING_DIMENSIONS: ${{ secrets.AZURE_OPENAI_EMBEDDING_DIMENSIONS || '1536' }}
+      AZURE_STORAGE_ACCOUNT_NAME: ${{ secrets.AZURE_STORAGE_ACCOUNT_NAME || '' }}
+      AZURE_STORAGE_DOCUMENTS_CONTAINER: ${{ secrets.AZURE_STORAGE_DOCUMENTS_CONTAINER || 'documents' }}
+      AZURE_STORAGE_AUTH_MODE: ${{ secrets.AZURE_STORAGE_AUTH_MODE || 'managed-identity' }}
+      BLOB_CORS_ALLOWED_ORIGINS_JSON: ${{ secrets.BLOB_CORS_ALLOWED_ORIGINS_JSON || '' }}
+      AZURE_SEARCH_SERVICE_NAME: ${{ secrets.AZURE_SEARCH_SERVICE_NAME || '' }}
+      AZURE_SEARCH_INDEX_NAME: ${{ secrets.AZURE_SEARCH_INDEX_NAME || 'documents-index' }}
+      AZURE_SEARCH_AUTH_MODE: ${{ secrets.AZURE_SEARCH_AUTH_MODE || 'api-key' }}
+      AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+      AZURE_OPENAI_MODEL_ID: ${{ secrets.AZURE_OPENAI_MODEL_ID }}
+      AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+      AZURE_SQL_ADMIN_LOGIN: ${{ secrets.AZURE_SQL_ADMIN_LOGIN }}
+      AZURE_SQL_ADMIN_PASSWORD: ${{ secrets.AZURE_SQL_ADMIN_PASSWORD }}
+      CONTAINER_REGISTRY_MODE: ${{ secrets.CONTAINER_REGISTRY_MODE || 'external' }}
+      EXTERNAL_REGISTRY_SERVER: ${{ secrets.EXTERNAL_REGISTRY_SERVER || 'ghcr.io' }}
+      EXTERNAL_REGISTRY_USERNAME: ${{ secrets.EXTERNAL_REGISTRY_USERNAME || '' }}
+      EXTERNAL_REGISTRY_PASSWORD: ${{ secrets.EXTERNAL_REGISTRY_PASSWORD || '' }}
+      ENABLE_LOG_ANALYTICS: ${{ secrets.ENABLE_LOG_ANALYTICS || 'false' }}
+      ENABLE_ASPIRE_DASHBOARD: ${{ secrets.ENABLE_ASPIRE_DASHBOARD || 'true' }}
+      BACKEND_MIN_REPLICAS: ${{ secrets.BACKEND_MIN_REPLICAS || '0' }}
+      FRONTEND_MIN_REPLICAS: ${{ secrets.FRONTEND_MIN_REPLICAS || '0' }}
+      WORKER_MIN_REPLICAS: ${{ secrets.WORKER_MIN_REPLICAS || '0' }}
+      BACKEND_IMAGE: mcr.microsoft.com/azuredocs/containerapps-helloworld:latest
+      FRONTEND_IMAGE: mcr.microsoft.com/azuredocs/containerapps-helloworld:latest
+      WORKER_IMAGE: mcr.microsoft.com/azuredocs/containerapps-helloworld:latest
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     environment:
       name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'dev' }}
@@ -122,8 +129,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Azure Developer CLI
-        uses: Azure/setup-azd@v2
+      - name: Install Azure Developer CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://aka.ms/install-azd.sh | bash
+          echo "${HOME}/.azd/bin" >> "$GITHUB_PATH"
+          "${HOME}/.azd/bin/azd" version
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -166,11 +178,6 @@ jobs:
 
       - name: Validate AI services mode inputs
         shell: bash
-        env:
-          AI_SERVICES_PROVISIONING_MODE: ${{ env.AI_SERVICES_PROVISIONING_MODE }}
-          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-          AZURE_OPENAI_MODEL_ID: ${{ secrets.AZURE_OPENAI_MODEL_ID }}
         run: |
           set -euo pipefail
 
@@ -309,11 +316,29 @@ jobs:
           done
 
       - name: Log in to Azure using OIDC
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
+            echo "OIDC token request variables are missing. Ensure workflow permission id-token: write is enabled."
+            exit 1
+          fi
+
+          federated_token="$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=api://AzureADTokenExchange" | jq -r '.value')"
+
+          if [[ -z "${federated_token}" || "${federated_token}" == "null" ]]; then
+            echo "Failed to obtain federated OIDC token for Azure login."
+            exit 1
+          fi
+
+          az login --service-principal \
+            --username "${AZURE_CLIENT_ID}" \
+            --tenant "${AZURE_TENANT_ID}" \
+            --federated-token "${federated_token}" \
+            --allow-no-subscriptions
+
+          az account set --subscription "${AZURE_SUBSCRIPTION_ID}"
 
       - name: Configure azd to use Azure CLI auth
         run: azd config set auth.useAzCliAuth true
@@ -347,10 +372,6 @@ jobs:
 
       - name: Validate SQL admin login format
         shell: bash
-        env:
-          SQL_PROVISIONING_MODE: ${{ env.SQL_PROVISIONING_MODE }}
-          AZURE_SQL_ADMIN_LOGIN: ${{ secrets.AZURE_SQL_ADMIN_LOGIN }}
-          AZURE_SQL_ADMIN_PASSWORD: ${{ secrets.AZURE_SQL_ADMIN_PASSWORD }}
         run: |
           set -euo pipefail
 
@@ -389,10 +410,6 @@ jobs:
 
       - name: Validate SQL provisioning mode inputs
         shell: bash
-        env:
-          SQL_PROVISIONING_MODE: ${{ env.SQL_PROVISIONING_MODE }}
-          AZURE_SQL_EXISTING_SERVER_NAME: ${{ env.AZURE_SQL_EXISTING_SERVER_NAME }}
-          AZURE_SQL_EXISTING_DATABASE_NAME: ${{ env.AZURE_SQL_EXISTING_DATABASE_NAME }}
         run: |
           set -euo pipefail
 
@@ -414,46 +431,6 @@ jobs:
 
       - name: Provision Infrastructure with Azure Developer CLI
         run: azd provision --no-prompt
-        env:
-          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-          AZURE_OPENAI_MODEL_ID: ${{ secrets.AZURE_OPENAI_MODEL_ID }}
-          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-          AI_SERVICES_PROVISIONING_MODE: ${{ env.AI_SERVICES_PROVISIONING_MODE }}
-          AZURE_AI_SERVICES_ACCOUNT_NAME: ${{ env.AZURE_AI_SERVICES_ACCOUNT_NAME }}
-          AZURE_AI_FOUNDRY_PROJECT_NAME: ${{ env.AZURE_AI_FOUNDRY_PROJECT_NAME }}
-          AZURE_OPENAI_AUTH_MODE: ${{ env.AZURE_OPENAI_AUTH_MODE }}
-          AZURE_OPENAI_CHAT_MODEL_NAME: ${{ env.AZURE_OPENAI_CHAT_MODEL_NAME }}
-          AZURE_OPENAI_CHAT_MODEL_VERSION: ${{ env.AZURE_OPENAI_CHAT_MODEL_VERSION }}
-          AZURE_OPENAI_EMBEDDING_MODEL_ID: ${{ env.AZURE_OPENAI_EMBEDDING_MODEL_ID }}
-          AZURE_OPENAI_EMBEDDING_MODEL_NAME: ${{ env.AZURE_OPENAI_EMBEDDING_MODEL_NAME }}
-          AZURE_OPENAI_EMBEDDING_MODEL_VERSION: ${{ env.AZURE_OPENAI_EMBEDDING_MODEL_VERSION }}
-          AZURE_OPENAI_EMBEDDING_DIMENSIONS: ${{ env.AZURE_OPENAI_EMBEDDING_DIMENSIONS }}
-          AZURE_STORAGE_ACCOUNT_NAME: ${{ env.AZURE_STORAGE_ACCOUNT_NAME }}
-          AZURE_STORAGE_DOCUMENTS_CONTAINER: ${{ env.AZURE_STORAGE_DOCUMENTS_CONTAINER }}
-          AZURE_STORAGE_AUTH_MODE: ${{ env.AZURE_STORAGE_AUTH_MODE }}
-          BLOB_CORS_ALLOWED_ORIGINS_JSON: ${{ env.BLOB_CORS_ALLOWED_ORIGINS_JSON }}
-          AZURE_SEARCH_SERVICE_NAME: ${{ env.AZURE_SEARCH_SERVICE_NAME }}
-          AZURE_SEARCH_INDEX_NAME: ${{ env.AZURE_SEARCH_INDEX_NAME }}
-          AZURE_SEARCH_AUTH_MODE: ${{ env.AZURE_SEARCH_AUTH_MODE }}
-          AZURE_SQL_ADMIN_LOGIN: ${{ secrets.AZURE_SQL_ADMIN_LOGIN }}
-          AZURE_SQL_ADMIN_PASSWORD: ${{ secrets.AZURE_SQL_ADMIN_PASSWORD }}
-          AZURE_SQL_ENTRA_ADMIN_LOGIN: ${{ env.AZURE_SQL_ENTRA_ADMIN_LOGIN }}
-          AZURE_SQL_ENTRA_ADMIN_OBJECT_ID: ${{ env.AZURE_SQL_ENTRA_ADMIN_OBJECT_ID }}
-          SQL_PROVISIONING_MODE: ${{ env.SQL_PROVISIONING_MODE }}
-          AZURE_SQL_EXISTING_SERVER_NAME: ${{ env.AZURE_SQL_EXISTING_SERVER_NAME }}
-          AZURE_SQL_EXISTING_DATABASE_NAME: ${{ env.AZURE_SQL_EXISTING_DATABASE_NAME }}
-          CONTAINER_REGISTRY_MODE: ${{ env.CONTAINER_REGISTRY_MODE }}
-          EXTERNAL_REGISTRY_SERVER: ${{ env.EXTERNAL_REGISTRY_SERVER }}
-          EXTERNAL_REGISTRY_USERNAME: ${{ env.EXTERNAL_REGISTRY_USERNAME }}
-          EXTERNAL_REGISTRY_PASSWORD: ${{ env.EXTERNAL_REGISTRY_PASSWORD }}
-          ENABLE_LOG_ANALYTICS: ${{ env.ENABLE_LOG_ANALYTICS }}
-          ENABLE_ASPIRE_DASHBOARD: ${{ env.ENABLE_ASPIRE_DASHBOARD }}
-          BACKEND_MIN_REPLICAS: ${{ env.BACKEND_MIN_REPLICAS }}
-          FRONTEND_MIN_REPLICAS: ${{ env.FRONTEND_MIN_REPLICAS }}
-          WORKER_MIN_REPLICAS: ${{ env.WORKER_MIN_REPLICAS }}
-          BACKEND_IMAGE: ${{ env.BACKEND_IMAGE }}
-          FRONTEND_IMAGE: ${{ env.FRONTEND_IMAGE }}
-          WORKER_IMAGE: ${{ env.WORKER_IMAGE }}
 
       - name: Grant backend UAMI SQL roles (provision mode)
         shell: pwsh
@@ -549,26 +526,14 @@ jobs:
       - name: Deploy Backend Service
         if: env.CONTAINER_REGISTRY_MODE == 'managed'
         run: azd deploy backend --no-prompt
-        env:
-          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-          AZURE_OPENAI_MODEL_ID: ${{ secrets.AZURE_OPENAI_MODEL_ID }}
-          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
 
       - name: Deploy Frontend Service
         if: env.CONTAINER_REGISTRY_MODE == 'managed'
         run: azd deploy frontend --no-prompt
-        env:
-          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-          AZURE_OPENAI_MODEL_ID: ${{ secrets.AZURE_OPENAI_MODEL_ID }}
-          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
 
       - name: Deploy Worker Service
         if: env.CONTAINER_REGISTRY_MODE == 'managed'
         run: azd deploy worker --no-prompt
-        env:
-          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-          AZURE_OPENAI_MODEL_ID: ${{ secrets.AZURE_OPENAI_MODEL_ID }}
-          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
 
       - name: Finalize external image deployment
         if: env.CONTAINER_REGISTRY_MODE == 'external'
@@ -583,8 +548,8 @@ jobs:
         if: success()
         run: |
           echo "✅ Deployment successful!"
-          echo "Environment: ${{ env.AZD_ENVIRONMENT_NAME }}"
-          echo "Subscription: ${{ env.AZURE_SUBSCRIPTION_ID }}"
+          echo "Environment: ${AZD_ENVIRONMENT_NAME}"
+          echo "Subscription: ${AZURE_SUBSCRIPTION_ID}"
 
       - name: Notify Deployment Status
         if: always()

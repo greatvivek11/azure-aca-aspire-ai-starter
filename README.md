@@ -141,6 +141,14 @@ ASPIRE_FRONTEND_MODE=vite-dev dotnet run
 
 ## ✅ Testing
 
+### Workflow Linting
+
+Validate GitHub Actions workflow syntax and expressions:
+
+```bash
+bash scripts/lint-workflows.sh
+```
+
 ### Architecture Tests
 
 We enforce architectural boundaries and best practices using xUnit tests. These tests validate:

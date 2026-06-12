@@ -69,3 +69,4 @@ appsettings.*.json
 # Local development configuration
 src/backend/appsettings.local.json
 src/aspire/appsettings.Development.json
+.tools/

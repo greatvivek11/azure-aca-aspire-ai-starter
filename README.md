@@ -82,6 +82,7 @@ Note: The `.env` file is gitignored and will not be committed to the repository.
 
 ## 🚀 Running the Application
 
+### Default Mode (Container-Based, Production-Like)
 After completing the setup steps above, you can run the application with:
 ```bash
 cd src/aspire
@@ -89,7 +90,34 @@ npm install --prefix ../frontend
 dotnet run
 ```
 
-This will start all services (frontend, backend, and worker) with Dapr sidecars.
+This will start all services (frontend, backend, and worker) with Dapr sidecars and the frontend as a Docker container.
+
+### Vite Dev Mode (Recommended for Frontend Development)
+For rapid frontend iteration with **Hot Module Reload (HMR)**:
+```bash
+cd src/aspire
+npm install --prefix ../frontend
+ASPIRE_FRONTEND_MODE=vite-dev dotnet run
+```
+
+**Benefits:**
+- ⚡ Instant hot reload when you edit React components
+- 🔍 Direct HTTP to backend (easier debugging)
+- 🚀 Much faster than container rebuilds
+- 📱 Great for UI/UX iteration
+
+**Trade-off:**
+- Frontend uses direct HTTP instead of Dapr service invocation
+- This is intentional for developer velocity (see [Local Development Documentation](./docs/LOCAL-DEVELOPMENT-DAPR.md))
+
+### Understanding Service Communication
+
+| Mode | Frontend | Backend | Communication | Best For |
+|------|----------|---------|---|---|
+| **vite-dev** (Recommended) | Vite HMR (port 3000) | Docker | Direct HTTP | Frontend development, fast iteration |
+| **container** (Default) | Docker | Docker | Dapr Service Invocation | Production validation, integration testing |
+
+**👉 For detailed explanation of these modes, architecture decisions, and troubleshooting, see:** [`docs/LOCAL-DEVELOPMENT-DAPR.md`](./docs/LOCAL-DEVELOPMENT-DAPR.md)
 ---
 
 ## ✅ Testing

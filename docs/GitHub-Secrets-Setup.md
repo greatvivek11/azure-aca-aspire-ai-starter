@@ -76,7 +76,7 @@ Use these to control infra behavior. Default behavior provisions a new Azure AI 
 |---|---|---|
 | `AI_SERVICES_PROVISIONING_MODE` | `external` (reuse existing) or `provision` (create new Foundry infra) | `provision` |
 | `AZURE_AI_SERVICES_ACCOUNT_NAME` | Optional Azure AI Foundry resource name override | empty (auto-generated) |
-| `AZURE_OPENAI_CHAT_MODEL_NAME` | Chat model catalog name for deployment | `gpt-5-mini` |
+| `AZURE_OPENAI_CHAT_MODEL_NAME` | Chat model catalog name for deployment | `gpt-chat-latest` |
 | `AZURE_OPENAI_CHAT_MODEL_VERSION` | Chat model version (provider/region dependent) | empty (provider chooses compatible default) |
 | `AZURE_OPENAI_EMBEDDING_MODEL_ID` | Embeddings deployment name | `text-embedding-3-small` |
 | `AZURE_OPENAI_EMBEDDING_MODEL_NAME` | Embeddings model catalog name | `text-embedding-3-small` |

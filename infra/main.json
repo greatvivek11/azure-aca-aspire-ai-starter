@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "4306947007881732467"
+      "templateHash": "3401694730560454785"
     }
   },
   "parameters": {
@@ -136,14 +136,14 @@
     },
     "openAiChatDeploymentName": {
       "type": "string",
-      "defaultValue": "gpt-5-mini",
+      "defaultValue": "gpt-chat-latest",
       "metadata": {
         "description": "Chat model deployment name. When provisioning, this deployment is created and used as AZURE_OPENAI_MODEL_ID."
       }
     },
     "openAiChatModelName": {
       "type": "string",
-      "defaultValue": "gpt-5-mini",
+      "defaultValue": "gpt-chat-latest",
       "metadata": {
         "description": "Chat model catalog name for Azure OpenAI deployment."
       }

@@ -61,10 +61,10 @@ param aiServicesAccountName string = ''
 param aiFoundryProjectName string = 'enterprise-copilot'
 
 @description('Chat model deployment name. When provisioning, this deployment is created and used as AZURE_OPENAI_MODEL_ID.')
-param openAiChatDeploymentName string = 'gpt-5-mini'
+param openAiChatDeploymentName string = 'gpt-chat-latest'
 
 @description('Chat model catalog name for Azure OpenAI deployment.')
-param openAiChatModelName string = 'gpt-5-mini'
+param openAiChatModelName string = 'gpt-chat-latest'
 
 @description('Chat model version for Azure OpenAI deployment.')
 param openAiChatModelVersion string = ''

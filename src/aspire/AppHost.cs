@@ -19,6 +19,20 @@ LoadEnvFile(".env");
 var azureOpenAiApiKey = builder.AddParameter("azureOpenAiApiKey", secret: true);
 var azureOpenAiModelId = builder.AddParameter("azureOpenAiModelId");
 var azureOpenAiEndpoint = builder.AddParameter("azureOpenAiEndpoint");
+var azureOpenAiAuthMode = Environment.GetEnvironmentVariable("AZURE_OPENAI_AUTH_MODE") ?? "api-key";
+var azureOpenAiEmbeddingModelId = Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_MODEL_ID") ?? "text-embedding-3-small";
+var azureOpenAiEmbeddingDimensions = Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_DIMENSIONS") ?? "1536";
+var azureStorageAccountName = Environment.GetEnvironmentVariable("AZURE_STORAGE_ACCOUNT_NAME") ?? string.Empty;
+var azureStorageConnectionString = Environment.GetEnvironmentVariable("AZURE_STORAGE_CONNECTION_STRING") ?? string.Empty;
+var azureStorageContainerName = Environment.GetEnvironmentVariable("AZURE_STORAGE_CONTAINER_NAME") ?? "documents";
+var azureStorageAuthMode = Environment.GetEnvironmentVariable("AZURE_STORAGE_AUTH_MODE") ?? "managed-identity";
+var azureSearchEndpoint = Environment.GetEnvironmentVariable("AZURE_SEARCH_ENDPOINT") ?? string.Empty;
+var azureSearchIndexName = Environment.GetEnvironmentVariable("AZURE_SEARCH_INDEX_NAME") ?? "documents-index";
+var azureSearchApiKey = Environment.GetEnvironmentVariable("AZURE_SEARCH_API_KEY") ?? string.Empty;
+var azureSearchAuthMode = Environment.GetEnvironmentVariable("AZURE_SEARCH_AUTH_MODE") ?? "api-key";
+var frontendMode = (Environment.GetEnvironmentVariable("ASPIRE_FRONTEND_MODE") ?? "container")
+    .Trim()
+    .ToLowerInvariant();
 var sqlSaPassword = "P@ssw0rd";
 var sqlImage = Environment.GetEnvironmentVariable("SQL_IMAGE");
 var resolvedSqlImage = string.IsNullOrWhiteSpace(sqlImage)
@@ -46,6 +60,7 @@ var backend = builder.AddDockerfile("backend", "../backend")
     .WaitFor(sql)
     .WaitFor(redis)
     .WithOtlpExporter()
+    .WithHttpEndpoint(name: "http", port: 8080, targetPort: 8080)
     .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions
     {
         AppId = "aihub-backend",
@@ -55,6 +70,18 @@ var backend = builder.AddDockerfile("backend", "../backend")
     .WithEnvironment("AZURE_OPENAI_API_KEY", azureOpenAiApiKey)
     .WithEnvironment("AZURE_OPENAI_MODEL_ID", azureOpenAiModelId)
     .WithEnvironment("AZURE_OPENAI_ENDPOINT", azureOpenAiEndpoint)
+    .WithEnvironment("AZURE_OPENAI_AUTH_MODE", azureOpenAiAuthMode)
+    .WithEnvironment("AZURE_OPENAI_EMBEDDING_MODEL_ID", azureOpenAiEmbeddingModelId)
+    .WithEnvironment("AZURE_OPENAI_EMBEDDING_DIMENSIONS", azureOpenAiEmbeddingDimensions)
+    .WithEnvironment("AZURE_STORAGE_ACCOUNT_NAME", azureStorageAccountName)
+    .WithEnvironment("AZURE_STORAGE_CONNECTION_STRING", azureStorageConnectionString)
+    .WithEnvironment("AZURE_STORAGE_CONTAINER_NAME", azureStorageContainerName)
+    .WithEnvironment("AZURE_STORAGE_AUTH_MODE", azureStorageAuthMode)
+    .WithEnvironment("AZURE_SEARCH_ENDPOINT", azureSearchEndpoint)
+    .WithEnvironment("AZURE_SEARCH_INDEX_NAME", azureSearchIndexName)
+    .WithEnvironment("AZURE_SEARCH_API_KEY", azureSearchApiKey)
+    .WithEnvironment("AZURE_SEARCH_AUTH_MODE", azureSearchAuthMode)
+    .WithEnvironment("WORKER_DAPR_BASE_URL", "http://localhost:3500/v1.0/invoke/aihub-worker/method")
     .WithEnvironment("ConnectionStrings__SqlServer", "Server=sql,1433;Database=AIHub;User Id=sa;Password=P@ssw0rd;TrustServerCertificate=true")
     .WithEnvironment("ConnectionStrings__Redis", "redis:6379")
     .WithEnvironment("REDIS_CONNECTION_STRING", "redis:6379");
@@ -63,6 +90,7 @@ var worker = builder.AddDockerfile("worker", "../worker")
     .WaitFor(sql)
     .WaitFor(redis)
     .WithOtlpExporter()
+    .WithHttpEndpoint(name: "http", port: 8081, targetPort: 8081)
     .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions
     {
         AppId = "aihub-worker",
@@ -71,22 +99,54 @@ var worker = builder.AddDockerfile("worker", "../worker")
     })
     .WithEnvironment("ConnectionStrings__SqlServer", "Server=sql,1433;Database=AIHub;User Id=sa;Password=P@ssw0rd;TrustServerCertificate=true")
     .WithEnvironment("ConnectionStrings__Redis", "redis:6379")
-    .WithEnvironment("REDIS_CONNECTION_STRING", "redis:6379");
+    .WithEnvironment("REDIS_CONNECTION_STRING", "redis:6379")
+    .WithEnvironment("AZURE_OPENAI_API_KEY", azureOpenAiApiKey)
+    .WithEnvironment("AZURE_OPENAI_MODEL_ID", azureOpenAiModelId)
+    .WithEnvironment("AZURE_OPENAI_ENDPOINT", azureOpenAiEndpoint)
+    .WithEnvironment("AZURE_OPENAI_AUTH_MODE", azureOpenAiAuthMode)
+    .WithEnvironment("AZURE_OPENAI_EMBEDDING_MODEL_ID", azureOpenAiEmbeddingModelId)
+    .WithEnvironment("AZURE_OPENAI_EMBEDDING_DIMENSIONS", azureOpenAiEmbeddingDimensions)
+    .WithEnvironment("AZURE_STORAGE_ACCOUNT_NAME", azureStorageAccountName)
+    .WithEnvironment("AZURE_STORAGE_CONNECTION_STRING", azureStorageConnectionString)
+    .WithEnvironment("AZURE_STORAGE_CONTAINER_NAME", azureStorageContainerName)
+    .WithEnvironment("AZURE_STORAGE_AUTH_MODE", azureStorageAuthMode)
+    .WithEnvironment("AZURE_SEARCH_ENDPOINT", azureSearchEndpoint)
+    .WithEnvironment("AZURE_SEARCH_INDEX_NAME", azureSearchIndexName)
+    .WithEnvironment("AZURE_SEARCH_API_KEY", azureSearchApiKey);
 
-var frontend = builder.AddDockerfile("frontend", "../frontend")
-    .WaitFor(backend)
-    .WaitFor(redis)
-    .WithOtlpExporter()
-    .WithHttpEndpoint(name: "http", port: 3000, targetPort: 3000)
-    .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions
-    {
-        AppId = "aihub-frontend",
-        AppPort = 3000,
-        ResourcesPaths = ImmutableHashSet.Create(daprComponentsPath)
-    })
-    .WithEnvironment("BACKEND_API_BASE_URL", "http://backend:8080")
-    .WithEnvironment("BACKEND_DAPR_BASE_URL", "http://localhost:3500/v1.0/invoke/aihub-backend/method")
-    .WithEnvironment("REDIS_URL", "redis://redis:6379");
+if (frontendMode == "vite-dev")
+{
+    var frontendDev = builder.AddNpmApp("frontend", "../frontend", "dev:aspire")
+        .WaitFor(backend)
+        .WaitFor(redis)
+        .WithOtlpExporter()
+        .WithHttpEndpoint(name: "http", port: 3000, env: "PORT")
+        .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions
+        {
+            AppId = "aihub-frontend",
+            AppPort = 3000,
+            ResourcesPaths = ImmutableHashSet.Create(daprComponentsPath)
+        })
+        .WithEnvironment("BACKEND_API_BASE_URL", "http://localhost:8080")
+        .WithEnvironment("REDIS_URL", "redis://redis:6379");
+}
+else
+{
+    var frontend = builder.AddDockerfile("frontend", "../frontend")
+        .WaitFor(backend)
+        .WaitFor(redis)
+        .WithOtlpExporter()
+        .WithHttpEndpoint(name: "http", port: 3000, targetPort: 3000)
+        .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions
+        {
+            AppId = "aihub-frontend",
+            AppPort = 3000,
+            ResourcesPaths = ImmutableHashSet.Create(daprComponentsPath)
+        })
+        .WithEnvironment("BACKEND_API_BASE_URL", "http://backend:8080")
+        .WithEnvironment("BACKEND_DAPR_BASE_URL", "http://localhost:3500/v1.0/invoke/aihub-backend/method")
+        .WithEnvironment("REDIS_URL", "redis://redis:6379");
+}
 
 builder.Build().Run();
 

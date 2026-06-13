@@ -1,84 +1,147 @@
 {
-  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
-  "contentVersion": "1.0.0.0",
-  "parameters": {
-    "environmentName": {
-      "value": "${AZURE_ENV_NAME}"
-    },
-    "location": {
-      "value": "${AZURE_LOCATION}"
-    },
-    "sqlAdminLogin": {
-      "value": "${AZURE_SQL_ADMIN_LOGIN}"
-    },
-    "sqlAdminPassword": {
-      "value": "${AZURE_SQL_ADMIN_PASSWORD}"
-    },
-    "sqlEntraAdminLogin": {
-      "value": "${AZURE_SQL_ENTRA_ADMIN_LOGIN}"
-    },
-    "sqlEntraAdminObjectId": {
-      "value": "${AZURE_SQL_ENTRA_ADMIN_OBJECT_ID}"
-    },
-    "azureOpenAiApiKey": {
-      "value": "${AZURE_OPENAI_API_KEY}"
-    },
-    "azureOpenAiModelId": {
-      "value": "${AZURE_OPENAI_MODEL_ID}"
-    },
-    "azureOpenAiEndpoint": {
-      "value": "${AZURE_OPENAI_ENDPOINT}"
-    },
-    "containerRegistryMode": {
-      "value": "${CONTAINER_REGISTRY_MODE}"
-    },
-    "externalRegistryServer": {
-      "value": "${EXTERNAL_REGISTRY_SERVER}"
-    },
-    "externalRegistryUsername": {
-      "value": "${EXTERNAL_REGISTRY_USERNAME}"
-    },
-    "externalRegistryPassword": {
-      "value": "${EXTERNAL_REGISTRY_PASSWORD}"
-    },
-    "enableLogAnalytics": {
-      "value": "${ENABLE_LOG_ANALYTICS}"
-    },
-    "enableAspireDashboard": {
-      "value": "${ENABLE_ASPIRE_DASHBOARD}"
-    },
-    "backendMinReplicas": {
-      "value": "${BACKEND_MIN_REPLICAS}"
-    },
-    "frontendMinReplicas": {
-      "value": "${FRONTEND_MIN_REPLICAS}"
-    },
-    "workerMinReplicas": {
-      "value": "${WORKER_MIN_REPLICAS}"
-    },
-    "backendImage": {
-      "value": "${BACKEND_IMAGE}"
-    },
-    "frontendImage": {
-      "value": "${FRONTEND_IMAGE}"
-    },
-    "workerImage": {
-      "value": "${WORKER_IMAGE}"
-    },
-    "sqlProvisioningMode": {
-      "value": "${SQL_PROVISIONING_MODE}"
-    },
-    "existingSqlServerName": {
-      "value": "${AZURE_SQL_EXISTING_SERVER_NAME}"
-    },
-    "existingSqlDatabaseName": {
-      "value": "${AZURE_SQL_EXISTING_DATABASE_NAME}"
-    },
-    "tags": {
-      "value": {
-        "project": "copilot-sk-azure",
-        "managedBy": "azd"
-      }
-    }
-  }
+	"$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"environmentName": {
+			"value": "${AZURE_ENV_NAME}"
+		},
+		"location": {
+			"value": "${AZURE_LOCATION}"
+		},
+		"sqlAdminLogin": {
+			"value": "${AZURE_SQL_ADMIN_LOGIN}"
+		},
+		"sqlAdminPassword": {
+			"value": "${AZURE_SQL_ADMIN_PASSWORD}"
+		},
+		"sqlEntraAdminLogin": {
+			"value": "${AZURE_SQL_ENTRA_ADMIN_LOGIN}"
+		},
+		"sqlEntraAdminObjectId": {
+			"value": "${AZURE_SQL_ENTRA_ADMIN_OBJECT_ID}"
+		},
+		"azureOpenAiApiKey": {
+			"value": "${AZURE_OPENAI_API_KEY}"
+		},
+		"azureOpenAiModelId": {
+			"value": "${AZURE_OPENAI_MODEL_ID}"
+		},
+		"azureOpenAiEndpoint": {
+			"value": "${AZURE_OPENAI_ENDPOINT}"
+		},
+		"aiServicesProvisioningMode": {
+			"value": "${AI_SERVICES_PROVISIONING_MODE}"
+		},
+		"aiServicesAccountName": {
+			"value": "${AZURE_AI_SERVICES_ACCOUNT_NAME}"
+		},
+		"aiFoundryProjectName": {
+			"value": "${AZURE_AI_FOUNDRY_PROJECT_NAME}"
+		},
+		"aiFoundryProjectProvisioningMode": {
+			"value": "${AZURE_AI_FOUNDRY_PROJECT_PROVISIONING_MODE}"
+		},
+		"openAiChatDeploymentName": {
+			"value": "${AZURE_OPENAI_CHAT_MODEL_NAME}"
+		},
+		"openAiChatModelName": {
+			"value": "${AZURE_OPENAI_CHAT_MODEL_NAME}"
+		},
+		"openAiChatModelVersion": {
+			"value": "${AZURE_OPENAI_CHAT_MODEL_VERSION}"
+		},
+		"openAiEmbeddingDeploymentName": {
+			"value": "${AZURE_OPENAI_EMBEDDING_MODEL_ID}"
+		},
+		"openAiEmbeddingModelName": {
+			"value": "${AZURE_OPENAI_EMBEDDING_MODEL_NAME}"
+		},
+		"openAiEmbeddingModelVersion": {
+			"value": "${AZURE_OPENAI_EMBEDDING_MODEL_VERSION}"
+		},
+		"openAiEmbeddingDimensions": {
+			"value": "${AZURE_OPENAI_EMBEDDING_DIMENSIONS}"
+		},
+		"openAiAuthMode": {
+			"value": "${AZURE_OPENAI_AUTH_MODE}"
+		},
+		"storageAccountName": {
+			"value": "${AZURE_STORAGE_ACCOUNT_NAME}"
+		},
+		"documentsContainerName": {
+			"value": "${AZURE_STORAGE_DOCUMENTS_CONTAINER}"
+		},
+		"blobCorsAllowedOriginsJson": {
+			"value": "${BLOB_CORS_ALLOWED_ORIGINS_JSON}"
+		},
+		"storageAuthMode": {
+			"value": "${AZURE_STORAGE_AUTH_MODE}"
+		},
+		"searchServiceName": {
+			"value": "${AZURE_SEARCH_SERVICE_NAME}"
+		},
+		"searchLocation": {
+			"value": "${AZURE_SEARCH_LOCATION}"
+		},
+		"searchProvisioningMode": {
+			"value": "${AZURE_SEARCH_PROVISIONING_MODE}"
+		},
+		"searchIndexName": {
+			"value": "${AZURE_SEARCH_INDEX_NAME}"
+		},
+		"searchAuthMode": {
+			"value": "${AZURE_SEARCH_AUTH_MODE}"
+		},
+		"containerRegistryMode": {
+			"value": "${CONTAINER_REGISTRY_MODE}"
+		},
+		"externalRegistryServer": {
+			"value": "${EXTERNAL_REGISTRY_SERVER}"
+		},
+		"externalRegistryUsername": {
+			"value": "${EXTERNAL_REGISTRY_USERNAME}"
+		},
+		"externalRegistryPassword": {
+			"value": "${EXTERNAL_REGISTRY_PASSWORD}"
+		},
+		"enableLogAnalytics": {
+			"value": "${ENABLE_LOG_ANALYTICS}"
+		},
+		"enableAspireDashboard": {
+			"value": "${ENABLE_ASPIRE_DASHBOARD}"
+		},
+		"backendMinReplicas": {
+			"value": "${BACKEND_MIN_REPLICAS}"
+		},
+		"frontendMinReplicas": {
+			"value": "${FRONTEND_MIN_REPLICAS}"
+		},
+		"workerMinReplicas": {
+			"value": "${WORKER_MIN_REPLICAS}"
+		},
+		"backendImage": {
+			"value": "${BACKEND_IMAGE}"
+		},
+		"frontendImage": {
+			"value": "${FRONTEND_IMAGE}"
+		},
+		"workerImage": {
+			"value": "${WORKER_IMAGE}"
+		},
+		"sqlProvisioningMode": {
+			"value": "${SQL_PROVISIONING_MODE}"
+		},
+		"existingSqlServerName": {
+			"value": "${AZURE_SQL_EXISTING_SERVER_NAME}"
+		},
+		"existingSqlDatabaseName": {
+			"value": "${AZURE_SQL_EXISTING_DATABASE_NAME}"
+		},
+		"tags": {
+			"value": {
+				"project": "copilot-sk-azure",
+				"managedBy": "azd"
+			}
+		}
+	}
 }

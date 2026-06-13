@@ -66,7 +66,26 @@ Copy the example environment file and fill in your actual values:
 cp src/aspire/.env.example src/aspire/.env
 ```
 
-Edit `src/aspire/.env` and fill in your actual values for Hugging Face API key and other configuration.
+Edit `src/aspire/.env` and fill in your Azure OpenAI/Foundry and RAG configuration values.
+
+At minimum, set these values for backend + RAG flows:
+- `AZURE_OPENAI_API_KEY`
+- `AZURE_OPENAI_MODEL_ID`
+- `AZURE_OPENAI_ENDPOINT`
+- `AZURE_OPENAI_AUTH_MODE` (`api-key` or `managed-identity`, MI-first with key fallback)
+- `AZURE_OPENAI_EMBEDDING_MODEL_ID`
+- `AZURE_OPENAI_EMBEDDING_DIMENSIONS`
+- `AZURE_STORAGE_ACCOUNT_NAME` (required for MI-first blob auth)
+- `AZURE_STORAGE_CONNECTION_STRING`
+- `AZURE_STORAGE_CONTAINER_NAME`
+- `AZURE_STORAGE_AUTH_MODE` (`api-key` or `managed-identity`, MI-first with connection-string fallback)
+- `AZURE_SEARCH_ENDPOINT`
+- `AZURE_SEARCH_INDEX_NAME`
+
+Optional tuning:
+- `UPLOAD_URL_EXPIRY_MINUTES` (default 15, min 5, max 120)
+- `AZURE_SEARCH_AUTH_MODE` (`api-key` default, or `managed-identity` for ACA MI-first search auth)
+- `BLOB_CORS_ALLOWED_ORIGINS_JSON` (JSON array string for SAS browser upload origins in infra provisioning)
 
 ### 3. Run the Application
 Navigate to the Aspire project directory and run the application:
@@ -82,6 +101,7 @@ Note: The `.env` file is gitignored and will not be committed to the repository.
 
 ## 🚀 Running the Application
 
+### Default Mode (Container-Based, Production-Like)
 After completing the setup steps above, you can run the application with:
 ```bash
 cd src/aspire
@@ -89,10 +109,45 @@ npm install --prefix ../frontend
 dotnet run
 ```
 
-This will start all services (frontend, backend, and worker) with Dapr sidecars.
+This will start all services (frontend, backend, and worker) with Dapr sidecars and the frontend as a Docker container.
+
+### Vite Dev Mode (Recommended for Frontend Development)
+For rapid frontend iteration with **Hot Module Reload (HMR)**:
+```bash
+cd src/aspire
+npm install --prefix ../frontend
+ASPIRE_FRONTEND_MODE=vite-dev dotnet run
+```
+
+**Benefits:**
+- ⚡ Instant hot reload when you edit React components
+- 🔍 Direct HTTP to backend (easier debugging)
+- 🚀 Much faster than container rebuilds
+- 📱 Great for UI/UX iteration
+
+**Trade-off:**
+- Frontend uses direct HTTP instead of Dapr service invocation
+- This is intentional for developer velocity (see [Local Development Documentation](./docs/LOCAL-DEVELOPMENT-DAPR.md))
+
+### Understanding Service Communication
+
+| Mode | Frontend | Backend | Communication | Best For |
+|------|----------|---------|---|---|
+| **vite-dev** (Recommended) | Vite HMR (port 3000) | Docker | Direct HTTP | Frontend development, fast iteration |
+| **container** (Default) | Docker | Docker | Dapr Service Invocation | Production validation, integration testing |
+
+**👉 For detailed explanation of these modes, architecture decisions, and troubleshooting, see:** [`docs/LOCAL-DEVELOPMENT-DAPR.md`](./docs/LOCAL-DEVELOPMENT-DAPR.md)
 ---
 
 ## ✅ Testing
+
+### Workflow Linting
+
+Validate GitHub Actions workflow syntax and expressions:
+
+```bash
+bash scripts/lint-workflows.sh
+```
 
 ### Architecture Tests
 
@@ -131,8 +186,10 @@ For detailed information, see [Architecture-Tests.md](./docs/Architecture-Tests.
    - `repo:<owner>/<repo>:environment:dev`
 5. Add required repository secrets:
    - `AZURE_SUBSCRIPTION_ID`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`
-   - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_MODEL_ID`, `AZURE_OPENAI_ENDPOINT`
    - `AZURE_SQL_ADMIN_LOGIN`, `AZURE_SQL_ADMIN_PASSWORD`
+   - `AI_SERVICES_PROVISIONING_MODE` (optional, defaults to `provision`)
+   - `AZURE_OPENAI_AUTH_MODE`, `AZURE_STORAGE_AUTH_MODE`, `AZURE_AI_FOUNDRY_PROJECT_NAME` (recommended overrides)
+   - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_MODEL_ID`, `AZURE_OPENAI_ENDPOINT` (**only** if `AI_SERVICES_PROVISIONING_MODE=external`)
 6. Trigger workflow from GitHub Actions with `environment=dev`.
 
 For full commands and troubleshooting, see:
@@ -149,9 +206,8 @@ To enable automatic deployment via GitHub Actions, configure these secrets:
 - `AZURE_TENANT_ID`
 
 **AI Services:**
-- `AZURE_OPENAI_API_KEY`
-- `AZURE_OPENAI_MODEL_ID`
-- `AZURE_OPENAI_ENDPOINT`
+- `AI_SERVICES_PROVISIONING_MODE` (optional, defaults to `provision`)
+- `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_MODEL_ID`, `AZURE_OPENAI_ENDPOINT` (required only in `external` mode)
 
 **SQL Provisioning + Entra Setup:**
 - `AZURE_SQL_ADMIN_LOGIN`
@@ -236,4 +292,3 @@ This script checks for:
 - ✅ SQL Server and database
 - ✅ Container Registry
 - ✅ Container Apps Environment
-

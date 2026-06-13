@@ -83,11 +83,30 @@ else
     echo "✅ Container Apps Environment '$ACA_ENV' exists"
 fi
 
+# Check for Storage Account
+echo "🔍 Checking Storage Account..."
+STORAGE_ACCOUNT=$(az storage account list --resource-group "$RESOURCE_GROUP" --query "[0].name" -o tsv 2>/dev/null || echo "")
+
+if [ -z "$STORAGE_ACCOUNT" ] || [ "$STORAGE_ACCOUNT" == "None" ]; then
+    echo "⚠️  No Storage Account found. It will be provisioned by azd provision."
+else
+    echo "✅ Storage Account '$STORAGE_ACCOUNT' exists"
+fi
+
+# Check for Azure AI Search
+echo "🔍 Checking Azure AI Search..."
+SEARCH_SERVICE=$(az search service list --resource-group "$RESOURCE_GROUP" --query "[0].name" -o tsv 2>/dev/null || echo "")
+
+if [ -z "$SEARCH_SERVICE" ] || [ "$SEARCH_SERVICE" == "None" ]; then
+    echo "⚠️  No Azure AI Search service found. It will be provisioned by azd provision."
+else
+    echo "✅ Azure AI Search '$SEARCH_SERVICE' exists"
+fi
+
 echo ""
 echo "✅ Validation complete. Ready for deployment!"
 echo ""
 echo "📝 Next steps:"
-echo "   1. Ensure AZURE_OPENAI_API_KEY, AZURE_OPENAI_MODEL_ID, and AZURE_OPENAI_ENDPOINT"
-echo "      are set as GitHub Secrets (see docs/GitHub-Secrets-Setup.md)"
+echo "   1. Ensure OpenAI runtime or provisioning secrets are configured (see docs/GitHub-Secrets-Setup.md)"
 echo "   2. Run the GitHub Actions deployment workflow or azd provision/azd deploy as needed"
 echo ""

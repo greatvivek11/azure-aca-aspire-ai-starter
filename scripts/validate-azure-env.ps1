@@ -84,12 +84,31 @@ try {
         Write-Host "✅ Container Apps Environment '$acaEnv' exists" -ForegroundColor Green
     }
 
+    # Check for Storage Account
+    Write-Host "🔍 Checking Storage Account..."
+    $storageAccount = az storage account list --resource-group $ResourceGroup --query "[0].name" -o tsv 2>$null
+
+    if ([string]::IsNullOrEmpty($storageAccount) -or $storageAccount -eq "None") {
+        Write-Host "⚠️  No Storage Account found. It will be provisioned by azd provision." -ForegroundColor Yellow
+    } else {
+        Write-Host "✅ Storage Account '$storageAccount' exists" -ForegroundColor Green
+    }
+
+    # Check for Azure AI Search
+    Write-Host "🔍 Checking Azure AI Search..."
+    $searchService = az search service list --resource-group $ResourceGroup --query "[0].name" -o tsv 2>$null
+
+    if ([string]::IsNullOrEmpty($searchService) -or $searchService -eq "None") {
+        Write-Host "⚠️  No Azure AI Search service found. It will be provisioned by azd provision." -ForegroundColor Yellow
+    } else {
+        Write-Host "✅ Azure AI Search '$searchService' exists" -ForegroundColor Green
+    }
+
     Write-Host ""
     Write-Host "✅ Validation complete. Ready for deployment!" -ForegroundColor Green
     Write-Host ""
     Write-Host "📝 Next steps:" -ForegroundColor Cyan
-    Write-Host "   1. Ensure AZURE_OPENAI_API_KEY, AZURE_OPENAI_MODEL_ID, and AZURE_OPENAI_ENDPOINT"
-    Write-Host "      are set as GitHub Secrets (see docs/GitHub-Secrets-Setup.md)"
+    Write-Host "   1. Ensure OpenAI runtime or provisioning secrets are configured (see docs/GitHub-Secrets-Setup.md)"
     Write-Host "   2. Run the GitHub Actions deployment workflow or azd provision/azd deploy as needed"
     Write-Host ""
 }

@@ -183,6 +183,86 @@ app.delete("/api/customers/:id", async (c) => {
 	}
 });
 
+app.post("/api/uploads/signed-url", async (c) => {
+	try {
+		const body = await c.req.json();
+		const response = await proxyToBackend("/v1/uploads/signed-url", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+		});
+		const responseBody = await response.text();
+		return c.body(responseBody, response.status, {
+			"content-type":
+				response.headers.get("content-type") ?? "application/json",
+		});
+	} catch (error) {
+		logFrontendException(error, { route: "/api/uploads/signed-url", method: "POST" });
+		return c.json(
+			{ message: "Failed to create signed upload URL", error: error.message },
+			500,
+		);
+	}
+});
+
+app.post("/api/ingest", async (c) => {
+	try {
+		const body = await c.req.json();
+		const response = await proxyToBackend("/v1/ingest", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+		});
+		const responseBody = await response.text();
+		return c.body(responseBody, response.status, {
+			"content-type":
+				response.headers.get("content-type") ?? "application/json",
+		});
+	} catch (error) {
+		logFrontendException(error, { route: "/api/ingest", method: "POST" });
+		return c.json({ message: "Failed to trigger ingestion", error: error.message }, 500);
+	}
+});
+
+app.get("/api/uploads/:documentId/status", async (c) => {
+	try {
+		const documentId = c.req.param("documentId");
+		const response = await proxyToBackend(`/v1/uploads/${documentId}/status`, {
+			method: "GET",
+		});
+		const responseBody = await response.text();
+		return c.body(responseBody, response.status, {
+			"content-type":
+				response.headers.get("content-type") ?? "application/json",
+		});
+	} catch (error) {
+		logFrontendException(error, {
+			route: "/api/uploads/:documentId/status",
+			method: "GET",
+		});
+		return c.json({ message: "Failed to fetch ingestion status", error: error.message }, 500);
+	}
+});
+
+app.post("/api/chat", async (c) => {
+	try {
+		const body = await c.req.json();
+		const response = await proxyToBackend("/v1/chat", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(body),
+		});
+		const responseBody = await response.text();
+		return c.body(responseBody, response.status, {
+			"content-type":
+				response.headers.get("content-type") ?? "application/json",
+		});
+	} catch (error) {
+		logFrontendException(error, { route: "/api/chat", method: "POST" });
+		return c.json({ message: "Failed to call chat API", error: error.message }, 500);
+	}
+});
+
 app.use("/*", serveStatic({ root: "./dist" }));
 
 app.get("*", async (c) => {

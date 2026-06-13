@@ -60,6 +60,13 @@ param aiServicesAccountName string = ''
 @description('Azure AI Foundry project name created under the provisioned AI Services account.')
 param aiFoundryProjectName string = 'enterprise-copilot'
 
+@allowed([
+  'arm'
+  'cli'
+])
+@description('Foundry project provisioning mode. arm creates the project in Bicep; cli defers project creation to post-provision CLI automation for reliability.')
+param aiFoundryProjectProvisioningMode string = 'cli'
+
 @description('Chat model deployment name. When provisioning, this deployment is created and used as AZURE_OPENAI_MODEL_ID.')
 param openAiChatDeploymentName string = 'gpt-5.1'
 
@@ -182,6 +189,7 @@ var useExistingSql = toLower(sqlProvisioningMode) == 'existing'
 var useManagedRegistry = toLower(containerRegistryMode) == 'managed'
 var useExternalRegistry = !useManagedRegistry
 var useProvisionedAiServices = toLower(aiServicesProvisioningMode) == 'provision'
+var useArmFoundryProjectProvisioning = useProvisionedAiServices && toLower(aiFoundryProjectProvisioningMode) == 'arm'
 var hasExternalRegistryCredentials = useExternalRegistry && !empty(externalRegistryUsername) && !empty(externalRegistryPassword)
 var logAnalyticsEnabled = toLower(enableLogAnalytics) == 'true'
 var aspireDashboardEnabled = toLower(enableAspireDashboard) == 'true'
@@ -408,7 +416,7 @@ resource aiServicesAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' = i
   }
 }
 
-resource aiFoundryProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = if (useProvisionedAiServices) {
+resource aiFoundryProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = if (useArmFoundryProjectProvisioning) {
   parent: aiServicesAccount
   name: aiFoundryProjectName
   location: location
@@ -429,9 +437,6 @@ resource aiServicesOpenAiUserRoleAssignment 'Microsoft.Authorization/roleAssignm
 resource chatModelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = if (useProvisionedAiServices) {
   parent: aiServicesAccount
   name: openAiChatDeploymentName
-  dependsOn: [
-    aiFoundryProject
-  ]
   sku: {
     name: 'GlobalStandard'
     capacity: 1
@@ -959,7 +964,7 @@ output AZURE_SQL_DATABASE_NAME string = resolvedSqlDatabaseName
 output AZURE_SQL_PROVISIONING_MODE string = sqlProvisioningMode
 output AZURE_STORAGE_ACCOUNT_NAME string = storageAccount.name
 output AZURE_STORAGE_DOCUMENTS_CONTAINER string = documentsContainer.name
-output AZURE_SEARCH_SERVICE_NAME string = aiSearch.name
+output AZURE_SEARCH_SERVICE_NAME string = resolvedSearchServiceName
 output AZURE_SEARCH_ENDPOINT string = searchEndpoint
 output AZURE_SEARCH_INDEX_NAME string = searchIndexName
 output AZURE_AI_SERVICES_PROVISIONING_MODE string = aiServicesProvisioningMode
@@ -968,7 +973,7 @@ output AZURE_OPENAI_EFFECTIVE_MODEL_ID string = resolvedOpenAiModelId
 output AZURE_OPENAI_EMBEDDING_MODEL_ID string = openAiEmbeddingDeploymentName
 output AZURE_OPENAI_EMBEDDING_DIMENSIONS int = openAiEmbeddingDimensions
 output AZURE_AI_SERVICES_ACCOUNT_NAME string = useProvisionedAiServices ? aiServicesAccount!.name : ''
-output AZURE_AI_FOUNDRY_PROJECT_NAME string = useProvisionedAiServices ? aiFoundryProject!.name : ''
+output AZURE_AI_FOUNDRY_PROJECT_NAME string = useProvisionedAiServices ? aiFoundryProjectName : ''
 output AZURE_OPENAI_AUTH_MODE string = openAiAuthMode
 output AZURE_STORAGE_AUTH_MODE string = storageAuthMode
 output CONTAINER_REGISTRY_MODE string = containerRegistryMode

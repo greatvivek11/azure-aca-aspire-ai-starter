@@ -82,6 +82,7 @@ jobs:
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_LOCATION: ${{ secrets.AZURE_LOCATION || 'southindia' }}
       AZD_ENVIRONMENT_NAME: ${{ secrets.AZD_ENVIRONMENT_NAME || 'copilot-sk-azure' }}
       SQL_PROVISIONING_MODE: ${{ secrets.SQL_PROVISIONING_MODE || 'provision' }}
       AZURE_SQL_EXISTING_SERVER_NAME: ${{ secrets.AZURE_SQL_EXISTING_SERVER_NAME || '' }}
@@ -91,7 +92,7 @@ jobs:
       AZURE_AI_FOUNDRY_PROJECT_NAME: ${{ secrets.AZURE_AI_FOUNDRY_PROJECT_NAME || 'enterprise-copilot' }}
       AZURE_OPENAI_AUTH_MODE: ${{ secrets.AZURE_OPENAI_AUTH_MODE || 'managed-identity' }}
       AZURE_OPENAI_CHAT_MODEL_NAME: ${{ secrets.AZURE_OPENAI_CHAT_MODEL_NAME || 'gpt-5-mini' }}
-      AZURE_OPENAI_CHAT_MODEL_VERSION: ${{ secrets.AZURE_OPENAI_CHAT_MODEL_VERSION || '2025-08-07' }}
+      AZURE_OPENAI_CHAT_MODEL_VERSION: ${{ secrets.AZURE_OPENAI_CHAT_MODEL_VERSION || '' }}
       AZURE_OPENAI_EMBEDDING_MODEL_ID: ${{ secrets.AZURE_OPENAI_EMBEDDING_MODEL_ID || 'text-embedding-3-small' }}
       AZURE_OPENAI_EMBEDDING_MODEL_NAME: ${{ secrets.AZURE_OPENAI_EMBEDDING_MODEL_NAME || 'text-embedding-3-small' }}
       AZURE_OPENAI_EMBEDDING_MODEL_VERSION: ${{ secrets.AZURE_OPENAI_EMBEDDING_MODEL_VERSION || '1' }}
@@ -347,6 +348,20 @@ jobs:
       - name: Configure azd to use Azure CLI auth
         run: azd config set auth.useAzCliAuth true
 
+      - name: Set azd environment location
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if azd env select "${AZD_ENVIRONMENT_NAME}" >/dev/null 2>&1; then
+            echo "Selected existing azd environment '${AZD_ENVIRONMENT_NAME}'."
+          else
+            azd env new "${AZD_ENVIRONMENT_NAME}" --location "${AZURE_LOCATION}" --no-prompt
+          fi
+
+          azd env set AZURE_LOCATION "${AZURE_LOCATION}"
+          echo "Using Azure location: ${AZURE_LOCATION}"
+
       - name: Verify Azure CLI context
         run: az account show --output table
 
@@ -372,7 +387,8 @@ jobs:
         run: |
           bash scripts/validate-azure-env.sh \
             "${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
-            "aihub-rg"
+            "aihub-rg" \
+            "${AZURE_LOCATION}"
 
       - name: Validate SQL admin login format
         shell: bash

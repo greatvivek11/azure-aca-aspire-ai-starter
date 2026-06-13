@@ -67,7 +67,7 @@ param openAiChatDeploymentName string = 'gpt-5-mini'
 param openAiChatModelName string = 'gpt-5-mini'
 
 @description('Chat model version for Azure OpenAI deployment.')
-param openAiChatModelVersion string = '2025-08-07'
+param openAiChatModelVersion string = ''
 
 @description('Embeddings model deployment name provisioned for ingestion/RAG.')
 param openAiEmbeddingDeploymentName string = 'text-embedding-3-small'
@@ -365,7 +365,7 @@ resource searchIndexDataReaderRoleAssignment 'Microsoft.Authorization/roleAssign
   }
 }
 
-resource aiServicesAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' = if (useProvisionedAiServices) {
+resource aiServicesAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' = if (useProvisionedAiServices) {
   name: resolvedAiServicesAccountName
   location: location
   tags: tags
@@ -376,6 +376,7 @@ resource aiServicesAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' = i
   properties: {
     customSubDomainName: resolvedAiServicesAccountName
     publicNetworkAccess: 'Enabled'
+    allowProjectManagement: true
   }
 }
 
@@ -400,22 +401,24 @@ resource aiServicesOpenAiUserRoleAssignment 'Microsoft.Authorization/roleAssignm
 resource chatModelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = if (useProvisionedAiServices) {
   parent: aiServicesAccount
   name: openAiChatDeploymentName
+  dependsOn: [
+    aiFoundryProject
+  ]
   sku: {
     name: 'GlobalStandard'
     capacity: 1
   }
   properties: {
-    model: {
-      format: 'OpenAI'
-      name: openAiChatModelName
-      version: openAiChatModelVersion
-    }
+    model: chatModel
   }
 }
 
 resource embeddingModelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = if (useProvisionedAiServices) {
   parent: aiServicesAccount
   name: openAiEmbeddingDeploymentName
+  dependsOn: [
+    chatModelDeployment
+  ]
   sku: {
     name: 'GlobalStandard'
     capacity: 1
@@ -481,6 +484,16 @@ var workerAppInsightsEnv = logAnalyticsEnabled
 var resolvedOpenAiApiKey = useProvisionedAiServices ? aiServicesAccount!.listKeys().key1 : azureOpenAiApiKey
 var resolvedOpenAiEndpoint = useProvisionedAiServices ? aiServicesAccount!.properties.endpoint : azureOpenAiEndpoint
 var resolvedOpenAiModelId = useProvisionedAiServices ? openAiChatDeploymentName : azureOpenAiModelId
+var chatModel = empty(openAiChatModelVersion)
+  ? {
+      format: 'OpenAI'
+      name: openAiChatModelName
+    }
+  : {
+      format: 'OpenAI'
+      name: openAiChatModelName
+      version: openAiChatModelVersion
+    }
 var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
 var searchEndpoint = 'https://${aiSearch.name}.search.windows.net'
 var searchApiKey = aiSearch.listAdminKeys().primaryKey

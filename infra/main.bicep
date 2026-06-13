@@ -99,6 +99,16 @@ param storageAuthMode string = 'managed-identity'
 @description('Azure AI Search service name override. Leave empty to auto-generate.')
 param searchServiceName string = ''
 
+@description('Azure AI Search service location. Defaults to deployment location but can be overridden to a region with available capacity.')
+param searchLocation string = location
+
+@allowed([
+  'provision'
+  'existing'
+])
+@description('Azure AI Search strategy: provision creates Search via IaC; existing reuses a pre-created Search service.')
+param searchProvisioningMode string = 'provision'
+
 @description('Azure AI Search index name for document chunks.')
 param searchIndexName string = 'documents-index'
 
@@ -185,6 +195,7 @@ var generatedStorageAccountName = toLower(take('st${uniqueString(resourceGroup()
 var resolvedStorageAccountName = empty(storageAccountName) ? generatedStorageAccountName : toLower(storageAccountName)
 var generatedSearchServiceName = toLower(take(replace('${baseName}srch', '-', ''), 60))
 var resolvedSearchServiceName = empty(searchServiceName) ? generatedSearchServiceName : toLower(searchServiceName)
+var useExistingSearch = toLower(searchProvisioningMode) == 'existing'
 var generatedAiServicesAccountName = toLower(take(replace('${baseName}aoai', '-', ''), 24))
 var resolvedAiServicesAccountName = empty(aiServicesAccountName)
   ? generatedAiServicesAccountName
@@ -334,9 +345,9 @@ resource blobDataContributorRoleAssignment 'Microsoft.Authorization/roleAssignme
   }
 }
 
-resource aiSearch 'Microsoft.Search/searchServices@2023-11-01' = {
+resource aiSearch 'Microsoft.Search/searchServices@2023-11-01' = if (!useExistingSearch) {
   name: resolvedSearchServiceName
-  location: location
+  location: searchLocation
   tags: tags
   sku: {
     name: 'basic'
@@ -355,9 +366,23 @@ resource aiSearch 'Microsoft.Search/searchServices@2023-11-01' = {
   }
 }
 
-resource searchIndexDataReaderRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource existingAiSearch 'Microsoft.Search/searchServices@2023-11-01' existing = if (useExistingSearch) {
+  name: resolvedSearchServiceName
+}
+
+resource searchIndexDataReaderRoleAssignmentProvisioned 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!useExistingSearch) {
   name: guid(aiSearch.id, containerAppsManagedIdentity.id, 'SearchIndexDataReader')
   scope: aiSearch
+  properties: {
+    principalId: containerAppsManagedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: searchIndexDataReaderRoleDefinitionId
+  }
+}
+
+resource searchIndexDataReaderRoleAssignmentExisting 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (useExistingSearch) {
+  name: guid(existingAiSearch.id, containerAppsManagedIdentity.id, 'SearchIndexDataReader')
+  scope: existingAiSearch
   properties: {
     principalId: containerAppsManagedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
@@ -370,6 +395,9 @@ resource aiServicesAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' = i
   location: location
   tags: tags
   kind: 'AIServices'
+  identity: {
+    type: 'SystemAssigned'
+  }
   sku: {
     name: 'S0'
   }
@@ -495,9 +523,11 @@ var chatModel = empty(openAiChatModelVersion)
       version: openAiChatModelVersion
     }
 var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageAccount.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
-var searchEndpoint = 'https://${aiSearch.name}.search.windows.net'
-var searchApiKey = aiSearch.listAdminKeys().primaryKey
-var searchQueryKeys = aiSearch.listQueryKeys().value
+var searchEndpoint = 'https://${resolvedSearchServiceName}.search.windows.net'
+var searchApiKey = useExistingSearch
+  ? existingAiSearch!.listAdminKeys().primaryKey
+  : aiSearch!.listAdminKeys().primaryKey
+var searchQueryKeys = useExistingSearch ? existingAiSearch!.listQueryKeys().value : aiSearch!.listQueryKeys().value
 var searchQueryKey = empty(searchQueryKeys) ? searchApiKey : first(searchQueryKeys)!.key
 var ragRuntimeSecrets = [
   {

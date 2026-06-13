@@ -77,6 +77,12 @@
     "searchServiceName": {
       "value": "${AZURE_SEARCH_SERVICE_NAME}"
     },
+    "searchLocation": {
+      "value": "${AZURE_SEARCH_LOCATION}"
+    },
+    "searchProvisioningMode": {
+      "value": "${AZURE_SEARCH_PROVISIONING_MODE}"
+    },
     "searchIndexName": {
       "value": "${AZURE_SEARCH_INDEX_NAME}"
     },

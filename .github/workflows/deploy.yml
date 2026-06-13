@@ -102,6 +102,10 @@ jobs:
       AZURE_STORAGE_AUTH_MODE: ${{ secrets.AZURE_STORAGE_AUTH_MODE || 'managed-identity' }}
       BLOB_CORS_ALLOWED_ORIGINS_JSON: ${{ secrets.BLOB_CORS_ALLOWED_ORIGINS_JSON || '' }}
       AZURE_SEARCH_SERVICE_NAME: ${{ secrets.AZURE_SEARCH_SERVICE_NAME || '' }}
+      AZURE_SEARCH_LOCATION: ${{ secrets.AZURE_SEARCH_LOCATION || secrets.AZURE_LOCATION || 'southindia' }}
+      AZURE_SEARCH_PROVISIONING_MODE: ${{ secrets.AZURE_SEARCH_PROVISIONING_MODE || 'provision' }}
+      AZURE_SEARCH_FAILOVER_ENABLED: ${{ secrets.AZURE_SEARCH_FAILOVER_ENABLED || 'false' }}
+      AZURE_SEARCH_FALLBACK_LOCATIONS: ${{ secrets.AZURE_SEARCH_FALLBACK_LOCATIONS || '' }}
       AZURE_SEARCH_INDEX_NAME: ${{ secrets.AZURE_SEARCH_INDEX_NAME || 'documents-index' }}
       AZURE_SEARCH_AUTH_MODE: ${{ secrets.AZURE_SEARCH_AUTH_MODE || 'api-key' }}
       AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
@@ -467,8 +471,170 @@ jobs:
 
           echo "SQL provisioning mode validated: ${mode_lower}"
 
+      - name: Validate Azure AI Search provisioning mode inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mode_lower="$(echo "${AZURE_SEARCH_PROVISIONING_MODE:-provision}" | tr '[:upper:]' '[:lower:]')"
+
+          if [[ "${mode_lower}" != "provision" && "${mode_lower}" != "existing" ]]; then
+            echo "AZURE_SEARCH_PROVISIONING_MODE must be 'provision' or 'existing'."
+            exit 1
+          fi
+
+          if [[ "${mode_lower}" == "existing" && -z "${AZURE_SEARCH_SERVICE_NAME:-}" ]]; then
+            echo "When AZURE_SEARCH_PROVISIONING_MODE=existing, set AZURE_SEARCH_SERVICE_NAME."
+            exit 1
+          fi
+
+          echo "Azure AI Search provisioning mode validated: ${mode_lower}"
+
+      - name: Validate Azure AI Search failover inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          enabled_lower="$(echo "${AZURE_SEARCH_FAILOVER_ENABLED:-false}" | tr '[:upper:]' '[:lower:]')"
+          if [[ "${enabled_lower}" != "true" && "${enabled_lower}" != "false" ]]; then
+            echo "AZURE_SEARCH_FAILOVER_ENABLED must be 'true' or 'false'."
+            exit 1
+          fi
+
+          if [[ "${enabled_lower}" == "true" ]]; then
+            mode_lower="$(echo "${AZURE_SEARCH_PROVISIONING_MODE:-provision}" | tr '[:upper:]' '[:lower:]')"
+            if [[ "${mode_lower}" != "provision" ]]; then
+              echo "AZURE_SEARCH_FAILOVER_ENABLED=true requires AZURE_SEARCH_PROVISIONING_MODE=provision."
+              exit 1
+            fi
+          fi
+
+          echo "Azure AI Search failover validated: ${enabled_lower}"
+
       - name: Provision Infrastructure with Azure Developer CLI
-        run: azd provision --no-prompt
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mode_lower="$(echo "${AZURE_SEARCH_PROVISIONING_MODE:-provision}" | tr '[:upper:]' '[:lower:]')"
+          failover_enabled="$(echo "${AZURE_SEARCH_FAILOVER_ENABLED:-false}" | tr '[:upper:]' '[:lower:]')"
+
+          normalize_region() {
+            echo "$1" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'
+          }
+
+          declare -a candidates=()
+          add_candidate() {
+            local region
+            region="$(normalize_region "$1")"
+            if [[ -z "${region}" ]]; then
+              return
+            fi
+            local existing
+            for existing in "${candidates[@]}"; do
+              if [[ "${existing}" == "${region}" ]]; then
+                return
+              fi
+            done
+            candidates+=("${region}")
+          }
+
+          primary_search_location="${AZURE_SEARCH_LOCATION:-${AZURE_LOCATION}}"
+          add_candidate "${primary_search_location}"
+
+          if [[ "${mode_lower}" != "provision" || "${failover_enabled}" != "true" ]]; then
+            echo "Search failover disabled or not applicable. Using AZURE_SEARCH_LOCATION='${candidates[0]}'."
+            azd env set AZURE_SEARCH_LOCATION "${candidates[0]}"
+            azd provision --no-prompt
+            echo "EFFECTIVE_SEARCH_LOCATION=${candidates[0]}" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          if [[ -n "${AZURE_SEARCH_FALLBACK_LOCATIONS:-}" ]]; then
+            IFS=',' read -r -a configured <<< "${AZURE_SEARCH_FALLBACK_LOCATIONS}"
+            for region in "${configured[@]}"; do
+              add_candidate "${region}"
+            done
+          else
+            case "${candidates[0]}" in
+              eastus2)
+                add_candidate eastus
+                add_candidate centralus
+                add_candidate westus3
+                ;;
+              eastus)
+                add_candidate eastus2
+                add_candidate centralus
+                add_candidate westus3
+                ;;
+              southindia)
+                add_candidate centralindia
+                add_candidate westindia
+                add_candidate southeastasia
+                ;;
+              westeurope)
+                add_candidate northeurope
+                add_candidate uksouth
+                add_candidate francecentral
+                ;;
+              *)
+                ;;
+            esac
+          fi
+
+          echo "Search location attempts (ordered): ${candidates[*]}"
+
+          for region in "${candidates[@]}"; do
+            echo "Attempting provision with AZURE_SEARCH_LOCATION='${region}'"
+            azd env set AZURE_SEARCH_LOCATION "${region}"
+
+            log_file="$(mktemp)"
+            set +e
+            azd provision --no-prompt 2>&1 | tee "${log_file}"
+            exit_code=${PIPESTATUS[0]}
+            set -e
+
+            if [[ ${exit_code} -eq 0 ]]; then
+              echo "Provision succeeded with AZURE_SEARCH_LOCATION='${region}'"
+              echo "EFFECTIVE_SEARCH_LOCATION=${region}" >> "$GITHUB_ENV"
+              exit 0
+            fi
+
+            if grep -q "InsufficientResourcesAvailable" "${log_file}"; then
+              echo "Capacity exhausted in '${region}'. Trying next configured region."
+              continue
+            fi
+
+            echo "Provision failed for a non-capacity reason in '${region}'. Stopping failover."
+            exit ${exit_code}
+          done
+
+          echo "Provision failed due to Search capacity in all configured regions."
+          exit 1
+
+      - name: Regional diagnostics after failed provision
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+
+          echo "=== Supported regions: Microsoft.Search/searchServices ==="
+          az provider show --namespace Microsoft.Search --query "resourceTypes[?resourceType=='searchServices'].locations | [0]" -o table
+
+          echo "=== Supported regions: Microsoft.CognitiveServices/accounts ==="
+          az provider show --namespace Microsoft.CognitiveServices --query "resourceTypes[?resourceType=='accounts'].locations | [0]" -o table
+
+          echo "=== Supported regions: Microsoft.App/managedEnvironments ==="
+          az provider show --namespace Microsoft.App --query "resourceTypes[?resourceType=='managedEnvironments'].locations | [0]" -o table
+
+          echo "=== Supported regions: Microsoft.Sql/servers ==="
+          az provider show --namespace Microsoft.Sql --query "resourceTypes[?resourceType=='servers'].locations | [0]" -o table
+
+          echo "=== Supported regions: Microsoft.Storage/storageAccounts ==="
+          az provider show --namespace Microsoft.Storage --query "resourceTypes[?resourceType=='storageAccounts'].locations | [0]" -o table
+
+          echo "=== Canonical Azure region names ==="
+          az account list-locations --query "[].{name:name,display:displayName}" -o table
 
       - name: Grant backend UAMI SQL roles (provision mode)
         shell: pwsh

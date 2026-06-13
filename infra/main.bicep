@@ -61,13 +61,13 @@ param aiServicesAccountName string = ''
 param aiFoundryProjectName string = 'enterprise-copilot'
 
 @description('Chat model deployment name. When provisioning, this deployment is created and used as AZURE_OPENAI_MODEL_ID.')
-param openAiChatDeploymentName string = 'gpt-chat-latest'
+param openAiChatDeploymentName string = 'gpt-5.1'
 
 @description('Chat model catalog name for Azure OpenAI deployment.')
-param openAiChatModelName string = 'gpt-chat-latest'
+param openAiChatModelName string = 'gpt-5.1'
 
 @description('Chat model version for Azure OpenAI deployment.')
-param openAiChatModelVersion string = ''
+param openAiChatModelVersion string = '2025-11-13'
 
 @description('Embeddings model deployment name provisioned for ingestion/RAG.')
 param openAiEmbeddingDeploymentName string = 'text-embedding-3-small'
@@ -175,9 +175,7 @@ var useProvisionedAiServices = toLower(aiServicesProvisioningMode) == 'provision
 var hasExternalRegistryCredentials = useExternalRegistry && !empty(externalRegistryUsername) && !empty(externalRegistryPassword)
 var logAnalyticsEnabled = toLower(enableLogAnalytics) == 'true'
 var aspireDashboardEnabled = toLower(enableAspireDashboard) == 'true'
-var appLogsDestination = logAnalyticsEnabled
-  ? 'log-analytics'
-  : (aspireDashboardEnabled ? 'azure-monitor' : 'none')
+var appLogsDestination = logAnalyticsEnabled ? 'log-analytics' : (aspireDashboardEnabled ? 'azure-monitor' : 'none')
 var resolvedBackendMinReplicas = int(backendMinReplicas)
 var resolvedFrontendMinReplicas = int(frontendMinReplicas)
 var resolvedWorkerMinReplicas = int(workerMinReplicas)
@@ -188,7 +186,9 @@ var resolvedStorageAccountName = empty(storageAccountName) ? generatedStorageAcc
 var generatedSearchServiceName = toLower(take(replace('${baseName}srch', '-', ''), 60))
 var resolvedSearchServiceName = empty(searchServiceName) ? generatedSearchServiceName : toLower(searchServiceName)
 var generatedAiServicesAccountName = toLower(take(replace('${baseName}aoai', '-', ''), 24))
-var resolvedAiServicesAccountName = empty(aiServicesAccountName) ? generatedAiServicesAccountName : toLower(aiServicesAccountName)
+var resolvedAiServicesAccountName = empty(aiServicesAccountName)
+  ? generatedAiServicesAccountName
+  : toLower(aiServicesAccountName)
 var normalizedSearchAuthMode = toLower(searchAuthMode) == 'managed-identity' ? 'managed-identity' : 'api-key'
 var backendAppId = 'aihub-backend'
 var frontendAppId = 'aihub-frontend'

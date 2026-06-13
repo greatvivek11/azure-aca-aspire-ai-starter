@@ -71,8 +71,11 @@ var storageAccountName = Environment.GetEnvironmentVariable("AZURE_STORAGE_ACCOU
 var storageAuthMode = (Environment.GetEnvironmentVariable("AZURE_STORAGE_AUTH_MODE") ?? "managed-identity")
     .Trim()
     .ToLowerInvariant();
-var embeddingModelId = Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_MODEL_ID")
-    ?? azureOpenAiSettings.ModelId;
+var embeddingModelId = (Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_MODEL_ID") ?? string.Empty).Trim();
+if (string.IsNullOrWhiteSpace(embeddingModelId))
+{
+    throw new InvalidOperationException("AZURE_OPENAI_EMBEDDING_MODEL_ID is required for document grounding and must reference an embeddings deployment.");
+}
 var embeddingDimensions = int.TryParse(Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_DIMENSIONS"), out var parsedDimensions)
     ? parsedDimensions
     : 1536;

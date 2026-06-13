@@ -178,18 +178,21 @@ static async Task RunIngestionLoopAsync(
     CancellationToken cancellationToken)
 {
     logger.LogInformation("Starting ingestion queue processor.");
+    var consecutiveLoopFailures = 0;
 
     while (!cancellationToken.IsCancellationRequested)
     {
-        var claimedJob = await TryClaimNextQueuedJobAsync(sqlConnectionString);
-        if (claimedJob is null)
-        {
-            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
-            continue;
-        }
-
+        DocumentIngestionJob? claimedJob = null;
         try
         {
+            claimedJob = await TryClaimNextQueuedJobAsync(sqlConnectionString);
+            if (claimedJob is null)
+            {
+                consecutiveLoopFailures = 0;
+                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+                continue;
+            }
+
             await ProcessDocumentAsync(
                 claimedJob.DocumentId,
                 sqlConnectionString,
@@ -208,18 +211,45 @@ static async Task RunIngestionLoopAsync(
                 embeddingDimensions,
                 httpClientFactory,
                 logger);
+
+            consecutiveLoopFailures = 0;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            break;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Unexpected error while processing document {DocumentId}", claimedJob.DocumentId);
-            await UpdateDocumentIngestionJobStatusAsync(
-                sqlConnectionString,
-                claimedJob.DocumentId,
-                "Failed",
-                100,
-                ex.Message);
+            consecutiveLoopFailures++;
+            var backoff = TimeSpan.FromSeconds(Math.Min(30, Math.Pow(2, Math.Min(consecutiveLoopFailures, 5))));
+
+            if (claimedJob is not null)
+            {
+                logger.LogError(ex, "Unexpected error while processing document {DocumentId}", claimedJob.DocumentId);
+                await UpdateDocumentIngestionJobStatusAsync(
+                    sqlConnectionString,
+                    claimedJob.DocumentId,
+                    "Failed",
+                    100,
+                    ex.Message);
+            }
+            else
+            {
+                logger.LogError(ex, "Unexpected error while claiming queued ingestion jobs.");
+            }
+
+            try
+            {
+                await Task.Delay(backoff, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
         }
     }
+
+    logger.LogInformation("Stopping ingestion queue processor.");
 }
 
 static async Task ProcessDocumentAsync(

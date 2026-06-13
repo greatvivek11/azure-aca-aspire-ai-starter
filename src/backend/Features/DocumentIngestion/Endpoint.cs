@@ -88,8 +88,9 @@ public static class Endpoint
                 uploadExpiresAtUtc));
         });
 
-        app.MapPost("/v1/ingest", async (IngestRequest request, IHttpClientFactory httpClientFactory) =>
+        app.MapPost("/v1/ingest", async (IngestRequest request, IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory) =>
         {
+            var logger = loggerFactory.CreateLogger("DocumentIngestion");
             var job = await GetDocumentIngestionJobAsync(options.SqlConnectionString, request.DocumentId);
             if (job is null)
             {
@@ -99,17 +100,24 @@ public static class Endpoint
             await UpdateDocumentIngestionJobStatusAsync(options.SqlConnectionString, request.DocumentId, "Queued", 15, null);
 
             var workerPayload = new WorkerIngestRequest(request.DocumentId);
-            using var httpClient = httpClientFactory.CreateClient();
-            using var response = await httpClient.PostAsJsonAsync($"{options.WorkerDaprBaseUrl}/v1/ingest", workerPayload);
-            if (!response.IsSuccessStatusCode)
+            try
             {
-                await UpdateDocumentIngestionJobStatusAsync(
-                    options.SqlConnectionString,
-                    request.DocumentId,
-                    "Failed",
-                    100,
-                    $"Worker trigger failed with HTTP {(int)response.StatusCode}");
-                return Results.StatusCode(StatusCodes.Status502BadGateway);
+                using var httpClient = httpClientFactory.CreateClient();
+                using var response = await httpClient.PostAsJsonAsync($"{options.WorkerDaprBaseUrl}/v1/ingest", workerPayload);
+                if (!response.IsSuccessStatusCode)
+                {
+                    logger.LogWarning(
+                        "Worker trigger returned HTTP {StatusCode} for document {DocumentId}. Job remains queued for polling worker.",
+                        (int)response.StatusCode,
+                        request.DocumentId);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "Worker trigger call failed for document {DocumentId}. Job remains queued for polling worker.",
+                    request.DocumentId);
             }
 
             return Results.Accepted($"/v1/uploads/{request.DocumentId}/status", new { request.DocumentId, status = "Queued" });

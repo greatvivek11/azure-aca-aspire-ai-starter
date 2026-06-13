@@ -2,7 +2,6 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using AIHub.Backend.Infrastructure.Ai;
-using Azure;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -225,7 +224,11 @@ Question:
                 var token = await AcquireManagedIdentityTokenAsync(options.ManagedIdentityClientId, httpClientFactory);
                 return await SearchRelevantChunksAsync(embedding, documentId, options, httpClientFactory, bearerToken: token);
             }
-            catch when (!string.IsNullOrWhiteSpace(options.SearchApiKey))
+            catch (HttpRequestException ex) when (!string.IsNullOrWhiteSpace(options.SearchApiKey) && ShouldFallbackToApiKey(ex))
+            {
+                return await SearchRelevantChunksAsync(embedding, documentId, options, httpClientFactory);
+            }
+            catch (InvalidOperationException ex) when (!string.IsNullOrWhiteSpace(options.SearchApiKey) && IsManagedIdentityConfigurationIssue(ex))
             {
                 return await SearchRelevantChunksAsync(embedding, documentId, options, httpClientFactory);
             }
@@ -346,6 +349,32 @@ Question:
 
         return tokenElement.GetString()
                ?? throw new InvalidOperationException("Managed identity access_token was empty.");
+    }
+
+    private static bool ShouldFallbackToApiKey(HttpRequestException ex)
+    {
+        if (!ex.StatusCode.HasValue)
+        {
+            return true;
+        }
+
+        return ex.StatusCode.Value is
+            System.Net.HttpStatusCode.BadRequest or
+            System.Net.HttpStatusCode.Unauthorized or
+            System.Net.HttpStatusCode.Forbidden or
+            System.Net.HttpStatusCode.NotFound or
+            System.Net.HttpStatusCode.RequestTimeout or
+            System.Net.HttpStatusCode.TooManyRequests or
+            System.Net.HttpStatusCode.BadGateway or
+            System.Net.HttpStatusCode.ServiceUnavailable or
+            System.Net.HttpStatusCode.GatewayTimeout;
+    }
+
+    private static bool IsManagedIdentityConfigurationIssue(InvalidOperationException ex)
+    {
+        var message = ex.Message;
+        return message.Contains("Managed identity endpoint is not available", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("access_token", StringComparison.OrdinalIgnoreCase);
     }
 }
 

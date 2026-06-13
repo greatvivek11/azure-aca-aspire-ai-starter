@@ -1,0 +1,57 @@
+name: Reusable Validate and Build
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate and Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Lint GitHub workflows
+        run: bash scripts/lint-workflows.sh
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Restore dependencies
+        run: dotnet restore copilot-sk.sln
+
+      - name: Build Backend
+        run: dotnet build copilot-sk.sln --configuration Release --no-restore
+
+      - name: Run Architecture Tests
+        run: dotnet test src/Backend.Tests/Backend.Tests.csproj --configuration Release --no-build --verbosity normal
+
+      - name: Build Frontend
+        working-directory: src/frontend
+        run: |
+          npm install
+          npm run build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            src/backend/bin/Release/
+            src/frontend/dist/
+            src/aspire/bin/Release/
+            src/worker/bin/Release/

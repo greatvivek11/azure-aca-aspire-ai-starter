@@ -81,6 +81,19 @@ main() {
   fi
 
   "${actionlint_bin}" -oneline "${workflow_files[@]}"
+
+  local shell_script_files=()
+  while IFS= read -r file; do
+    shell_script_files+=("${file#${REPO_ROOT}/}")
+  done < <(find "${REPO_ROOT}/scripts/ci" -maxdepth 1 -type f -name "*.sh" | sort)
+
+  if [[ "${#shell_script_files[@]}" -gt 0 ]]; then
+    if command -v shellcheck >/dev/null 2>&1; then
+      (cd "${REPO_ROOT}" && shellcheck -x "${shell_script_files[@]}")
+    else
+      echo "shellcheck is not installed; skipping shell script linting." >&2
+    fi
+  fi
 }
 
 main "$@"

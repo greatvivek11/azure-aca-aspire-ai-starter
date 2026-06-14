@@ -20,6 +20,7 @@ else
 fi
 
 azd env set AZURE_LOCATION "${effective_location}"
+azd env set AZURE_RESOURCE_GROUP "${resource_group_name}"
 
 {
   echo "AZURE_LOCATION=${effective_location}"

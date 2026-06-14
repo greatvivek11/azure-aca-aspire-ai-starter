@@ -2,7 +2,7 @@
 set -euo pipefail
 
 requested_location="${AZURE_LOCATION:-southindia}"
-resource_group_name="rg-${AZD_ENVIRONMENT_NAME}"
+resource_group_name="${AZD_ENVIRONMENT_NAME}-rg"
 existing_rg_location="$(az group show --name "${resource_group_name}" --query location -o tsv 2>/dev/null || true)"
 
 if [[ -n "${existing_rg_location}" ]]; then

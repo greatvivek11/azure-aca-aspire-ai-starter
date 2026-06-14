@@ -19,6 +19,7 @@ export default function App() {
 	const [chatInput, setChatInput] = useState("");
 	const [chatError, setChatError] = useState("");
 	const [chatLoading, setChatLoading] = useState(false);
+	const [uploadingFile, setUploadingFile] = useState(false);
 	const [messages, setMessages] = useState([]);
 	const [ingestionJobs, setIngestionJobs] = useState([]);
 	const [activeDocumentId, setActiveDocumentId] = useState(null);
@@ -101,6 +102,27 @@ export default function App() {
 		() => ingestionJobs.filter((job) => !terminalStatuses.has(job.status)).length,
 		[ingestionJobs],
 	);
+	const hasUploadedFile = ingestionJobs.length > 0;
+	const hasReadyDocument = useMemo(
+		() =>
+			Boolean(activeDocumentId) &&
+			ingestionJobs.some((job) => job.documentId === activeDocumentId && job.status === "Ready"),
+		[activeDocumentId, ingestionJobs],
+	);
+	const hasIngestionInProgress = useMemo(
+		() => ingestionJobs.some((job) => !terminalStatuses.has(job.status)),
+		[ingestionJobs],
+	);
+	const sendDisabledReason = !hasUploadedFile
+		? "Upload a file first to send a message."
+		: uploadingFile
+			? "Please wait for the file upload to finish."
+			: !hasReadyDocument && hasIngestionInProgress
+				? "Please wait for ingestion to complete before sending."
+				: !hasReadyDocument
+					? "Upload and ingest a file successfully before sending."
+					: "";
+	const sendDisabled = chatLoading || uploadingFile || !hasReadyDocument;
 
 	async function onCreateCustomer(event) {
 		event.preventDefault();
@@ -153,33 +175,27 @@ export default function App() {
 		}
 
 		setChatError("");
+		setUploadingFile(true);
 		appendSystemMessage(`Uploading ${file.name}...`);
 
 		try {
-			const signedResponse = await fetch("/api/uploads/signed-url", {
+			const formData = new FormData();
+			formData.append("file", file);
+			const uploadResponse = await fetch("/api/uploads", {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ fileName: file.name }),
-			});
-			if (!signedResponse.ok) {
-				const text = await signedResponse.text();
-				throw new Error(text || `Failed to get signed URL (${signedResponse.status})`);
-			}
-
-			const signedPayload = await signedResponse.json();
-			const uploadResponse = await fetch(signedPayload.uploadUrl, {
-				method: "PUT",
-				headers: { "x-ms-blob-type": "BlockBlob", "Content-Type": file.type || "application/octet-stream" },
-				body: file,
+				body: formData,
 			});
 			if (!uploadResponse.ok) {
-				throw new Error(`Blob upload failed (${uploadResponse.status})`);
+				const text = await uploadResponse.text();
+				throw new Error(text || `Blob upload failed (${uploadResponse.status})`);
 			}
+
+			const uploadPayload = await uploadResponse.json();
 
 			const ingestResponse = await fetch("/api/ingest", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ documentId: signedPayload.documentId }),
+				body: JSON.stringify({ documentId: uploadPayload.documentId }),
 			});
 			if (!ingestResponse.ok) {
 				const text = await ingestResponse.text();
@@ -187,11 +203,11 @@ export default function App() {
 			}
 
 			setIngestionJobs((prev) => [
-				...prev.filter((item) => item.documentId !== signedPayload.documentId),
+				...prev.filter((item) => item.documentId !== uploadPayload.documentId),
 				{
-					documentId: signedPayload.documentId,
-					fileName: signedPayload.fileName,
-					blobName: signedPayload.blobName,
+					documentId: uploadPayload.documentId,
+					fileName: uploadPayload.fileName,
+					blobName: uploadPayload.blobName,
 					status: "Queued",
 					progressPercent: 15,
 				},
@@ -201,13 +217,14 @@ export default function App() {
 			setChatError(error.message);
 			appendSystemMessage(`Upload failed for ${file.name}: ${error.message}`);
 		} finally {
+			setUploadingFile(false);
 			event.target.value = "";
 		}
 	}
 
 	async function onSendChat(event) {
 		event.preventDefault();
-		if (!chatInput.trim() || chatLoading) {
+		if (!chatInput.trim() || sendDisabled) {
 			return;
 		}
 
@@ -419,13 +436,18 @@ export default function App() {
 						<button
 							type="button"
 							onClick={() => fileInputRef.current?.click()}
-							disabled={chatLoading}
+							disabled={chatLoading || uploadingFile}
 						>
-							Attach
+							{uploadingFile ? "Uploading..." : "Attach"}
 						</button>
-						<button className="primary" type="submit" disabled={chatLoading}>
-							{chatLoading ? "Thinking..." : "Send"}
-						</button>
+						<span
+							className="tooltip-anchor"
+							title={sendDisabled ? sendDisabledReason : undefined}
+						>
+							<button className="primary" type="submit" disabled={sendDisabled}>
+								{chatLoading ? "Thinking..." : "Send"}
+							</button>
+						</span>
 					</form>
 				</section>
 			)}

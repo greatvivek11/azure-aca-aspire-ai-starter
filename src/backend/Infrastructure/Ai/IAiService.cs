@@ -1,4 +1,4 @@
-namespace AIHub.Backend.Infrastructure.Ai;
+namespace AcaAspireAiTemplate.Backend.Infrastructure.Ai;
 
 public interface IAiService
 {

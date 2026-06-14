@@ -1,6 +1,6 @@
 # 🖥️ Frontend Architecture
 
-This document outlines the architectural decisions, technology stack, and design principles for the frontend of the AI-Powered Knowledge Hub. It distinguishes between the current implementation in the repository and the target direction for later phases.
+This document outlines the architectural decisions, technology stack, and design principles for the frontend of the Azure ACA Aspire AI Starter Template. It distinguishes between the current implementation in the repository and the target direction for later phases.
 
 ## 🎯 Core Principles
 

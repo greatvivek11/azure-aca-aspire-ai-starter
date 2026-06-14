@@ -1,7 +1,7 @@
 using Xunit;
 using Shouldly;
 
-namespace AIHub.Backend.Tests.Architecture;
+namespace AcaAspireAiTemplate.Backend.Tests.Architecture;
 
 /// <summary>
 /// Simple architecture tests to validate backend structure

@@ -1,10 +1,13 @@
+using Azure.Storage.Blobs;
 using System.Diagnostics;
-using AIHub.Backend.Features.AiPing;
-using AIHub.Backend.Features.Chat;
-using AIHub.Backend.Features.Customers;
-using AIHub.Backend.Features.DocumentIngestion;
-using AIHub.Backend.Features.Health;
-using AIHub.Backend.Infrastructure.Ai;
+using System.Text;
+using System.Text.Json;
+using AcaAspireAiTemplate.Backend.Features.AiPing;
+using AcaAspireAiTemplate.Backend.Features.Chat;
+using AcaAspireAiTemplate.Backend.Features.Customers;
+using AcaAspireAiTemplate.Backend.Features.DocumentIngestion;
+using AcaAspireAiTemplate.Backend.Features.Health;
+using AcaAspireAiTemplate.Backend.Infrastructure.Ai;
 using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Dapr.AspNetCore;
 using Microsoft.Data.SqlClient;
@@ -24,7 +27,7 @@ builder.Logging.AddOpenTelemetry(logging =>
 var otelBuilder = builder.Services.AddOpenTelemetry()
     .WithTracing(tracing => tracing
         .AddSource("Microsoft.AspNetCore")
-        .AddSource("AIHub.Backend"))
+        .AddSource("AcaAspireAiTemplate.Backend"))
     .WithMetrics(metrics => metrics
         .AddMeter("Microsoft.AspNetCore.Hosting")
         .AddMeter("Microsoft.AspNetCore.Server.Kestrel"));
@@ -41,25 +44,47 @@ if (!string.IsNullOrWhiteSpace(appInsightsConnectionString))
 builder.Services.Configure<AzureOpenAiOptions>(
     builder.Configuration.GetSection(AzureOpenAiOptions.SectionName));
 
-var azureOpenAiSettings = ResolveAzureOpenAiSettings(builder.Configuration);
+var aiMode = (Environment.GetEnvironmentVariable("AI_MODE") ?? "azure").Trim().ToLowerInvariant();
+var ollamaBaseUrl = (Environment.GetEnvironmentVariable("OLLAMA_BASE_URL") ?? "http://ollama:11434").Trim();
+var ollamaChatModel = (Environment.GetEnvironmentVariable("OLLAMA_CHAT_MODEL") ?? "gemma3:4b-it-qat").Trim();
+var ollamaEmbedModel = (Environment.GetEnvironmentVariable("OLLAMA_EMBED_MODEL") ?? "nomic-embed-text").Trim();
+var qdrantUrl = (Environment.GetEnvironmentVariable("QDRANT_URL") ?? "http://qdrant:6333").Trim();
+var qdrantCollection = (Environment.GetEnvironmentVariable("QDRANT_COLLECTION") ?? "documents").Trim();
+
+var azureOpenAiSettings = aiMode == "azure"
+    ? ResolveAzureOpenAiSettings(builder.Configuration)
+    : null;
 var openAiAuthMode = (Environment.GetEnvironmentVariable("AZURE_OPENAI_AUTH_MODE") ?? "api-key").Trim().ToLowerInvariant();
 var managedIdentityClientId = Environment.GetEnvironmentVariable("AZURE_CLIENT_ID");
-builder.Services.AddSingleton<IAiService>(_ =>
-    new FoundryChatService(
+builder.Services.AddSingleton<IAiService>(_ => aiMode == "local"
+    ? new OllamaChatService(
         _.GetRequiredService<IHttpClientFactory>(),
-        azureOpenAiSettings,
+        ollamaBaseUrl,
+        ollamaChatModel)
+    : new FoundryChatService(
+        _.GetRequiredService<IHttpClientFactory>(),
+        azureOpenAiSettings!,
         openAiAuthMode,
         managedIdentityClientId));
 
 var app = builder.Build();
 
 var sqlConnectionString = GetSqlConnectionString(app.Configuration);
-await EnsureSqlSchemaAsync(sqlConnectionString);
+if (string.Equals(aiMode, "local", StringComparison.OrdinalIgnoreCase))
+{
+    await RunStartupStepAsync("Ensuring SQL database", () => EnsureDatabaseExistsAsync(sqlConnectionString), app.Logger);
+}
+else
+{
+    app.Logger.LogInformation("Skipping SQL database creation check in Azure mode.");
+}
+await RunStartupStepAsync("Ensuring SQL schema", () => EnsureSqlSchemaAsync(sqlConnectionString), app.Logger);
 
 var workerDaprBaseUrl = Environment.GetEnvironmentVariable("WORKER_DAPR_BASE_URL")
-    ?? "http://localhost:3500/v1.0/invoke/aihub-worker/method";
+    ?? "http://localhost:3500/v1.0/invoke/worker/method";
 var storageConnectionString = Environment.GetEnvironmentVariable("AZURE_STORAGE_CONNECTION_STRING") ?? string.Empty;
 var storageContainerName = Environment.GetEnvironmentVariable("AZURE_STORAGE_CONTAINER_NAME") ?? string.Empty;
+var storagePublicBlobEndpoint = Environment.GetEnvironmentVariable("AZURE_STORAGE_PUBLIC_BLOB_ENDPOINT") ?? string.Empty;
 var searchEndpoint = Environment.GetEnvironmentVariable("AZURE_SEARCH_ENDPOINT") ?? string.Empty;
 var searchIndexName = Environment.GetEnvironmentVariable("AZURE_SEARCH_INDEX_NAME") ?? string.Empty;
 var searchApiKey = Environment.GetEnvironmentVariable("AZURE_SEARCH_API_KEY");
@@ -71,18 +96,28 @@ var storageAccountName = Environment.GetEnvironmentVariable("AZURE_STORAGE_ACCOU
 var storageAuthMode = (Environment.GetEnvironmentVariable("AZURE_STORAGE_AUTH_MODE") ?? "managed-identity")
     .Trim()
     .ToLowerInvariant();
-var embeddingModelId = (Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_MODEL_ID") ?? string.Empty).Trim();
-if (string.IsNullOrWhiteSpace(embeddingModelId))
+var embeddingModelId = (aiMode == "local"
+    ? Environment.GetEnvironmentVariable("OLLAMA_EMBED_MODEL") ?? "nomic-embed-text"
+    : Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_MODEL_ID") ?? string.Empty).Trim();
+if (string.IsNullOrWhiteSpace(embeddingModelId) && aiMode == "azure")
 {
     throw new InvalidOperationException("AZURE_OPENAI_EMBEDDING_MODEL_ID is required for document grounding and must reference an embeddings deployment.");
 }
-var embeddingDimensions = int.TryParse(Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_DIMENSIONS"), out var parsedDimensions)
-    ? parsedDimensions
-    : 1536;
+var embeddingDimensions = aiMode == "local"
+    ? (int.TryParse(Environment.GetEnvironmentVariable("OLLAMA_EMBED_DIMENSIONS"), out var parsedLocalDimensions)
+        ? parsedLocalDimensions
+        : 768)
+    : (int.TryParse(Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_DIMENSIONS"), out var parsedDimensions)
+        ? parsedDimensions
+        : 1536);
 
 var uploadUrlExpiryMinutes = int.TryParse(Environment.GetEnvironmentVariable("UPLOAD_URL_EXPIRY_MINUTES"), out var parsedUploadExpiry)
     ? Math.Clamp(parsedUploadExpiry, 5, 120)
     : 15;
+await RunStartupStepAsync(
+    "Ensuring local blob storage",
+    () => EnsureLocalBlobStorageAsync(storageConnectionString, storageContainerName, app.Logger),
+    app.Logger);
 
 if (app.Environment.IsDevelopment())
 {
@@ -127,20 +162,45 @@ app.MapDocumentIngestionEndpoints(new DocumentIngestionOptions(
     storageConnectionString,
     storageContainerName,
     storageAuthMode,
+    storagePublicBlobEndpoint,
     managedIdentityClientId,
     TimeSpan.FromMinutes(uploadUrlExpiryMinutes)));
 app.MapChatEndpoint(new ChatOptions(
+    aiMode,
     azureOpenAiSettings,
     openAiAuthMode,
     embeddingModelId,
     embeddingDimensions,
+    ollamaBaseUrl,
+    qdrantUrl,
+    qdrantCollection,
     searchEndpoint,
     searchIndexName,
     searchApiKey,
     managedIdentityClientId,
     useManagedIdentityForSearch));
 
-app.MapGet("/", () => "AI Hub Backend is running!");
+app.MapGet("/", () => "ACA Aspire AI Starter Backend is running!");
+
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            await WarmLocalOllamaModelsAsync(
+                aiMode,
+                app.Services.GetRequiredService<IHttpClientFactory>(),
+                ollamaBaseUrl,
+                [ollamaChatModel, ollamaEmbedModel],
+                app.Logger);
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Background Ollama model warmup failed.");
+        }
+    });
+});
 
 app.Run();
 
@@ -155,6 +215,117 @@ static async Task EnsureSqlSchemaAsync(string connectionString)
     await using var seedCommand = connection.CreateCommand();
     seedCommand.CommandText = seedScript;
     await seedCommand.ExecuteNonQueryAsync();
+}
+
+static async Task EnsureDatabaseExistsAsync(string connectionString)
+{
+    var builder = new SqlConnectionStringBuilder(connectionString);
+    var databaseName = builder.InitialCatalog;
+    if (string.IsNullOrWhiteSpace(databaseName))
+    {
+        return;
+    }
+
+    builder.InitialCatalog = "master";
+    await using var connection = new SqlConnection(builder.ConnectionString);
+    await connection.OpenAsync();
+
+    await using var command = connection.CreateCommand();
+    command.CommandText = """
+IF DB_ID(@databaseName) IS NULL
+BEGIN
+    DECLARE @sql nvarchar(max) = N'CREATE DATABASE [' + REPLACE(@databaseName, ']', ']]') + N']';
+    EXEC (@sql);
+END
+""";
+    command.Parameters.AddWithValue("@databaseName", databaseName);
+    await command.ExecuteNonQueryAsync();
+}
+
+static async Task EnsureLocalBlobStorageAsync(
+    string storageConnectionString,
+    string storageContainerName,
+    ILogger logger)
+{
+    if (string.IsNullOrWhiteSpace(storageConnectionString) || string.IsNullOrWhiteSpace(storageContainerName))
+    {
+        logger.LogInformation("Skipping local blob storage initialization because storage connection settings are incomplete.");
+        return;
+    }
+
+    if (!storageConnectionString.Contains("AccountName=devstoreaccount1", StringComparison.OrdinalIgnoreCase))
+    {
+        logger.LogInformation("Skipping local blob storage initialization because the configured storage account is not the local Azurite account.");
+        return;
+    }
+
+    var blobServiceClient = new BlobServiceClient(storageConnectionString);
+    var containerClient = blobServiceClient.GetBlobContainerClient(storageContainerName);
+    await containerClient.CreateIfNotExistsAsync();
+    logger.LogInformation("Local blob storage container is ready. Container={ContainerName}", storageContainerName);
+}
+
+static async Task WarmLocalOllamaModelsAsync(
+    string aiMode,
+    IHttpClientFactory httpClientFactory,
+    string ollamaBaseUrl,
+    IReadOnlyList<string> modelNames,
+    ILogger logger)
+{
+    if (!string.Equals(aiMode, "local", StringComparison.OrdinalIgnoreCase))
+    {
+        return;
+    }
+
+    var uniqueModelNames = modelNames
+        .Where(modelName => !string.IsNullOrWhiteSpace(modelName))
+        .Select(modelName => modelName.Trim())
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+    if (uniqueModelNames.Length == 0)
+    {
+        logger.LogWarning("Skipping Ollama model warmup because no local model names were configured.");
+        return;
+    }
+
+    using var client = httpClientFactory.CreateClient();
+    foreach (var modelName in uniqueModelNames)
+    {
+        logger.LogInformation("Preloading Ollama model {ModelName}.", modelName);
+        using var payload = new StringContent(
+            JsonSerializer.Serialize(new { name = modelName, stream = false }),
+            Encoding.UTF8,
+            "application/json");
+        using var response = await client.PostAsync($"{ollamaBaseUrl.TrimEnd('/')}/api/pull", payload);
+        if (!response.IsSuccessStatusCode)
+        {
+            var responseBody = await response.Content.ReadAsStringAsync();
+            logger.LogWarning(
+                "Skipping Ollama model warmup for {ModelName}. StatusCode={StatusCode}, Response={ResponseBody}",
+                modelName,
+                (int)response.StatusCode,
+                string.IsNullOrWhiteSpace(responseBody) ? "<empty>" : responseBody);
+            continue;
+        }
+
+        logger.LogInformation("Ollama model {ModelName} is ready.", modelName);
+    }
+}
+
+static async Task RunStartupStepAsync(string stepName, Func<Task> action, ILogger logger)
+{
+    logger.LogInformation("{StartupStep} started.", stepName);
+
+    try
+    {
+        await action();
+        logger.LogInformation("{StartupStep} completed.", stepName);
+    }
+    catch (Exception ex)
+    {
+        logger.LogCritical(ex, "{StartupStep} failed.", stepName);
+        throw;
+    }
 }
 
 static AzureOpenAiRuntimeSettings ResolveAzureOpenAiSettings(IConfiguration configuration)

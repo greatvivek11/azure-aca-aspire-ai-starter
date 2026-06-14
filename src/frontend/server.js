@@ -74,11 +74,12 @@ trackTrace("Frontend server booting", {
 const backendApiCandidates = [
 	process.env.BACKEND_DAPR_BASE_URL,
 	process.env.BACKEND_API_BASE_URL,
-	"http://localhost:3500/v1.0/invoke/aihub-backend/method",
+	"http://localhost:3500/v1.0/invoke/api/method",
 	"http://backend:8080",
 	"http://localhost:8080",
 	"http://host.docker.internal:8080",
 ].filter(Boolean);
+const aiMode = (process.env.AI_MODE || "azure").trim().toLowerCase();
 
 async function proxyToBackend(pathSuffix, options) {
 	let lastError = null;
@@ -180,6 +181,69 @@ app.delete("/api/customers/:id", async (c) => {
 			{ message: "Failed to delete customer", error: error.message },
 			500,
 		);
+	}
+});
+
+app.post("/api/uploads", async (c) => {
+	try {
+		if (aiMode === "local") {
+			const contentType = c.req.header("content-type");
+			const requestBody = await c.req.arrayBuffer();
+			const response = await proxyToBackend("/v1/uploads", {
+				method: "POST",
+				headers: contentType ? { "Content-Type": contentType } : undefined,
+				body: requestBody,
+			});
+			const responseBody = await response.text();
+			return c.body(responseBody, response.status, {
+				"content-type":
+					response.headers.get("content-type") ?? "application/json",
+			});
+		}
+
+		const formData = await c.req.formData();
+		const file = formData.get("file");
+		if (!(file instanceof File)) {
+			return c.json({ message: "file is required" }, 400);
+		}
+
+		const signedResponse = await proxyToBackend("/v1/uploads/signed-url", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ fileName: file.name }),
+		});
+		const signedResponseBody = await signedResponse.text();
+		if (!signedResponse.ok) {
+			return c.body(signedResponseBody, signedResponse.status, {
+				"content-type":
+					signedResponse.headers.get("content-type") ?? "application/json",
+			});
+		}
+
+		const signedPayload = JSON.parse(signedResponseBody);
+		const uploadResponse = await fetch(signedPayload.uploadUrl, {
+			method: "PUT",
+			headers: {
+				"x-ms-blob-type": "BlockBlob",
+				"Content-Type": file.type || "application/octet-stream",
+			},
+			body: await file.arrayBuffer(),
+		});
+		if (!uploadResponse.ok) {
+			return c.json(
+				{ message: "Blob upload failed", error: `Blob upload failed (${uploadResponse.status})` },
+				502,
+			);
+		}
+
+		return c.json({
+			documentId: signedPayload.documentId,
+			fileName: signedPayload.fileName,
+			blobName: signedPayload.blobName,
+		});
+	} catch (error) {
+		logFrontendException(error, { route: "/api/uploads", method: "POST" });
+		return c.json({ message: "Failed to upload file", error: error.message }, 500);
 	}
 });
 

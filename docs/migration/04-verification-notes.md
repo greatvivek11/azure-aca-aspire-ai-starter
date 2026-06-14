@@ -9,8 +9,8 @@ Date: 2026-06-06
 3. Aspire dashboard reachable at local dashboard URL.
 4. Dapr sidecars for backend, frontend, and worker reported `Running`.
 5. Dapr invocation health checks returned `HTTP/1.1 200 OK` for both:
-   - `aihub-backend` `/v1/health`
-   - `aihub-worker` `/v1/health`
+   - `api` `/v1/health`
+   - `worker` `/v1/health`
 
 ## Important runtime observation
 

@@ -20,7 +20,7 @@ Currently, we store sensitive credentials in GitHub Secrets instead of Azure Key
 Use this if you want the shortest path to first successful deployment.
 
 1. Create CI service principal and capture IDs.
-2. Grant CI principal RBAC on `aihub-rg`:
+2. Grant CI principal RBAC on `azure-aca-aspire-ai-starter-rg`:
   - `Contributor`
   - `User Access Administrator`
 3. Create GitHub Environment `dev` (UI or `gh api`).
@@ -125,7 +125,7 @@ When `SQL_PROVISIONING_MODE=existing`, both existing-name secrets are required.
 
 | Secret Name | Description | Default |
 |---|---|---|
-| `AZD_ENVIRONMENT_NAME` | Azure Developer CLI environment name | `copilot-sk-azure` |
+| `AZD_ENVIRONMENT_NAME` | Azure Developer CLI environment name | `azure-aca-aspire-ai-starter` |
 | `CONTAINER_REGISTRY_MODE` | `external` for public/authenticated external images, `managed` to provision ACR and use `azd deploy` | `external` |
 | `EXTERNAL_REGISTRY_SERVER` | Registry hostname used in external mode | `ghcr.io` |
 | `EXTERNAL_REGISTRY_USERNAME` | Required for authenticated non-GHCR registries | empty |
@@ -160,7 +160,7 @@ Important GHCR note:
 ```bash
 # Create a service principal scoped to the deployment resource group
 SUBSCRIPTION_ID="<your-subscription-id>"
-RESOURCE_GROUP="aihub-rg"
+RESOURCE_GROUP="azure-aca-aspire-ai-starter-rg"
 
 az ad sp create-for-rbac \
   --name "github-actions-copilot" \
@@ -189,7 +189,7 @@ Example (resource-group scope):
 
 ```bash
 SUBSCRIPTION_ID="<subscription-id>"
-RESOURCE_GROUP="aihub-rg"
+RESOURCE_GROUP="azure-aca-aspire-ai-starter-rg"
 APP_ID="<AZURE_CLIENT_ID>"
 
 SP_OBJECT_ID=$(az ad sp show --id "$APP_ID" --query id -o tsv)
@@ -320,7 +320,7 @@ AZURE_SQL_ADMIN_PASSWORD: <azure-sql-admin-password>
 
 #### Optional Configuration:
 ```
-AZD_ENVIRONMENT_NAME: copilot-sk-azure
+AZD_ENVIRONMENT_NAME: azure-aca-aspire-ai-starter
 CONTAINER_REGISTRY_MODE: external
 EXTERNAL_REGISTRY_SERVER: ghcr.io
 ENABLE_LOG_ANALYTICS: false

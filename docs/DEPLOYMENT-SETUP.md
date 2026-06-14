@@ -57,10 +57,10 @@ dotnet test src/Backend.Tests/Backend.Tests.csproj --configuration Release
 **Usage**:
 ```bash
 # Bash
-bash scripts/validate-azure-env.sh <SUBSCRIPTION_ID> aihub-rg
+bash scripts/validate-azure-env.sh <SUBSCRIPTION_ID> azure-aca-aspire-ai-starter-rg
 
 # PowerShell
-pwsh scripts/validate-azure-env.ps1 -SubscriptionId <SUBSCRIPTION_ID> -ResourceGroup aihub-rg
+pwsh scripts/validate-azure-env.ps1 -SubscriptionId <SUBSCRIPTION_ID> -ResourceGroup azure-aca-aspire-ai-starter-rg
 ```
 
 ---
@@ -79,7 +79,7 @@ pwsh scripts/validate-azure-env.ps1 -SubscriptionId <SUBSCRIPTION_ID> -ResourceG
 
 ### 5. **Solution Updates** ✅
 **Files**:
-- `copilot-sk.sln` (Backend.Tests project added)
+- `azure-aca-aspire-ai-starter.sln` (Backend.Tests project added)
 
 Backend.Tests project is now part of the build and test pipeline
 
@@ -129,7 +129,7 @@ AZURE_OPENAI_MODEL_ID       (required only when AI_SERVICES_PROVISIONING_MODE=ex
 AZURE_OPENAI_ENDPOINT       (required only when AI_SERVICES_PROVISIONING_MODE=external)
 AZURE_SQL_ADMIN_LOGIN       (provision-time SQL admin login)
 AZURE_SQL_ADMIN_PASSWORD    (provision-time SQL admin password)
-AZD_ENVIRONMENT_NAME        (optional, default: copilot-sk-azure)
+AZD_ENVIRONMENT_NAME        (optional, default: azure-aca-aspire-ai-starter)
 ```
 
 Optional override only (advanced):
@@ -156,7 +156,7 @@ WORKER_MIN_REPLICAS         (optional, default: 0)
 Before committing and pushing:
 
 - [ ] All GitHub Secrets configured
-- [ ] Local build succeeds: `dotnet build copilot-sk.sln`
+- [ ] Local build succeeds: `dotnet build azure-aca-aspire-ai-starter.sln`
 - [ ] Architecture tests pass: `dotnet test src/Backend.Tests/Backend.Tests.csproj`
 - [ ] Frontend builds: `npm run build --prefix src/frontend`
 - [ ] Code committed: `git push origin main`

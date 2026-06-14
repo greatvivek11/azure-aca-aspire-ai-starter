@@ -1,6 +1,6 @@
-# AI Hub Backend
+# ACA Aspire AI Starter Backend
 
-This is the backend service for the AI Hub, built with .NET 10 Minimal API following Vertical Slice Architecture (VSA).
+This is the backend service for the ACA Aspire AI Starter, built with .NET 10 Minimal API following Vertical Slice Architecture (VSA).
 
 ## Project Structure
 
@@ -38,8 +38,8 @@ Run the Aspire AppHost project to orchestrate all services.
 ### Docker
 
 ```bash
-docker build -t aihub-backend .
-docker run -p 8080:8080 aihub-backend
+docker build -t api .
+docker run -p 8080:8080 api
 ```
 
 ## Configuration

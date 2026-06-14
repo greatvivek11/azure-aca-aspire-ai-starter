@@ -16,9 +16,16 @@ Environment.SetEnvironmentVariable("DAPR_COMPONENTS_PATH", daprComponentsPath);
 LoadEnvFile(".env");
 
 // Centralized configuration management
-var azureOpenAiApiKey = builder.AddParameter("azureOpenAiApiKey", secret: true);
-var azureOpenAiModelId = builder.AddParameter("azureOpenAiModelId");
-var azureOpenAiEndpoint = builder.AddParameter("azureOpenAiEndpoint");
+var azureOpenAiApiKey = Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY") ?? string.Empty;
+var azureOpenAiModelId = Environment.GetEnvironmentVariable("AZURE_OPENAI_MODEL_ID") ?? string.Empty;
+var azureOpenAiEndpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT") ?? string.Empty;
+var aiMode = (Environment.GetEnvironmentVariable("AI_MODE") ?? "local").Trim().ToLowerInvariant();
+var ollamaBaseUrl = Environment.GetEnvironmentVariable("OLLAMA_BASE_URL") ?? "http://ollama:11434";
+var ollamaChatModel = Environment.GetEnvironmentVariable("OLLAMA_CHAT_MODEL") ?? "gemma3:4b-it-qat";
+var ollamaEmbedModel = Environment.GetEnvironmentVariable("OLLAMA_EMBED_MODEL") ?? "nomic-embed-text";
+var ollamaEmbedDimensions = Environment.GetEnvironmentVariable("OLLAMA_EMBED_DIMENSIONS") ?? "768";
+var qdrantUrl = Environment.GetEnvironmentVariable("QDRANT_URL") ?? "http://qdrant:6333";
+var qdrantCollection = Environment.GetEnvironmentVariable("QDRANT_COLLECTION") ?? "documents";
 var azureOpenAiAuthMode = Environment.GetEnvironmentVariable("AZURE_OPENAI_AUTH_MODE") ?? "api-key";
 var azureOpenAiEmbeddingModelId = Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_MODEL_ID") ?? "text-embedding-3-small";
 var azureOpenAiEmbeddingDimensions = Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_DIMENSIONS") ?? "1536";
@@ -26,6 +33,26 @@ var azureStorageAccountName = Environment.GetEnvironmentVariable("AZURE_STORAGE_
 var azureStorageConnectionString = Environment.GetEnvironmentVariable("AZURE_STORAGE_CONNECTION_STRING") ?? string.Empty;
 var azureStorageContainerName = Environment.GetEnvironmentVariable("AZURE_STORAGE_CONTAINER_NAME") ?? "documents";
 var azureStorageAuthMode = Environment.GetEnvironmentVariable("AZURE_STORAGE_AUTH_MODE") ?? "managed-identity";
+var storagePublicBlobEndpoint = Environment.GetEnvironmentVariable("AZURE_STORAGE_PUBLIC_BLOB_ENDPOINT") ?? string.Empty;
+const string azuriteAccountName = "devstoreaccount1";
+const string azuriteAccountKey = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==";
+var defaultAzuriteInternalConnectionString =
+    $"DefaultEndpointsProtocol=http;AccountName={azuriteAccountName};AccountKey={azuriteAccountKey};BlobEndpoint=http://azurite:10000/{azuriteAccountName};";
+var defaultAzuritePublicBlobEndpoint = $"http://localhost:10000/{azuriteAccountName}";
+var resolvedStorageAccountName = aiMode == "local" && string.IsNullOrWhiteSpace(azureStorageAccountName)
+    ? azuriteAccountName
+    : azureStorageAccountName;
+var resolvedStorageConnectionString = aiMode == "local" &&
+                                      (string.IsNullOrWhiteSpace(azureStorageConnectionString)
+                                       || azureStorageConnectionString.Contains("AccountName=devstoreaccount1", StringComparison.OrdinalIgnoreCase))
+    ? defaultAzuriteInternalConnectionString
+    : azureStorageConnectionString;
+var resolvedStorageAuthMode = aiMode == "local"
+    ? "api-key"
+    : azureStorageAuthMode;
+var resolvedStoragePublicBlobEndpoint = aiMode == "local" && string.IsNullOrWhiteSpace(storagePublicBlobEndpoint)
+    ? defaultAzuritePublicBlobEndpoint
+    : storagePublicBlobEndpoint;
 var azureSearchEndpoint = Environment.GetEnvironmentVariable("AZURE_SEARCH_ENDPOINT") ?? string.Empty;
 var azureSearchIndexName = Environment.GetEnvironmentVariable("AZURE_SEARCH_INDEX_NAME") ?? "documents-index";
 var azureSearchApiKey = Environment.GetEnvironmentVariable("AZURE_SEARCH_API_KEY") ?? string.Empty;
@@ -52,6 +79,18 @@ var redis = builder.AddContainer("redis", "redis:7-alpine")
     .WithEndpoint(name: "tcp", port: 6379, targetPort: 6379)
     .WithVolume("redis-data", "/data");
 
+var azurite = builder.AddContainer("azurite", "mcr.microsoft.com/azure-storage/azurite:latest")
+    .WithEndpoint(name: "blob", port: 10000, targetPort: 10000)
+    .WithVolume("azurite-data", "/data");
+
+var ollama = builder.AddContainer("ollama", "ollama/ollama:latest")
+    .WithEndpoint(name: "http", port: 11434, targetPort: 11434)
+    .WithVolume("ollama-data", "/root/.ollama");
+
+var qdrant = builder.AddContainer("qdrant", "qdrant/qdrant:v1.12.6")
+    .WithEndpoint(name: "http", port: 6333, targetPort: 6333)
+    .WithVolume("qdrant-data", "/qdrant/storage");
+
 // Parameter values will be read from appsettings.json or environment variables
 // You can also set them through the .NET Aspire dashboard when running the app
 
@@ -59,57 +98,78 @@ var redis = builder.AddContainer("redis", "redis:7-alpine")
 var backend = builder.AddDockerfile("backend", "../backend")
     .WaitFor(sql)
     .WaitFor(redis)
+    .WaitFor(azurite)
+    .WaitFor(ollama)
+    .WaitFor(qdrant)
     .WithOtlpExporter()
     .WithHttpEndpoint(name: "http", port: 8080, targetPort: 8080)
     .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions
     {
-        AppId = "aihub-backend",
+        AppId = "api",
         AppPort = 8080,
         ResourcesPaths = ImmutableHashSet.Create(daprComponentsPath)
     })
     .WithEnvironment("AZURE_OPENAI_API_KEY", azureOpenAiApiKey)
     .WithEnvironment("AZURE_OPENAI_MODEL_ID", azureOpenAiModelId)
     .WithEnvironment("AZURE_OPENAI_ENDPOINT", azureOpenAiEndpoint)
+    .WithEnvironment("AI_MODE", aiMode)
+    .WithEnvironment("OLLAMA_BASE_URL", ollamaBaseUrl)
+    .WithEnvironment("OLLAMA_CHAT_MODEL", ollamaChatModel)
+    .WithEnvironment("OLLAMA_EMBED_MODEL", ollamaEmbedModel)
+    .WithEnvironment("OLLAMA_EMBED_DIMENSIONS", ollamaEmbedDimensions)
+    .WithEnvironment("QDRANT_URL", qdrantUrl)
+    .WithEnvironment("QDRANT_COLLECTION", qdrantCollection)
     .WithEnvironment("AZURE_OPENAI_AUTH_MODE", azureOpenAiAuthMode)
     .WithEnvironment("AZURE_OPENAI_EMBEDDING_MODEL_ID", azureOpenAiEmbeddingModelId)
     .WithEnvironment("AZURE_OPENAI_EMBEDDING_DIMENSIONS", azureOpenAiEmbeddingDimensions)
-    .WithEnvironment("AZURE_STORAGE_ACCOUNT_NAME", azureStorageAccountName)
-    .WithEnvironment("AZURE_STORAGE_CONNECTION_STRING", azureStorageConnectionString)
+    .WithEnvironment("AZURE_STORAGE_ACCOUNT_NAME", resolvedStorageAccountName)
+    .WithEnvironment("AZURE_STORAGE_CONNECTION_STRING", resolvedStorageConnectionString)
     .WithEnvironment("AZURE_STORAGE_CONTAINER_NAME", azureStorageContainerName)
-    .WithEnvironment("AZURE_STORAGE_AUTH_MODE", azureStorageAuthMode)
+    .WithEnvironment("AZURE_STORAGE_AUTH_MODE", resolvedStorageAuthMode)
+    .WithEnvironment("AZURE_STORAGE_PUBLIC_BLOB_ENDPOINT", resolvedStoragePublicBlobEndpoint)
     .WithEnvironment("AZURE_SEARCH_ENDPOINT", azureSearchEndpoint)
     .WithEnvironment("AZURE_SEARCH_INDEX_NAME", azureSearchIndexName)
     .WithEnvironment("AZURE_SEARCH_API_KEY", azureSearchApiKey)
     .WithEnvironment("AZURE_SEARCH_AUTH_MODE", azureSearchAuthMode)
-    .WithEnvironment("WORKER_DAPR_BASE_URL", "http://localhost:3500/v1.0/invoke/aihub-worker/method")
-    .WithEnvironment("ConnectionStrings__SqlServer", "Server=sql,1433;Database=AIHub;User Id=sa;Password=P@ssw0rd;TrustServerCertificate=true")
+    .WithEnvironment("WORKER_DAPR_BASE_URL", "http://localhost:3500/v1.0/invoke/worker/method")
+    .WithEnvironment("ConnectionStrings__SqlServer", "Server=sql,1433;Database=AcaAspireAiTemplate;User Id=sa;Password=P@ssw0rd;TrustServerCertificate=true")
     .WithEnvironment("ConnectionStrings__Redis", "redis:6379")
     .WithEnvironment("REDIS_CONNECTION_STRING", "redis:6379");
 
 var worker = builder.AddDockerfile("worker", "../worker")
     .WaitFor(sql)
     .WaitFor(redis)
+    .WaitFor(azurite)
+    .WaitFor(ollama)
+    .WaitFor(qdrant)
     .WithOtlpExporter()
     .WithHttpEndpoint(name: "http", port: 8081, targetPort: 8081)
     .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions
     {
-        AppId = "aihub-worker",
+        AppId = "worker",
         AppPort = 8081,
         ResourcesPaths = ImmutableHashSet.Create(daprComponentsPath)
     })
-    .WithEnvironment("ConnectionStrings__SqlServer", "Server=sql,1433;Database=AIHub;User Id=sa;Password=P@ssw0rd;TrustServerCertificate=true")
+    .WithEnvironment("ConnectionStrings__SqlServer", "Server=sql,1433;Database=AcaAspireAiTemplate;User Id=sa;Password=P@ssw0rd;TrustServerCertificate=true")
     .WithEnvironment("ConnectionStrings__Redis", "redis:6379")
     .WithEnvironment("REDIS_CONNECTION_STRING", "redis:6379")
     .WithEnvironment("AZURE_OPENAI_API_KEY", azureOpenAiApiKey)
     .WithEnvironment("AZURE_OPENAI_MODEL_ID", azureOpenAiModelId)
     .WithEnvironment("AZURE_OPENAI_ENDPOINT", azureOpenAiEndpoint)
+    .WithEnvironment("AI_MODE", aiMode)
+    .WithEnvironment("OLLAMA_BASE_URL", ollamaBaseUrl)
+    .WithEnvironment("OLLAMA_CHAT_MODEL", ollamaChatModel)
+    .WithEnvironment("OLLAMA_EMBED_MODEL", ollamaEmbedModel)
+    .WithEnvironment("OLLAMA_EMBED_DIMENSIONS", ollamaEmbedDimensions)
+    .WithEnvironment("QDRANT_URL", qdrantUrl)
+    .WithEnvironment("QDRANT_COLLECTION", qdrantCollection)
     .WithEnvironment("AZURE_OPENAI_AUTH_MODE", azureOpenAiAuthMode)
     .WithEnvironment("AZURE_OPENAI_EMBEDDING_MODEL_ID", azureOpenAiEmbeddingModelId)
     .WithEnvironment("AZURE_OPENAI_EMBEDDING_DIMENSIONS", azureOpenAiEmbeddingDimensions)
-    .WithEnvironment("AZURE_STORAGE_ACCOUNT_NAME", azureStorageAccountName)
-    .WithEnvironment("AZURE_STORAGE_CONNECTION_STRING", azureStorageConnectionString)
+    .WithEnvironment("AZURE_STORAGE_ACCOUNT_NAME", resolvedStorageAccountName)
+    .WithEnvironment("AZURE_STORAGE_CONNECTION_STRING", resolvedStorageConnectionString)
     .WithEnvironment("AZURE_STORAGE_CONTAINER_NAME", azureStorageContainerName)
-    .WithEnvironment("AZURE_STORAGE_AUTH_MODE", azureStorageAuthMode)
+    .WithEnvironment("AZURE_STORAGE_AUTH_MODE", resolvedStorageAuthMode)
     .WithEnvironment("AZURE_SEARCH_ENDPOINT", azureSearchEndpoint)
     .WithEnvironment("AZURE_SEARCH_INDEX_NAME", azureSearchIndexName)
     .WithEnvironment("AZURE_SEARCH_API_KEY", azureSearchApiKey);
@@ -123,11 +183,12 @@ if (frontendMode == "vite-dev")
         .WithHttpEndpoint(name: "http", port: 3000, env: "PORT")
         .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions
         {
-            AppId = "aihub-frontend",
+            AppId = "web",
             AppPort = 3000,
             ResourcesPaths = ImmutableHashSet.Create(daprComponentsPath)
         })
         .WithEnvironment("BACKEND_API_BASE_URL", "http://localhost:8080")
+        .WithEnvironment("AI_MODE", aiMode)
         .WithEnvironment("REDIS_URL", "redis://redis:6379");
 }
 else
@@ -139,12 +200,13 @@ else
         .WithHttpEndpoint(name: "http", port: 3000, targetPort: 3000)
         .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions
         {
-            AppId = "aihub-frontend",
+            AppId = "web",
             AppPort = 3000,
             ResourcesPaths = ImmutableHashSet.Create(daprComponentsPath)
         })
         .WithEnvironment("BACKEND_API_BASE_URL", "http://backend:8080")
-        .WithEnvironment("BACKEND_DAPR_BASE_URL", "http://localhost:3500/v1.0/invoke/aihub-backend/method")
+        .WithEnvironment("BACKEND_DAPR_BASE_URL", "http://localhost:3500/v1.0/invoke/api/method")
+        .WithEnvironment("AI_MODE", aiMode)
         .WithEnvironment("REDIS_URL", "redis://redis:6379");
 }
 

@@ -19,7 +19,7 @@ import { defineConfig } from "vite";
 //   - The backend is still fully Dapr-enabled; only the local dev path differs
 //
 // To override for testing Dapr locally, set:
-//   BACKEND_PROXY_BASE_URL="http://127.0.0.1:3500/v1.0/invoke/aihub-backend/method"
+//   BACKEND_PROXY_BASE_URL="http://127.0.0.1:3500/v1.0/invoke/api/method"
 //   (requires dapr placement service running on localhost:50005)
 
 const backendProxyBaseUrl =

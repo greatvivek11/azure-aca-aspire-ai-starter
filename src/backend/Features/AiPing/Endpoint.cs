@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using AIHub.Backend.Infrastructure.Ai;
+using AcaAspireAiTemplate.Backend.Infrastructure.Ai;
 
-namespace AIHub.Backend.Features.AiPing;
+namespace AcaAspireAiTemplate.Backend.Features.AiPing;
 
 public static class Endpoint
 {
@@ -11,7 +11,7 @@ public static class Endpoint
     {
         app.MapGet("/v1/ping-ai", async (IAiService aiService, ILoggerFactory loggerFactory) =>
         {
-            var logger = loggerFactory.CreateLogger("AIHub.Backend.Features.AiPing");
+            var logger = loggerFactory.CreateLogger("AcaAspireAiTemplate.Backend.Features.AiPing");
 
             try
             {

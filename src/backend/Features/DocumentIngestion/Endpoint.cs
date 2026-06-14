@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Data.SqlClient;
 
-namespace AIHub.Backend.Features.DocumentIngestion;
+namespace AcaAspireAiTemplate.Backend.Features.DocumentIngestion;
 
 public static class Endpoint
 {
@@ -24,67 +24,111 @@ public static class Endpoint
 
     public static void MapDocumentIngestionEndpoints(this IEndpointRouteBuilder app, DocumentIngestionOptions options)
     {
-        app.MapPost("/v1/uploads/signed-url", async (CreateSignedUploadRequest request, IHttpClientFactory httpClientFactory) =>
+        app.MapPost("/v1/uploads", async (HttpRequest request, ILoggerFactory loggerFactory) =>
         {
+            var logger = loggerFactory.CreateLogger("DocumentIngestion");
             if (!options.UploadConfigured)
             {
+                logger.LogWarning("Direct upload request rejected because upload storage is not configured.");
                 return Results.BadRequest("Upload pipeline is not configured. Missing storage connection settings.");
             }
 
-            if (string.IsNullOrWhiteSpace(request.FileName))
+            if (!request.HasFormContentType)
             {
-                return Results.BadRequest("fileName is required.");
+                return Results.BadRequest("multipart/form-data content is required.");
             }
 
-            var safeFileName = Path.GetFileName(request.FileName.Trim());
-            if (string.IsNullOrWhiteSpace(safeFileName) || safeFileName is "." or "..")
+            var form = await request.ReadFormAsync();
+            var file = form.Files["file"] ?? form.Files.FirstOrDefault();
+            if (file is null)
             {
-                return Results.BadRequest("fileName must include a valid file name.");
+                return Results.BadRequest("file is required.");
             }
 
-            if (safeFileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            var validationError = ValidateFileName(file.FileName, out var safeFileName);
+            if (validationError is not null)
             {
-                return Results.BadRequest("fileName contains invalid characters.");
-            }
-
-            var extension = Path.GetExtension(safeFileName);
-            if (string.IsNullOrWhiteSpace(extension) || !SupportedExtensions.Contains(extension))
-            {
-                return Results.BadRequest("Only .txt, .pdf, and .docx files are supported for ingestion.");
+                return Results.BadRequest(validationError);
             }
 
             var documentId = Guid.NewGuid();
             var blobName = $"{documentId:N}/{safeFileName}";
-            var resolvedStorageAccountName = ResolveStorageAccountName(options.StorageAccountName, options.StorageConnectionString);
-            BlobClient blobClient;
-            if (!string.IsNullOrWhiteSpace(options.StorageConnectionString))
-            {
-                var blobServiceClient = new BlobServiceClient(options.StorageConnectionString);
-                var containerClient = blobServiceClient.GetBlobContainerClient(options.StorageContainerName);
-                await containerClient.CreateIfNotExistsAsync();
-                blobClient = containerClient.GetBlobClient(blobName);
-            }
-            else
-            {
-                blobClient = new BlobClient(BuildBlobUri(resolvedStorageAccountName, options.StorageContainerName, blobName));
-            }
+            var blobClient = CreateBlobClient(options, blobName);
 
-            var uploadExpiresAtUtc = DateTimeOffset.UtcNow.Add(options.UploadUrlLifetime);
-            var uploadUrl = await CreateBlobUploadSasUrlAsync(blobClient, options, uploadExpiresAtUtc, httpClientFactory);
+            await using (var stream = file.OpenReadStream())
+            {
+                await blobClient.UploadAsync(
+                    stream,
+                    new BlobUploadOptions
+                    {
+                        HttpHeaders = new BlobHttpHeaders
+                        {
+                            ContentType = string.IsNullOrWhiteSpace(file.ContentType)
+                                ? "application/octet-stream"
+                                : file.ContentType
+                        }
+                    });
+            }
 
             await CreateDocumentIngestionJobAsync(
                 options.SqlConnectionString,
                 documentId,
-                safeFileName,
+                safeFileName!,
+                blobName,
+                "PendingUpload",
+                5);
+
+            logger.LogInformation(
+                "Uploaded document {DocumentId} directly to blob storage. Blob={BlobName}, SizeBytes={SizeBytes}",
+                documentId,
+                blobName,
+                file.Length);
+
+            return Results.Ok(new DirectUploadResponse(documentId, safeFileName!, blobName));
+        });
+
+        app.MapPost("/v1/uploads/signed-url", async (CreateSignedUploadRequest request, IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory) =>
+        {
+            var logger = loggerFactory.CreateLogger("DocumentIngestion");
+            if (!options.UploadConfigured)
+            {
+                logger.LogWarning("Signed upload URL request rejected because upload storage is not configured.");
+                return Results.BadRequest("Upload pipeline is not configured. Missing storage connection settings.");
+            }
+
+            var validationError = ValidateFileName(request.FileName, out var safeFileName);
+            if (validationError is not null)
+            {
+                return Results.BadRequest(validationError);
+            }
+
+            var documentId = Guid.NewGuid();
+            var blobName = $"{documentId:N}/{safeFileName}";
+            var blobClient = CreateBlobClient(options, blobName);
+
+            var uploadExpiresAtUtc = DateTimeOffset.UtcNow.Add(options.UploadUrlLifetime);
+            var uploadUrl = await CreateBlobUploadSasUrlAsync(blobClient, options, uploadExpiresAtUtc, httpClientFactory);
+            var clientUploadUrl = RewriteUploadUrlForClient(uploadUrl, options.StoragePublicBlobEndpoint);
+            logger.LogInformation(
+                "Created signed upload URL for document {DocumentId}. Blob={BlobName}, InternalHost={InternalHost}, PublicHost={PublicHost}",
+                documentId,
+                blobName,
+                blobClient.Uri.Host,
+                new Uri(clientUploadUrl).Host);
+
+            await CreateDocumentIngestionJobAsync(
+                options.SqlConnectionString,
+                documentId,
+                safeFileName!,
                 blobName,
                 "PendingUpload",
                 5);
 
             return Results.Ok(new CreateSignedUploadResponse(
                 documentId,
-                safeFileName,
+                safeFileName!,
                 blobName,
-                uploadUrl,
+                clientUploadUrl,
                 uploadExpiresAtUtc));
         });
 
@@ -128,6 +172,49 @@ public static class Endpoint
             var status = await GetDocumentIngestionJobAsync(options.SqlConnectionString, documentId);
             return status is null ? Results.NotFound() : Results.Ok(status);
         });
+    }
+
+    private static string? ValidateFileName(string? fileName, out string? safeFileName)
+    {
+        safeFileName = null;
+
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return "fileName is required.";
+        }
+
+        safeFileName = Path.GetFileName(fileName.Trim());
+        if (string.IsNullOrWhiteSpace(safeFileName) || safeFileName is "." or "..")
+        {
+            return "fileName must include a valid file name.";
+        }
+
+        if (safeFileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            return "fileName contains invalid characters.";
+        }
+
+        var extension = Path.GetExtension(safeFileName);
+        if (string.IsNullOrWhiteSpace(extension) || !SupportedExtensions.Contains(extension))
+        {
+            return "Only .txt, .pdf, and .docx files are supported for ingestion.";
+        }
+
+        return null;
+    }
+
+    private static BlobClient CreateBlobClient(DocumentIngestionOptions options, string blobName)
+    {
+        var resolvedStorageAccountName = ResolveStorageAccountName(options.StorageAccountName, options.StorageConnectionString);
+        if (!string.IsNullOrWhiteSpace(options.StorageConnectionString))
+        {
+            var blobServiceClient = new BlobServiceClient(options.StorageConnectionString);
+            var containerClient = blobServiceClient.GetBlobContainerClient(options.StorageContainerName);
+            containerClient.CreateIfNotExists();
+            return containerClient.GetBlobClient(blobName);
+        }
+
+        return new BlobClient(BuildBlobUri(resolvedStorageAccountName, options.StorageContainerName, blobName));
     }
 
     private static async Task<string> CreateBlobUploadSasUrlAsync(
@@ -310,6 +397,47 @@ public static class Endpoint
         throw new InvalidOperationException($"Storage connection string is missing '{key}'.");
     }
 
+    private static string RewriteUploadUrlForClient(string uploadUrl, string storagePublicBlobEndpoint)
+    {
+        if (string.IsNullOrWhiteSpace(storagePublicBlobEndpoint))
+        {
+            return uploadUrl;
+        }
+
+        if (!Uri.TryCreate(uploadUrl, UriKind.Absolute, out var originalUri)
+            || !Uri.TryCreate(storagePublicBlobEndpoint, UriKind.Absolute, out var publicBaseUri))
+        {
+            return uploadUrl;
+        }
+
+        var baseSegments = publicBaseUri.AbsolutePath
+            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var originalSegments = originalUri.AbsolutePath
+            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        string[] finalSegments;
+        if (baseSegments.Length == 0)
+        {
+            finalSegments = originalSegments;
+        }
+        else if (originalSegments.Length > 0 && string.Equals(baseSegments[^1], originalSegments[0], StringComparison.OrdinalIgnoreCase))
+        {
+            finalSegments = [..baseSegments, ..originalSegments[1..]];
+        }
+        else
+        {
+            finalSegments = [..baseSegments, ..originalSegments];
+        }
+
+        var builder = new UriBuilder(publicBaseUri.Scheme, publicBaseUri.Host, publicBaseUri.Port)
+        {
+            Path = "/" + string.Join('/', finalSegments),
+            Query = originalUri.Query.TrimStart('?')
+        };
+
+        return builder.Uri.ToString();
+    }
+
     private static async Task CreateDocumentIngestionJobAsync(
         string connectionString,
         Guid documentId,
@@ -417,6 +545,7 @@ public sealed record DocumentIngestionOptions(
     string StorageConnectionString,
     string StorageContainerName,
     string StorageAuthMode,
+    string StoragePublicBlobEndpoint,
     string? ManagedIdentityClientId,
     TimeSpan UploadUrlLifetime)
 {
@@ -426,6 +555,10 @@ public sealed record DocumentIngestionOptions(
 }
 
 internal sealed record CreateSignedUploadRequest(string FileName);
+internal sealed record DirectUploadResponse(
+    Guid DocumentId,
+    string FileName,
+    string BlobName);
 internal sealed record CreateSignedUploadResponse(
     Guid DocumentId,
     string FileName,

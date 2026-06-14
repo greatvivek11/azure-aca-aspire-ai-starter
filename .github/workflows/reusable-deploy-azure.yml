@@ -75,6 +75,8 @@ on:
         required: false
       AZURE_OPENAI_ENDPOINT:
         required: false
+      AI_MODE:
+        required: false
       AZURE_SQL_ADMIN_LOGIN:
         required: false
       AZURE_SQL_ADMIN_PASSWORD:
@@ -112,7 +114,7 @@ jobs:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_LOCATION: ${{ secrets.AZURE_LOCATION || 'southindia' }}
-      AZD_ENVIRONMENT_NAME: ${{ secrets.AZD_ENVIRONMENT_NAME || 'copilot-sk-azure' }}
+      AZD_ENVIRONMENT_NAME: ${{ secrets.AZD_ENVIRONMENT_NAME || 'azure-aca-aspire-ai-starter' }}
       SQL_PROVISIONING_MODE: ${{ secrets.SQL_PROVISIONING_MODE || 'provision' }}
       AZURE_SQL_EXISTING_SERVER_NAME: ${{ secrets.AZURE_SQL_EXISTING_SERVER_NAME || '' }}
       AZURE_SQL_EXISTING_DATABASE_NAME: ${{ secrets.AZURE_SQL_EXISTING_DATABASE_NAME || '' }}
@@ -141,6 +143,7 @@ jobs:
       AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
       AZURE_OPENAI_MODEL_ID: ${{ secrets.AZURE_OPENAI_MODEL_ID }}
       AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+      AI_MODE: ${{ secrets.AI_MODE || 'azure' }}
       AZURE_SQL_ADMIN_LOGIN: ${{ secrets.AZURE_SQL_ADMIN_LOGIN }}
       AZURE_SQL_ADMIN_PASSWORD: ${{ secrets.AZURE_SQL_ADMIN_PASSWORD }}
       CONTAINER_REGISTRY_MODE: ${{ secrets.CONTAINER_REGISTRY_MODE || 'external' }}

@@ -65,6 +65,9 @@
 		"openAiAuthMode": {
 			"value": "${AZURE_OPENAI_AUTH_MODE}"
 		},
+		"aiMode": {
+			"value": "${AI_MODE}"
+		},
 		"storageAccountName": {
 			"value": "${AZURE_STORAGE_ACCOUNT_NAME}"
 		},
@@ -139,7 +142,7 @@
 		},
 		"tags": {
 			"value": {
-				"project": "copilot-sk-azure",
+				"project": "azure-aca-aspire-ai-starter",
 				"managedBy": "azd"
 			}
 		}

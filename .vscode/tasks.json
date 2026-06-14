@@ -7,7 +7,7 @@
 			"type": "process",
 			"args": [
 				"build",
-				"${workspaceFolder}/copilot-sk.sln",
+				"${workspaceFolder}/azure-aca-aspire-ai-starter.sln",
 				"/property:GenerateFullPaths=true",
 				"/consoleloggerparameters:NoSummary"
 			],
@@ -20,7 +20,7 @@
 				"build"
 			],
 			"dockerBuild": {
-				"tag": "copilotsk:dev",
+				"tag": "acaaspireaistarter:dev",
 				"target": "base",
 				"dockerfile": "${workspaceFolder}/src/aspire/Dockerfile",
 				"context": "${workspaceFolder}",
@@ -37,7 +37,7 @@
 				"build"
 			],
 			"dockerBuild": {
-				"tag": "copilotsk:latest",
+				"tag": "acaaspireaistarter:latest",
 				"dockerfile": "${workspaceFolder}/src/aspire/Dockerfile",
 				"context": "${workspaceFolder}",
 				"platform": {

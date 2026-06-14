@@ -3,7 +3,8 @@
 # Test script for backend endpoints
 
 echo "Starting backend service..."
-cd /Users/vivekkaushik/Projects/copilot-sk/src/backend
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 ASPNETCORE_URLS=http://localhost:8080 dotnet run --no-launch-profile > /dev/null 2>&1 &
 BACKEND_PID=$!
 

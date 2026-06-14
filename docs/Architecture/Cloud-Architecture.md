@@ -1,6 +1,6 @@
 # ☁️ Cloud-Native Architecture
 
-This document provides the holistic, end-to-end architecture for deploying, securing, and operating the AI-Powered Knowledge Hub on Microsoft Azure. It connects the application design to the underlying cloud infrastructure, focusing on security, automation, observability, and cost-awareness. The architecture is designed to integrate cleanly with **.NET Aspire**, **ACA**, **Dapr**, and a **Vite + Hono** frontend.
+This document provides the holistic, end-to-end architecture for deploying, securing, and operating the Azure ACA Aspire AI Starter Template on Microsoft Azure. It connects the application design to the underlying cloud infrastructure, focusing on security, automation, observability, and cost-awareness. The architecture is designed to integrate cleanly with **.NET Aspire**, **ACA**, **Dapr**, and a **Vite + Hono** frontend.
 
 ---
 
@@ -38,7 +38,7 @@ graph TD
         subgraph "Azure Data & Secret Services"
             I[Azure SQL DB]
             J[Azure Blob Storage]
-            K[Azure Cosmos DB (Vector)]
+            K[Azure AI Search (Vector)]
             L(3rd Party Secrets <br/>in GitHub Actions)
         end
         
@@ -81,7 +81,7 @@ graph TD
 
   * Azure SQL: `db_datareader`, `db_datawriter`
   * Azure Blob: `Storage Blob Data Contributor`
-  * Azure Cosmos DB: data plane role for vector operations
+  * Azure AI Search: data/query plane access for vector retrieval operations
 * **Third-Party Secrets**: HF/OpenAI keys stored in **GitHub Actions secrets**, injected at deploy.
 * **Configuration**: Backend uses `DefaultAzureCredential` in Aspire to authenticate seamlessly with Azure resources.
 

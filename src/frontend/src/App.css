@@ -118,6 +118,18 @@ button:hover {
 	background: #f8fafc;
 }
 
+button:disabled {
+	cursor: not-allowed;
+	opacity: 0.55;
+	background: #e5e7eb;
+	color: #6b7280;
+	border-color: #cbd5e1;
+}
+
+button:disabled:hover {
+	background: #e5e7eb;
+}
+
 button.primary {
 	background: #2563eb;
 	color: #fff;
@@ -126,6 +138,12 @@ button.primary {
 
 button.primary:hover {
 	background: #1d4ed8;
+}
+
+button.primary:disabled {
+	background: #93c5fd;
+	color: #eff6ff;
+	border-color: #93c5fd;
 }
 
 .form-grid {
@@ -251,4 +269,8 @@ select {
 
 .hidden-file-input {
 	display: none;
+}
+
+.tooltip-anchor {
+	display: inline-flex;
 }

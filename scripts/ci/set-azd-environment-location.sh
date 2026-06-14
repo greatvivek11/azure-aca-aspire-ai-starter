@@ -22,9 +22,23 @@ fi
 azd env set AZURE_LOCATION "${effective_location}"
 azd env set AZURE_RESOURCE_GROUP "${resource_group_name}"
 
+requested_sql_location="${AZURE_SQL_LOCATION:-}"
+if [[ -n "${requested_sql_location}" ]]; then
+  effective_sql_location="${requested_sql_location}"
+elif [[ "${effective_location}" == "southindia" ]]; then
+  # South India can intermittently reject new Azure SQL server creation.
+  effective_sql_location="southeastasia"
+else
+  effective_sql_location="${effective_location}"
+fi
+
+azd env set AZURE_SQL_LOCATION "${effective_sql_location}"
+
 {
   echo "AZURE_LOCATION=${effective_location}"
+  echo "AZURE_SQL_LOCATION=${effective_sql_location}"
   echo "DEPLOY_RESOURCE_GROUP=${resource_group_name}"
 } >> "$GITHUB_ENV"
 
 echo "Using Azure location: ${effective_location}"
+echo "Using Azure SQL location: ${effective_sql_location}"

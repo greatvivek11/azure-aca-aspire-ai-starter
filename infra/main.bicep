@@ -22,6 +22,9 @@ param sqlAdminPassword string
 @description('Azure SQL database name used by backend API.')
 param sqlDatabaseName string = 'acaaspireaistarter'
 
+@description('Azure SQL server/database location. Defaults to deployment location but can be overridden for regional capacity constraints.')
+param sqlLocation string = location
+
 @allowed([
   'provision'
   'existing'
@@ -611,7 +614,7 @@ var externalRegistryConfiguration = useManagedRegistry
 // Azure SQL logical server for backend transactional data.
 resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = if (!useExistingSql) {
   name: sqlServerName
-  location: location
+  location: sqlLocation
   tags: tags
   properties: {
     administratorLogin: sqlAdminLogin
@@ -644,7 +647,7 @@ resource sqlAllowAzureServices 'Microsoft.Sql/servers/firewallRules@2023-08-01-p
 resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-08-01-preview' = if (!useExistingSql) {
   parent: sqlServer
   name: sqlDatabaseName
-  location: location
+  location: sqlLocation
   tags: tags
   sku: {
     name: 'GP_S_Gen5_1'

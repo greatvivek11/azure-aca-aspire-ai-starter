@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "2715284896161410302"
+      "templateHash": "14193300786230604128"
     }
   },
   "parameters": {
@@ -54,6 +54,13 @@
       "defaultValue": "acaaspireaistarter",
       "metadata": {
         "description": "Azure SQL database name used by backend API."
+      }
+    },
+    "sqlLocation": {
+      "type": "string",
+      "defaultValue": "[parameters('location')]",
+      "metadata": {
+        "description": "Azure SQL server/database location. Defaults to deployment location but can be overridden for regional capacity constraints."
       }
     },
     "sqlProvisioningMode": {
@@ -761,7 +768,7 @@
       "type": "Microsoft.Sql/servers",
       "apiVersion": "2023-08-01-preview",
       "name": "[variables('sqlServerName')]",
-      "location": "[parameters('location')]",
+      "location": "[parameters('sqlLocation')]",
       "tags": "[parameters('tags')]",
       "properties": {
         "administratorLogin": "[parameters('sqlAdminLogin')]",
@@ -788,7 +795,7 @@
       "type": "Microsoft.Sql/servers/databases",
       "apiVersion": "2023-08-01-preview",
       "name": "[format('{0}/{1}', variables('sqlServerName'), parameters('sqlDatabaseName'))]",
-      "location": "[parameters('location')]",
+      "location": "[parameters('sqlLocation')]",
       "tags": "[parameters('tags')]",
       "sku": {
         "name": "GP_S_Gen5_1",

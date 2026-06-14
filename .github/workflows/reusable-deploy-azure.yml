@@ -19,7 +19,11 @@ on:
         required: false
       AZD_ENVIRONMENT_NAME:
         required: false
+      AZURE_RESOURCE_NAME_PREFIX:
+        required: false
       AZURE_SQL_LOCATION:
+        required: false
+      AZURE_SQL_DATABASE_NAME:
         required: false
       SQL_PROVISIONING_MODE:
         required: false
@@ -117,7 +121,9 @@ jobs:
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_LOCATION: ${{ secrets.AZURE_LOCATION || 'southindia' }}
       AZD_ENVIRONMENT_NAME: ${{ secrets.AZD_ENVIRONMENT_NAME || 'azure-aca-aspire-ai-starter' }}
+      AZURE_RESOURCE_NAME_PREFIX: ${{ secrets.AZURE_RESOURCE_NAME_PREFIX || 'aih-azure-aca-aspire-ai-starter' }}
       AZURE_SQL_LOCATION: ${{ secrets.AZURE_SQL_LOCATION || '' }}
+      AZURE_SQL_DATABASE_NAME: ${{ secrets.AZURE_SQL_DATABASE_NAME || 'acaaspireaistarter' }}
       SQL_PROVISIONING_MODE: ${{ secrets.SQL_PROVISIONING_MODE || 'provision' }}
       AZURE_SQL_EXISTING_SERVER_NAME: ${{ secrets.AZURE_SQL_EXISTING_SERVER_NAME || '' }}
       AZURE_SQL_EXISTING_DATABASE_NAME: ${{ secrets.AZURE_SQL_EXISTING_DATABASE_NAME || '' }}
@@ -198,6 +204,9 @@ jobs:
 
       - name: Validate Foundry project provisioning mode inputs
         run: bash scripts/ci/validate-foundry-project-mode.sh
+
+      - name: Validate Bicep parameter wiring
+        run: bash scripts/ci/validate-bicep-parameter-wiring.sh
 
       - name: Resolve external image coordinates
         if: env.CONTAINER_REGISTRY_MODE == 'external'

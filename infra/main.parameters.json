@@ -5,8 +5,17 @@
 		"environmentName": {
 			"value": "${AZURE_ENV_NAME}"
 		},
+		"resourceNamePrefix": {
+			"value": "${AZURE_RESOURCE_NAME_PREFIX}"
+		},
 		"location": {
 			"value": "${AZURE_LOCATION}"
+		},
+		"sqlLocation": {
+			"value": "${AZURE_SQL_LOCATION}"
+		},
+		"sqlDatabaseName": {
+			"value": "${AZURE_SQL_DATABASE_NAME}"
 		},
 		"sqlAdminLogin": {
 			"value": "${AZURE_SQL_ADMIN_LOGIN}"

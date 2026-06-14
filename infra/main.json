@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "14193300786230604128"
+      "templateHash": "15220121548557929387"
     }
   },
   "parameters": {
@@ -395,7 +395,8 @@
     "frontendAppName": "frontend",
     "workerAppName": "worker",
     "containerAppsManagedIdentityName": "[format('{0}-cai', variables('baseName'))]",
-    "sqlServerName": "[take(format('{0}-sql', variables('baseName')), 63)]",
+    "sqlLocationSeed": "[take(uniqueString(parameters('sqlLocation')), 4)]",
+    "sqlServerName": "[take(format('{0}-{1}-sql', variables('baseName'), variables('sqlLocationSeed')), 63)]",
     "useExistingSql": "[equals(toLower(parameters('sqlProvisioningMode')), 'existing')]",
     "useManagedRegistry": "[equals(toLower(parameters('containerRegistryMode')), 'managed')]",
     "useExternalRegistry": "[not(variables('useManagedRegistry'))]",

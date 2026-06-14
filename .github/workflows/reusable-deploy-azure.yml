@@ -19,6 +19,8 @@ on:
         required: false
       AZD_ENVIRONMENT_NAME:
         required: false
+      AZURE_RESOURCE_GROUP:
+        required: false
       AZURE_RESOURCE_NAME_PREFIX:
         required: false
       AZURE_SQL_LOCATION:
@@ -121,6 +123,7 @@ jobs:
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_LOCATION: ${{ secrets.AZURE_LOCATION || 'southindia' }}
       AZD_ENVIRONMENT_NAME: ${{ secrets.AZD_ENVIRONMENT_NAME || 'azure-aca-aspire-ai-starter' }}
+      AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP || '' }}
       AZURE_RESOURCE_NAME_PREFIX: ${{ secrets.AZURE_RESOURCE_NAME_PREFIX || 'aih-azure-aca-aspire-ai-starter' }}
       AZURE_SQL_LOCATION: ${{ secrets.AZURE_SQL_LOCATION || '' }}
       AZURE_SQL_DATABASE_NAME: ${{ secrets.AZURE_SQL_DATABASE_NAME || 'acaaspireaistarter' }}
@@ -269,6 +272,12 @@ jobs:
 
       - name: Set azd environment location
         run: bash scripts/ci/set-azd-environment-location.sh
+
+      - name: Show effective azd environment values
+        shell: bash
+        run: |
+          echo "AZD_ENVIRONMENT_NAME=${AZD_ENVIRONMENT_NAME}"
+          azd env get-values | grep -E "AZURE_RESOURCE_GROUP|AZURE_LOCATION|AZURE_SQL_LOCATION|AZURE_ENV_NAME" || true
 
       - name: Verify Azure CLI context
         run: az account show --output table

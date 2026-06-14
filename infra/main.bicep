@@ -201,7 +201,8 @@ var backendAppName = 'backend'
 var frontendAppName = 'frontend'
 var workerAppName = 'worker'
 var containerAppsManagedIdentityName = '${baseName}-cai'
-var sqlServerName = take('${baseName}-sql', 63)
+var sqlLocationSeed = take(uniqueString(sqlLocation), 4)
+var sqlServerName = take('${baseName}-${sqlLocationSeed}-sql', 63)
 var useExistingSql = toLower(sqlProvisioningMode) == 'existing'
 var useManagedRegistry = toLower(containerRegistryMode) == 'managed'
 var useExternalRegistry = !useManagedRegistry

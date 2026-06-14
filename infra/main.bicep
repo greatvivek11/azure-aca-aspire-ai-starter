@@ -173,7 +173,11 @@ param frontendImage string = 'mcr.microsoft.com/azuredocs/containerapps-hellowor
 @description('Container image for the worker app.')
 param workerImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
-var baseName = toLower('${resourceNamePrefix}-${environmentName}')
+// Keep generated resource names short and deterministic so long environment names do not violate provider limits.
+var prefixSlug = take(toLower(replace(resourceNamePrefix, '-', '')), 10)
+var environmentSlug = take(toLower(replace(environmentName, '-', '')), 6)
+var nameSeed = take(uniqueString(subscription().subscriptionId, resourceGroup().id, environmentName), 6)
+var baseName = '${prefixSlug}-${environmentSlug}-${nameSeed}'
 var acrPullRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   '7f951dda-4ed3-4680-a7ca-43fe172d538d'

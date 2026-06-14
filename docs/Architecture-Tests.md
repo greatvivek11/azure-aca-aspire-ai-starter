@@ -1,6 +1,6 @@
 # Architecture Tests
 
-This document explains the architecture tests used to maintain code quality and enforce dependency boundaries in the AI Hub backend.
+This document explains the architecture tests used to maintain code quality and enforce dependency boundaries in the ACA Aspire AI Starter backend.
 
 ## Overview
 
@@ -103,7 +103,7 @@ public void BackendNamespaces_ShouldFollowVerticalSliceStructure()
 
 **Expected namespace structure:**
 ```
-AIHub.Backend
+AcaAspireAiTemplate.Backend
 ├── Features
 │   ├── Health
 │   └── AiPing
@@ -178,7 +178,7 @@ public void BackendFeatures_ShouldBeIndependent()
 
 ```bash
 # Run all tests
-dotnet test copilot-sk.sln
+dotnet test azure-aca-aspire-ai-starter.sln
 
 # Run architecture tests only
 dotnet test src/Backend.Tests/Backend.Tests.csproj
@@ -211,7 +211,7 @@ Tests run automatically in the `validate` job:
 ### Example 1: Accidentally Importing Frontend
 
 **Test**: `BackendProject_ShouldNotHaveDependencyOnFrontend`  
-**Failure**: If someone adds `using AIHub.Frontend;` to backend code
+**Failure**: If someone adds `using AcaAspireAiTemplate.Frontend;` to backend code
 
 ```
 ❌ Backend should never depend on Frontend

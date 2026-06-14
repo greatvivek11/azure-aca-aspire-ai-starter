@@ -141,7 +141,7 @@ To test Dapr service invocation locally without rebuilding containers:
 dapr run --dapr-placement-service-port 50005 &
 
 # Set frontend to use Dapr proxy
-export BACKEND_PROXY_BASE_URL="http://127.0.0.1:3500/v1.0/invoke/aihub-backend/method"
+export BACKEND_PROXY_BASE_URL="http://127.0.0.1:3500/v1.0/invoke/api/method"
 
 # Run Aspire
 cd src/aspire && dotnet run
@@ -158,7 +158,7 @@ cd src/aspire && dotnet run
 - Ensure placement service is running: `ps aux | grep "dapr.*placement"`
 - Check Dapr sidecar logs: `docker logs <container-id>`
 - Verify Dapr metadata: `curl http://localhost:3500/v1.0/metadata`
-- Common error: `"couldn't find service: aihub-backend"` means placement is disconnected
+- Common error: `"couldn't find service: api"` means placement is disconnected
 
 ### HMR not working in vite-dev mode
 - Ensure `ASPIRE_FRONTEND_MODE=vite-dev` is set

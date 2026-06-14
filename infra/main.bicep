@@ -6,6 +6,9 @@ param location string = resourceGroup().location
 @description('Environment name for resource naming and tagging.')
 param environmentName string = 'dev'
 
+@description('Deterministic prefix for Azure resource names.')
+param resourceNamePrefix string = 'aih-azure-aca-aspire-ai-starter'
+
 @description('Optional tags applied to all resources.')
 param tags object = {}
 
@@ -17,7 +20,10 @@ param sqlAdminLogin string
 param sqlAdminPassword string
 
 @description('Azure SQL database name used by backend API.')
-param sqlDatabaseName string = 'copilotsk'
+param sqlDatabaseName string = 'acaaspireaistarter'
+
+@description('Azure SQL server/database location. Defaults to deployment location but can be overridden for regional capacity constraints.')
+param sqlLocation string = location
 
 @allowed([
   'provision'
@@ -91,6 +97,13 @@ param openAiEmbeddingDimensions int = 1536
 @description('OpenAI/Foundry auth mode for backend and worker. managed-identity tries MI first with API-key fallback.')
 param openAiAuthMode string = 'managed-identity'
 
+@allowed([
+  'azure'
+  'local'
+])
+@description('AI runtime mode for backend/worker. Use azure for cloud deployments.')
+param aiMode string = 'azure'
+
 @description('Storage account name override. Leave empty to auto-generate.')
 param storageAccountName string = ''
 
@@ -163,7 +176,11 @@ param frontendImage string = 'mcr.microsoft.com/azuredocs/containerapps-hellowor
 @description('Container image for the worker app.')
 param workerImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
-var baseName = 'aih-${environmentName}-${uniqueString(resourceGroup().id)}'
+// Keep generated resource names short and deterministic so long environment names do not violate provider limits.
+var prefixSlug = take(toLower(replace(resourceNamePrefix, '-', '')), 10)
+var environmentSlug = take(toLower(replace(environmentName, '-', '')), 6)
+var nameSeed = take(uniqueString(subscription().subscriptionId, resourceGroup().id, environmentName), 6)
+var baseName = '${prefixSlug}-${environmentSlug}-${nameSeed}'
 var acrPullRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   '7f951dda-4ed3-4680-a7ca-43fe172d538d'
@@ -184,7 +201,8 @@ var backendAppName = 'backend'
 var frontendAppName = 'frontend'
 var workerAppName = 'worker'
 var containerAppsManagedIdentityName = '${baseName}-cai'
-var sqlServerName = take('${baseName}-sql', 63)
+var sqlLocationSeed = take(uniqueString(sqlLocation), 4)
+var sqlServerName = take('${baseName}-${sqlLocationSeed}-sql', 63)
 var useExistingSql = toLower(sqlProvisioningMode) == 'existing'
 var useManagedRegistry = toLower(containerRegistryMode) == 'managed'
 var useExternalRegistry = !useManagedRegistry
@@ -199,19 +217,19 @@ var resolvedFrontendMinReplicas = int(frontendMinReplicas)
 var resolvedWorkerMinReplicas = int(workerMinReplicas)
 var resolvedSqlServerName = useExistingSql ? existingSqlServerName : sqlServerName
 var resolvedSqlDatabaseName = useExistingSql ? existingSqlDatabaseName : sqlDatabaseName
-var generatedStorageAccountName = toLower(take('st${uniqueString(resourceGroup().id, environmentName)}', 24))
+var generatedStorageAccountName = toLower(take(replace('${baseName}st', '-', ''), 24))
 var resolvedStorageAccountName = empty(storageAccountName) ? generatedStorageAccountName : toLower(storageAccountName)
-var generatedSearchServiceName = toLower(take(replace('${baseName}srch', '-', ''), 60))
+var generatedSearchServiceName = toLower(take('${baseName}-srch', 60))
 var resolvedSearchServiceName = empty(searchServiceName) ? generatedSearchServiceName : toLower(searchServiceName)
 var useExistingSearch = toLower(searchProvisioningMode) == 'existing'
-var generatedAiServicesAccountName = toLower(take(replace('${baseName}aoai', '-', ''), 24))
+var generatedAiServicesAccountName = toLower(take('${baseName}-aoai', 64))
 var resolvedAiServicesAccountName = empty(aiServicesAccountName)
   ? generatedAiServicesAccountName
   : toLower(aiServicesAccountName)
 var normalizedSearchAuthMode = toLower(searchAuthMode) == 'managed-identity' ? 'managed-identity' : 'api-key'
-var backendAppId = 'aihub-backend'
-var frontendAppId = 'aihub-frontend'
-var workerAppId = 'aihub-worker'
+var backendAppId = 'api'
+var frontendAppId = 'web'
+var workerAppId = 'worker'
 
 // Log Analytics is required for ACA diagnostics and troubleshooting.
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = if (logAnalyticsEnabled) {
@@ -358,7 +376,7 @@ resource aiSearch 'Microsoft.Search/searchServices@2023-11-01' = if (!useExistin
   location: searchLocation
   tags: tags
   sku: {
-    name: 'basic'
+    name: 'free'
   }
   properties: {
     replicaCount: 1
@@ -597,7 +615,7 @@ var externalRegistryConfiguration = useManagedRegistry
 // Azure SQL logical server for backend transactional data.
 resource sqlServer 'Microsoft.Sql/servers@2023-08-01-preview' = if (!useExistingSql) {
   name: sqlServerName
-  location: location
+  location: sqlLocation
   tags: tags
   properties: {
     administratorLogin: sqlAdminLogin
@@ -630,17 +648,18 @@ resource sqlAllowAzureServices 'Microsoft.Sql/servers/firewallRules@2023-08-01-p
 resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-08-01-preview' = if (!useExistingSql) {
   parent: sqlServer
   name: sqlDatabaseName
-  location: location
+  location: sqlLocation
   tags: tags
   sku: {
-    name: 'HS_Gen5_2'
-    tier: 'Hyperscale'
-    capacity: 2
+    name: 'GP_S_Gen5_1'
+    tier: 'GeneralPurpose'
+    capacity: 1
     family: 'Gen5'
   }
   properties: {
     collation: 'SQL_Latin1_General_CP1_CI_AS'
     maxSizeBytes: 2147483648
+    minCapacity: json('0.5')
     autoPauseDelay: 60
   }
 }
@@ -682,6 +701,10 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'backend'
           image: backendImage
           env: concat(backendAppInsightsEnv, [
+            {
+              name: 'AI_MODE'
+              value: aiMode
+            }
             {
               name: 'AZURE_OPENAI_API_KEY'
               secretRef: 'azure-openai-api-key'
@@ -809,6 +832,10 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
           image: frontendImage
           env: concat(frontendAppInsightsEnv, [
             {
+              name: 'AI_MODE'
+              value: aiMode
+            }
+            {
               name: 'BACKEND_DAPR_BASE_URL'
               value: 'http://localhost:3500/v1.0/invoke/${backendAppId}/method'
             }
@@ -868,6 +895,10 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'worker'
           image: workerImage
           env: concat(workerAppInsightsEnv, [
+            {
+              name: 'AI_MODE'
+              value: aiMode
+            }
             {
               name: 'AZURE_OPENAI_API_KEY'
               secretRef: 'azure-openai-api-key'

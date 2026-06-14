@@ -1,4 +1,4 @@
-namespace AIHub.Backend.Domain;
+namespace AcaAspireAiTemplate.Backend.Domain;
 
 public class Document
 {

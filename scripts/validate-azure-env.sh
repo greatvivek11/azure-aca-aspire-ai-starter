@@ -8,7 +8,7 @@
 set -euo pipefail
 
 SUBSCRIPTION_ID="${1:-}"
-RESOURCE_GROUP="${2:-aihub-rg}"
+RESOURCE_GROUP="${2:-azure-aca-aspire-ai-starter-rg}"
 LOCATION="${3:-eastus}"
 
 if [ -z "$SUBSCRIPTION_ID" ]; then

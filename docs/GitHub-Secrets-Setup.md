@@ -20,7 +20,7 @@ Currently, we store sensitive credentials in GitHub Secrets instead of Azure Key
 Use this if you want the shortest path to first successful deployment.
 
 1. Create CI service principal and capture IDs.
-2. Grant CI principal RBAC on `aihub-rg`:
+2. Grant CI principal RBAC on `azure-aca-aspire-ai-starter-rg`:
   - `Contributor`
   - `User Access Administrator`
 3. Create GitHub Environment `dev` (UI or `gh api`).
@@ -125,7 +125,7 @@ When `SQL_PROVISIONING_MODE=existing`, both existing-name secrets are required.
 
 | Secret Name | Description | Default |
 |---|---|---|
-| `AZD_ENVIRONMENT_NAME` | Azure Developer CLI environment name | `copilot-sk-azure` |
+| `AZD_ENVIRONMENT_NAME` | Azure Developer CLI environment name | `azure-aca-aspire-ai-starter` |
 | `CONTAINER_REGISTRY_MODE` | `external` for public/authenticated external images, `managed` to provision ACR and use `azd deploy` | `external` |
 | `EXTERNAL_REGISTRY_SERVER` | Registry hostname used in external mode | `ghcr.io` |
 | `EXTERNAL_REGISTRY_USERNAME` | Required for authenticated non-GHCR registries | empty |
@@ -160,7 +160,14 @@ Important GHCR note:
 ```bash
 # Create a service principal scoped to the deployment resource group
 SUBSCRIPTION_ID="<your-subscription-id>"
-RESOURCE_GROUP="aihub-rg"
+RESOURCE_GROUP="azure-aca-aspire-ai-starter-rg"
+LOCATION="southindia"
+
+# Create the resource group first (no-op if it already exists)
+az group create \
+  --subscription "$SUBSCRIPTION_ID" \
+  --name "$RESOURCE_GROUP" \
+  --location "$LOCATION"
 
 az ad sp create-for-rbac \
   --name "github-actions-copilot" \
@@ -189,7 +196,7 @@ Example (resource-group scope):
 
 ```bash
 SUBSCRIPTION_ID="<subscription-id>"
-RESOURCE_GROUP="aihub-rg"
+RESOURCE_GROUP="azure-aca-aspire-ai-starter-rg"
 APP_ID="<AZURE_CLIENT_ID>"
 
 SP_OBJECT_ID=$(az ad sp show --id "$APP_ID" --query id -o tsv)
@@ -249,10 +256,11 @@ GITHUB_REPO="<your-github-repo>"
 GITHUB_ENVIRONMENT="dev"
 AZURE_CLIENT_ID="<appId-from-step-1>"
 
-# Add federated credentials to the Entra application (service principal)
+CREDENTIAL_NAME="github-actions-env-${GITHUB_ENVIRONMENT}"
+
 cat > federated-credential.json <<EOF
 {
-  "name": "github-actions-env-${GITHUB_ENVIRONMENT}",
+  "name": "${CREDENTIAL_NAME}",
   "issuer": "https://token.actions.githubusercontent.com",
   "subject": "repo:${GITHUB_OWNER}/${GITHUB_REPO}:environment:${GITHUB_ENVIRONMENT}",
   "description": "GitHub Actions environment ${GITHUB_ENVIRONMENT}",
@@ -262,10 +270,34 @@ cat > federated-credential.json <<EOF
 }
 EOF
 
-az ad app federated-credential create \
-  --id "$AZURE_CLIENT_ID" \
-  --parameters @federated-credential.json
+# Upsert: update if already exists, create otherwise
+EXISTING=$(az ad app federated-credential list --id "$AZURE_CLIENT_ID" \
+  --query "[?name=='${CREDENTIAL_NAME}'].name" -o tsv)
+
+if [[ -n "$EXISTING" ]]; then
+  echo "Updating existing federated credential '${CREDENTIAL_NAME}'..."
+  az ad app federated-credential update \
+    --id "$AZURE_CLIENT_ID" \
+    --federated-credential-id "$CREDENTIAL_NAME" \
+    --parameters @federated-credential.json
+else
+  echo "Creating federated credential '${CREDENTIAL_NAME}'..."
+  az ad app federated-credential create \
+    --id "$AZURE_CLIENT_ID" \
+    --parameters @federated-credential.json
+fi
 ```
+
+Verify the credential was created/updated correctly:
+
+```bash
+az ad app federated-credential list \
+  --id "$AZURE_CLIENT_ID" \
+  --query "[].{name:name, subject:subject, issuer:issuer}" \
+  -o table
+```
+
+Expected output shows `subject` as `repo:<owner>/<repo>:environment:<environment>`. If the subject still shows an old repo name, re-run the upsert block above.
 
 If you deploy to multiple environments, create one federated credential per environment
 subject (for example: `dev`, `staging`, `prod`).
@@ -320,7 +352,7 @@ AZURE_SQL_ADMIN_PASSWORD: <azure-sql-admin-password>
 
 #### Optional Configuration:
 ```
-AZD_ENVIRONMENT_NAME: copilot-sk-azure
+AZD_ENVIRONMENT_NAME: azure-aca-aspire-ai-starter
 CONTAINER_REGISTRY_MODE: external
 EXTERNAL_REGISTRY_SERVER: ghcr.io
 ENABLE_LOG_ANALYTICS: false

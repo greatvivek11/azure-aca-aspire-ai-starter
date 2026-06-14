@@ -9,9 +9,15 @@ if ($mode -eq 'existing') {
 $sqlServer = azd env get-value AZURE_SQL_SERVER_NAME
 $sqlDatabase = azd env get-value AZURE_SQL_DATABASE_NAME
 $uamiName = azd env get-value UAMI_NAME
+$uamiClientId = azd env get-value UAMI_CLIENT_ID
 
-if ([string]::IsNullOrWhiteSpace($sqlServer) -or [string]::IsNullOrWhiteSpace($sqlDatabase) -or [string]::IsNullOrWhiteSpace($uamiName)) {
-  throw 'Missing required azd outputs for SQL role grant. Expected AZURE_SQL_SERVER_NAME, AZURE_SQL_DATABASE_NAME, and UAMI_NAME.'
+if (
+  [string]::IsNullOrWhiteSpace($sqlServer) -or
+  [string]::IsNullOrWhiteSpace($sqlDatabase) -or
+  [string]::IsNullOrWhiteSpace($uamiName) -or
+  [string]::IsNullOrWhiteSpace($uamiClientId)
+) {
+  throw 'Missing required azd outputs for SQL role grant. Expected AZURE_SQL_SERVER_NAME, AZURE_SQL_DATABASE_NAME, UAMI_NAME, and UAMI_CLIENT_ID.'
 }
 
 $token = az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv
@@ -22,13 +28,16 @@ if ([string]::IsNullOrWhiteSpace($token)) {
 $connectionString = "Server=tcp:$sqlServer.database.windows.net,1433;Initial Catalog=$sqlDatabase;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
 
 $escapedUamiName = $uamiName.Replace("'", "''")
+$escapedUamiClientId = $uamiClientId.Replace("'", "''")
 
 $sql = @"
   DECLARE @principal sysname = N'$escapedUamiName';
+  DECLARE @principalClientId uniqueidentifier = '$escapedUamiClientId';
+  DECLARE @principalSid nvarchar(100) = CONVERT(varchar(100), CONVERT(varbinary(16), @principalClientId), 1);
 
   IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = @principal)
   BEGIN
-    DECLARE @createUserSql nvarchar(max) = N'CREATE USER [' + REPLACE(@principal, ']', ']]') + N'] FROM EXTERNAL PROVIDER;';
+    DECLARE @createUserSql nvarchar(max) = N'CREATE USER [' + REPLACE(@principal, ']', ']]') + N'] WITH SID = ' + @principalSid + N', TYPE = E;';
     EXEC(@createUserSql);
   END;
 

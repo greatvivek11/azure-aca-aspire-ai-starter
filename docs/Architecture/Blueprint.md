@@ -1,6 +1,6 @@
-# 🛠️ Technical Blueprint: Cloud-Native AI Hub
+# 🛠️ Technical Blueprint: Cloud-Native ACA Aspire AI Starter
 
-**A detailed guide for building the AI Knowledge Hub on Azure, using Dapr, Cosmos DB, and the Hugging Face Inference Router.**
+**A detailed guide for building the Azure ACA Aspire AI Starter Template on Azure, using Dapr, Azure AI Search, and Azure AI Foundry.**
 
 ---
 
@@ -9,8 +9,8 @@
 * **Semantic Kernel**: Microsoft’s open-source SDK for AI orchestration. [GitHub](https://github.com/microsoft/semantic-kernel) | [Docs](https://learn.microsoft.com/en-us/semantic-kernel/overview/)
 * **Azure Container Apps**: Managed environment for running microservices and containerized applications. [Docs](https://learn.microsoft.com/en-us/azure/container-apps/)
 * **Dapr**: APIs for building resilient, stateful, and event-driven distributed applications. [Docs](https://docs.dapr.io/)
-* **Azure Cosmos DB for MongoDB (vCore)**: A powerful, scalable NoSQL database with integrated vector search capabilities. [Vector Search Docs](https://learn.microsoft.com/en-us/azure/cosmos-db/mongodb/vcore/vector-search)
-* **Hugging Face Router**: A proxy for routing requests to various open-source models. [Website](https://huggingface.co/inference-endpoints/router)
+* **Azure AI Search**: Managed retrieval and vector indexing for grounded responses. [Docs](https://learn.microsoft.com/en-us/azure/search/)
+* **Azure AI Foundry / Azure OpenAI**: Managed model hosting and inference for chat and embeddings. [Docs](https://learn.microsoft.com/en-us/azure/ai-foundry/)
 
 ## 📋 A. Architecture & Technology Stack
 
@@ -22,11 +22,11 @@
 
   * Azure SQL Database (relational data)
   * Azure Blob Storage (file storage)
-  * Azure Cosmos DB (vector embeddings & memory)
+  * Azure AI Search (vector embeddings & retrieval)
 * **AI Orchestration**:
 
   * Semantic Kernel
-  * Hugging Face Inference Router via SK OpenAI connector
+  * Azure AI Foundry / Azure OpenAI for chat + embeddings
 * **IaC**: Bicep/Terraform scripts to provision ACA, SQL, Blob, Cosmos, network.
 * **Deployment**: GitHub Actions → Azure Container Apps via `azd`, with service definitions in `azure.yaml`.
 * **Observability**: ACA logs, optional App Insights + Log Analytics (free-tier friendly via sampling).

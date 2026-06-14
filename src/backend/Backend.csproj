@@ -5,8 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <PublishAot>false</PublishAot>
-    <AssemblyName>AIHub.Backend</AssemblyName>
-    <RootNamespace>AIHub.Backend</RootNamespace>
+    <AssemblyName>AcaAspireAiTemplate.Backend</AssemblyName>
+    <RootNamespace>AcaAspireAiTemplate.Backend</RootNamespace>
     <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
     <UserSecretsId>2db2f4b9-dec1-4def-b7b5-107b001c0459</UserSecretsId>
   </PropertyGroup>

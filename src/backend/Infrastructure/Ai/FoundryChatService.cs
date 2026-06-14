@@ -1,7 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-namespace AIHub.Backend.Infrastructure.Ai;
+namespace AcaAspireAiTemplate.Backend.Infrastructure.Ai;
 
 public sealed class FoundryChatService : IAiService
 {

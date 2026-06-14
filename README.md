@@ -1,4 +1,4 @@
-# 🤖 AI-Powered Knowledge Hub
+# 🤖 Azure ACA Aspire AI Starter Template
 
 This repository contains the source code for a modern, cloud-native AI assistant designed to serve as an internal "Copilot" for enterprise knowledge. It allows users to chat with, upload, and analyze company documents using a sophisticated, scalable, and secure architecture.
 
@@ -25,11 +25,11 @@ This project is built using a modern, distributed architecture designed for scal
 -   **Frontend**: A **React** Single Page Application (SPA) built with **Vite**, served by a lightweight **Hono** Node application, and managed with **npm**.
 -   **Cloud Platform**: Hosted entirely on **Azure Container Apps**, with a containerized frontend and backend.
 -   **Service Communication**: **Dapr (Distributed Application Runtime)** is used for secure, internal service-to-service communication.
--   **AI Orchestration**: **Semantic Kernel** is used to orchestrate calls to the **Hugging Face Inference Router**, providing flexibility in model choice.
+-   **AI Orchestration**: **Azure AI Foundry / Azure OpenAI** powers chat and embeddings for the template's minimal AI workflow.
 -   **Data Storage**:
     -   **Azure SQL Database**: For structured, relational data.
     -   **Azure Blob Storage**: For all uploaded documents and files.
-    -   **Azure Cosmos DB**: For vector embeddings to power the RAG pipeline.
+    -   **Azure AI Search**: For vector indexing and retrieval in the RAG pipeline.
 -   **Security**: Authentication is handled by **Microsoft Entra ID** using the **MSAL** library. All communication between the backend and Azure services uses passwordless **Managed Identities**.
 -   **DevOps**: Infrastructure is defined with **Bicep (IaC)** and deployed automatically via a **GitHub Actions** CI/CD pipeline.
 
@@ -66,26 +66,37 @@ Copy the example environment file and fill in your actual values:
 cp src/aspire/.env.example src/aspire/.env
 ```
 
-Edit `src/aspire/.env` and fill in your Azure OpenAI/Foundry and RAG configuration values.
+Edit `src/aspire/.env` and choose one AI mode:
 
-At minimum, set these values for backend + RAG flows:
-- `AZURE_OPENAI_API_KEY`
-- `AZURE_OPENAI_MODEL_ID`
-- `AZURE_OPENAI_ENDPOINT`
-- `AZURE_OPENAI_AUTH_MODE` (`api-key` or `managed-identity`, MI-first with key fallback)
-- `AZURE_OPENAI_EMBEDDING_MODEL_ID`
-- `AZURE_OPENAI_EMBEDDING_DIMENSIONS`
+- **Local mode (default)**: `AI_MODE=local` (uses local Ollama + Qdrant containers)
+  - `OLLAMA_CHAT_MODEL` (default `gemma3:4b-it-qat`)
+  - `OLLAMA_EMBED_MODEL` (default `nomic-embed-text`)
+  - `OLLAMA_EMBED_DIMENSIONS` (default `768`)
+  - `QDRANT_COLLECTION` (default `documents`)
+  - Storage defaults point to local Azurite via `AZURE_STORAGE_CONNECTION_STRING` and `AZURE_STORAGE_PUBLIC_BLOB_ENDPOINT`
+  - Uploads are proxied through the backend (no browser-to-Azurite CORS setup required)
+  - Backend/worker preload the configured Ollama models at startup; the downloaded models persist in the `ollama-data` Docker volume for later restarts
+- **Azure mode**: `AI_MODE=azure` (uses Azure OpenAI/Foundry + Azure AI Search)
+  - `AZURE_OPENAI_API_KEY`
+  - `AZURE_OPENAI_MODEL_ID`
+  - `AZURE_OPENAI_ENDPOINT`
+  - `AZURE_OPENAI_AUTH_MODE` (`api-key` or `managed-identity`, MI-first with key fallback)
+  - `AZURE_OPENAI_EMBEDDING_MODEL_ID`
+  - `AZURE_OPENAI_EMBEDDING_DIMENSIONS`
+  - `AZURE_SEARCH_ENDPOINT`
+  - `AZURE_SEARCH_INDEX_NAME`
+
+For both modes, uploads/ingestion use blob storage settings:
 - `AZURE_STORAGE_ACCOUNT_NAME` (required for MI-first blob auth)
 - `AZURE_STORAGE_CONNECTION_STRING`
 - `AZURE_STORAGE_CONTAINER_NAME`
+- `AZURE_STORAGE_PUBLIC_BLOB_ENDPOINT` (optional; local default is `http://localhost:10000/devstoreaccount1`)
 - `AZURE_STORAGE_AUTH_MODE` (`api-key` or `managed-identity`, MI-first with connection-string fallback)
-- `AZURE_SEARCH_ENDPOINT`
-- `AZURE_SEARCH_INDEX_NAME`
+- `BLOB_CORS_ALLOWED_ORIGINS_JSON` (JSON array string for direct browser blob uploads in Azure/signed-URL flows)
 
 Optional tuning:
 - `UPLOAD_URL_EXPIRY_MINUTES` (default 15, min 5, max 120)
 - `AZURE_SEARCH_AUTH_MODE` (`api-key` default, or `managed-identity` for ACA MI-first search auth)
-- `BLOB_CORS_ALLOWED_ORIGINS_JSON` (JSON array string for SAS browser upload origins in infra provisioning)
 
 ### 3. Run the Application
 Navigate to the Aspire project directory and run the application:
@@ -178,7 +189,7 @@ For detailed information, see [Architecture-Tests.md](./docs/Architecture-Tests.
 ### Quick Bootstrap Checklist (5-10 min)
 
 1. Create CI service principal and capture `AZURE_CLIENT_ID` + `AZURE_TENANT_ID`.
-2. Grant CI principal RBAC on `aihub-rg`:
+2. Grant CI principal RBAC on `azure-aca-aspire-ai-starter-rg`:
    - `Contributor`
    - `User Access Administrator`
 3. Create GitHub Environment `dev`.
@@ -187,6 +198,7 @@ For detailed information, see [Architecture-Tests.md](./docs/Architecture-Tests.
 5. Add required repository secrets:
    - `AZURE_SUBSCRIPTION_ID`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`
    - `AZURE_SQL_ADMIN_LOGIN`, `AZURE_SQL_ADMIN_PASSWORD`
+   - `AI_MODE` (optional, defaults to `azure` in deploy workflow)
    - `AI_SERVICES_PROVISIONING_MODE` (optional, defaults to `provision`)
    - `AZURE_OPENAI_AUTH_MODE`, `AZURE_STORAGE_AUTH_MODE`, `AZURE_AI_FOUNDRY_PROJECT_NAME` (recommended overrides)
    - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_MODEL_ID`, `AZURE_OPENAI_ENDPOINT` (**only** if `AI_SERVICES_PROVISIONING_MODE=external`)
@@ -223,7 +235,7 @@ For detailed setup instructions, see [GitHub-Secrets-Setup.md](./docs/GitHub-Sec
 
 ```bash
 git add .
-git commit -m "Initial commit: AI Hub with GitHub Actions CI/CD"
+git commit -m "Initial commit: ACA Aspire AI Starter with GitHub Actions CI/CD"
 git push origin main
 ```
 
@@ -281,10 +293,10 @@ Before deploying to Azure, validate that required resources exist:
 
 ```bash
 # Bash
-bash scripts/validate-azure-env.sh <SUBSCRIPTION_ID> aihub-rg
+bash scripts/validate-azure-env.sh <SUBSCRIPTION_ID> azure-aca-aspire-ai-starter-rg
 
 # PowerShell
-pwsh scripts/validate-azure-env.ps1 -SubscriptionId <SUBSCRIPTION_ID> -ResourceGroup aihub-rg
+pwsh scripts/validate-azure-env.ps1 -SubscriptionId <SUBSCRIPTION_ID> -ResourceGroup azure-aca-aspire-ai-starter-rg
 ```
 
 This script checks for:

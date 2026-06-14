@@ -1,7 +1,7 @@
 {
-  "name": "aihub-frontend",
+  "name": "azure-aca-aspire-ai-starter-web",
   "version": "1.0.0",
-  "description": "React frontend for AI Hub",
+  "description": "React frontend for ACA Aspire AI Starter",
   "main": "server.js",
   "type": "module",
   "scripts": {

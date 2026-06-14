@@ -1,6 +1,6 @@
 # 🏛️ Backend Architecture
 
-This document outlines the architectural decisions and patterns for the backend service of the AI-Powered Knowledge Hub. It separates the current implementation in the repository from the target direction for later phases.
+This document outlines the architectural decisions and patterns for the backend service of the Azure ACA Aspire AI Starter Template. It separates the current implementation in the repository from the target direction for later phases.
 
 ## 🎯 Core Principles
 

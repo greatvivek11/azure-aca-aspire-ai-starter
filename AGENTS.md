@@ -9,7 +9,7 @@ This repository is a cloud-native AI application with four main code areas under
 
 ## Source Of Truth
 - Prefer the current repository layout and project manifests over narrative docs when they conflict.
-- Treat `copilot-sk.sln`, `azure.yaml`, `src/*/*.csproj`, `src/frontend/package.json`, and `src/aspire/AppHost.cs` as implementation truth.
+- Treat `azure-aca-aspire-ai-starter.sln`, `azure.yaml`, `src/*/*.csproj`, `src/frontend/package.json`, and `src/aspire/AppHost.cs` as implementation truth.
 - Some docs describe planned or earlier states of the system. If a doc conflicts with live code, follow the live code and call out the mismatch.
 
 ## Architecture
@@ -19,7 +19,7 @@ This repository is a cloud-native AI application with four main code areas under
 - Azure deployment configuration is defined in `azure.yaml` and `infra/`.
 
 ## Build And Test
-- Build the .NET solution from the repo root with `dotnet build copilot-sk.sln`.
+- Build the .NET solution from the repo root with `dotnet build azure-aca-aspire-ai-starter.sln`.
 - Run backend architecture tests with `dotnet test src/Backend.Tests/Backend.Tests.csproj`.
 - Frontend commands should run from `src/frontend` and use npm because `package-lock.json` is present.
 - For local full-stack runs, prefer the Aspire host in `src/aspire`.

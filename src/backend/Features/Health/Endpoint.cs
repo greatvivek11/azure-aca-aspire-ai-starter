@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 
-namespace AIHub.Backend.Features.Health;
+namespace AcaAspireAiTemplate.Backend.Features.Health;
 
 public static class Endpoint
 {

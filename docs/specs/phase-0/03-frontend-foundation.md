@@ -27,7 +27,7 @@ To scaffold a minimal Vite + React application served by a Hono Node host that a
 
 -   **Goal:** A simple UI to display the status of core system components.
 -   **Acceptance Criteria:**
-    -   [ ] The main page of the application is titled "AI Hub - System Status".
+    -   [ ] The main page of the application is titled "ACA Aspire AI Starter - System Status".
     -   [ ] The UI displays a section for "Backend API Status".
     -   [ ] The UI displays a section for "Worker Service Status".
     -   [ ] The UI displays a section for "AI Service Status".
@@ -39,11 +39,11 @@ To scaffold a minimal Vite + React application served by a Hono Node host that a
 -   **Acceptance Criteria:**
     -   [ ] **Backend Health Check:**
         -   [ ] On page load, the application makes an asynchronous `GET` request to the backend's `/v1/health` endpoint.
-        -   [ ] This request **must** be routed through the Hono host or Dapr sidecar, using the Dapr App ID of the backend where applicable (e.g., `http://localhost:3500/v1.0/invoke/aihub-backend/method/v1/health`).
+        -   [ ] This request **must** be routed through the Hono host or Dapr sidecar, using the Dapr App ID of the backend where applicable (e.g., `http://localhost:3500/v1.0/invoke/api/method/v1/health`).
         -   [ ] The "Backend API Status" section updates to show "Healthy" (or an error state) based on the API response.
     -   [ ] **Worker Health Check:**
         -   [ ] On page load, the application makes an asynchronous `GET` request to the worker's `/v1/health` endpoint.
-        -   [ ] This request **must** be routed through the Hono host or Dapr sidecar, using the Dapr App ID of the worker where applicable (e.g., `http://localhost:3500/v1.0/invoke/aihub-worker/method/v1/health`).
+        -   [ ] This request **must** be routed through the Hono host or Dapr sidecar, using the Dapr App ID of the worker where applicable (e.g., `http://localhost:3500/v1.0/invoke/worker/method/v1/health`).
         -   [ ] The "Worker Service Status" section updates to show "Healthy" (or an error state) based on the API response.
     -   [ ] **AI Service Ping:**
         -   [ ] When the "Ping AI Service" button is clicked, the application makes a `GET` request to the backend's `/v1/ping-ai` endpoint via the Hono host or the Dapr sidecar.

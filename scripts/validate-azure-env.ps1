@@ -10,7 +10,7 @@ param(
     [string]$SubscriptionId,
     
     [Parameter(Mandatory=$false)]
-    [string]$ResourceGroup = "aihub-rg",
+    [string]$ResourceGroup = "azure-aca-aspire-ai-starter-rg",
     
     [Parameter(Mandatory=$false)]
     [string]$Location = "eastus"

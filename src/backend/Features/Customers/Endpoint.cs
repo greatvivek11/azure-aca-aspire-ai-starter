@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Data.SqlClient;
 
-namespace AIHub.Backend.Features.Customers;
+namespace AcaAspireAiTemplate.Backend.Features.Customers;
 
 public static class Endpoint
 {

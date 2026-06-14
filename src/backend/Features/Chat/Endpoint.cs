@@ -1,12 +1,12 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using AIHub.Backend.Infrastructure.Ai;
+using AcaAspireAiTemplate.Backend.Infrastructure.Ai;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 
-namespace AIHub.Backend.Features.Chat;
+namespace AcaAspireAiTemplate.Backend.Features.Chat;
 
 public static class Endpoint
 {
@@ -27,21 +27,38 @@ public static class Endpoint
                     return Results.BadRequest("RAG mode is not configured. Missing search endpoint/index or usable search authentication.");
                 }
 
-                var embedding = await GenerateEmbeddingAsync(
-                    request.Message,
-                    options.AzureOpenAi.Endpoint,
-                    options.AzureOpenAi.ApiKey,
-                    options.OpenAiAuthMode,
-                    options.EmbeddingModelId,
-                    options.EmbeddingDimensions,
-                    options.ManagedIdentityClientId,
-                    httpClientFactory);
+                List<SearchChunkDocument> searchResults;
+                if (options.IsLocalMode)
+                {
+                    var embedding = await GenerateLocalEmbeddingAsync(
+                        request.Message,
+                        options.OllamaBaseUrl,
+                        options.EmbeddingModelId,
+                        httpClientFactory);
+                    searchResults = await SearchRelevantChunksFromQdrantAsync(
+                        embedding,
+                        request.DocumentId,
+                        options,
+                        httpClientFactory);
+                }
+                else
+                {
+                    var embedding = await GenerateEmbeddingAsync(
+                        request.Message,
+                        options.AzureOpenAi!.Endpoint,
+                        options.AzureOpenAi.ApiKey,
+                        options.OpenAiAuthMode,
+                        options.EmbeddingModelId,
+                        options.EmbeddingDimensions,
+                        options.ManagedIdentityClientId,
+                        httpClientFactory);
 
-                var searchResults = await SearchRelevantChunksWithFallbackAsync(
-                    embedding,
-                    request.DocumentId,
-                    options,
-                    httpClientFactory);
+                    searchResults = await SearchRelevantChunksWithFallbackAsync(
+                        embedding,
+                        request.DocumentId,
+                        options,
+                        httpClientFactory);
+                }
 
                 var citations = new List<ChatCitation>();
                 var contextParts = new List<string>();
@@ -125,6 +142,36 @@ Question:
 
         response.EnsureSuccessStatusCode();
         return await ParseEmbeddingAsync(response);
+    }
+
+    private static async Task<float[]> GenerateLocalEmbeddingAsync(
+        string text,
+        string ollamaBaseUrl,
+        string embeddingModel,
+        IHttpClientFactory httpClientFactory)
+    {
+        using var client = httpClientFactory.CreateClient();
+        await EnsureOllamaModelPulledAsync(client, ollamaBaseUrl, embeddingModel);
+
+        var requestBody = new
+        {
+            model = embeddingModel,
+            prompt = text
+        };
+        using var payload = new StringContent(
+            JsonSerializer.Serialize(requestBody),
+            Encoding.UTF8,
+            "application/json");
+        using var response = await client.PostAsync($"{ollamaBaseUrl.TrimEnd('/')}/api/embeddings", payload);
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement
+            .GetProperty("embedding")
+            .EnumerateArray()
+            .Select(x => x.GetSingle())
+            .ToArray();
     }
 
     private static bool IsAuthFailure(System.Net.HttpStatusCode statusCode) =>
@@ -235,6 +282,72 @@ Question:
         }
 
         return await SearchRelevantChunksAsync(embedding, documentId, options, httpClientFactory);
+    }
+
+    private static async Task<List<SearchChunkDocument>> SearchRelevantChunksFromQdrantAsync(
+        float[] embedding,
+        Guid? documentId,
+        ChatOptions options,
+        IHttpClientFactory httpClientFactory)
+    {
+        using var client = httpClientFactory.CreateClient();
+        var searchPayload = new Dictionary<string, object?>
+        {
+            ["vector"] = embedding,
+            ["limit"] = 5,
+            ["with_payload"] = true
+        };
+
+        if (documentId.HasValue)
+        {
+            searchPayload["filter"] = new
+            {
+                must = new[]
+                {
+                    new
+                    {
+                        key = "documentId",
+                        match = new { value = documentId.Value.ToString() }
+                    }
+                }
+            };
+        }
+
+        using var payload = new StringContent(
+            JsonSerializer.Serialize(searchPayload),
+            Encoding.UTF8,
+            "application/json");
+        using var response = await client.PostAsync(
+            $"{options.QdrantUrl.TrimEnd('/')}/collections/{options.QdrantCollection}/points/search",
+            payload);
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var document = JsonDocument.Parse(json);
+        var chunks = new List<SearchChunkDocument>();
+        if (!document.RootElement.TryGetProperty("result", out var values) || values.ValueKind != JsonValueKind.Array)
+        {
+            return chunks;
+        }
+
+        foreach (var element in values.EnumerateArray())
+        {
+            if (!element.TryGetProperty("payload", out var payloadElement))
+            {
+                continue;
+            }
+
+            chunks.Add(new SearchChunkDocument
+            {
+                Id = element.TryGetProperty("id", out var idElement) ? idElement.ToString() : string.Empty,
+                DocumentId = payloadElement.TryGetProperty("documentId", out var documentIdElement) ? documentIdElement.GetString() ?? string.Empty : string.Empty,
+                ChunkId = payloadElement.TryGetProperty("chunkId", out var chunkIdElement) ? chunkIdElement.GetString() ?? string.Empty : string.Empty,
+                FileName = payloadElement.TryGetProperty("fileName", out var fileNameElement) ? fileNameElement.GetString() ?? string.Empty : string.Empty,
+                Content = payloadElement.TryGetProperty("content", out var contentElement) ? contentElement.GetString() ?? string.Empty : string.Empty
+            });
+        }
+
+        return chunks;
     }
 
     private static async Task<List<SearchChunkDocument>> SearchRelevantChunksAsync(
@@ -376,28 +489,51 @@ Question:
         return message.Contains("Managed identity endpoint is not available", StringComparison.OrdinalIgnoreCase)
             || message.Contains("access_token", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static async Task EnsureOllamaModelPulledAsync(HttpClient client, string ollamaBaseUrl, string modelName)
+    {
+        using var payload = new StringContent(
+            JsonSerializer.Serialize(new { name = modelName, stream = false }),
+            Encoding.UTF8,
+            "application/json");
+        using var response = await client.PostAsync($"{ollamaBaseUrl.TrimEnd('/')}/api/pull", payload);
+        if (!response.IsSuccessStatusCode)
+        {
+            var responseBody = await response.Content.ReadAsStringAsync();
+            throw new InvalidOperationException(
+                $"Ollama failed to pull model '{modelName}' (HTTP {(int)response.StatusCode}). Response: {responseBody}");
+        }
+    }
 }
 
 public sealed record ChatOptions(
-    AzureOpenAiRuntimeSettings AzureOpenAi,
+    string AiMode,
+    AzureOpenAiRuntimeSettings? AzureOpenAi,
     string OpenAiAuthMode,
     string EmbeddingModelId,
     int EmbeddingDimensions,
+    string OllamaBaseUrl,
+    string QdrantUrl,
+    string QdrantCollection,
     string SearchEndpoint,
     string SearchIndexName,
     string? SearchApiKey,
     string? ManagedIdentityClientId,
     bool UseManagedIdentity)
 {
+    public bool IsLocalMode => string.Equals(AiMode, "local", StringComparison.OrdinalIgnoreCase);
+
     public bool ManagedIdentityRuntimeAvailable =>
         UseManagedIdentity &&
         !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("IDENTITY_ENDPOINT")) &&
         !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("IDENTITY_HEADER"));
 
     public bool SearchConfigured =>
-        !string.IsNullOrWhiteSpace(SearchEndpoint) &&
-        !string.IsNullOrWhiteSpace(SearchIndexName) &&
-        (ManagedIdentityRuntimeAvailable || !string.IsNullOrWhiteSpace(SearchApiKey));
+        IsLocalMode
+            ? !string.IsNullOrWhiteSpace(QdrantUrl) && !string.IsNullOrWhiteSpace(QdrantCollection)
+            : !string.IsNullOrWhiteSpace(SearchEndpoint) &&
+              !string.IsNullOrWhiteSpace(SearchIndexName) &&
+              (ManagedIdentityRuntimeAvailable || !string.IsNullOrWhiteSpace(SearchApiKey));
 }
 
 internal sealed record ChatRequest(string Message, string? Mode, Guid? DocumentId);

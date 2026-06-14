@@ -1,6 +1,6 @@
-name: copilot-sk-azure
+name: azure-aca-aspire-ai-starter
 metadata:
-  template: copilot-sk-azure@0.1.0
+  template: azure-aca-aspire-ai-starter@0.1.0
 
 env:
   AZURE_LOCATION: southindia

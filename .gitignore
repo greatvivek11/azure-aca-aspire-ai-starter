@@ -70,3 +70,6 @@ appsettings.*.json
 src/backend/appsettings.local.json
 src/aspire/appsettings.Development.json
 .tools/
+
+# Entra federated credential bootstrap files (generated locally, never commit)
+federated-credential*.json

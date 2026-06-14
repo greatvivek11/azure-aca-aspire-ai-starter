@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Azure;
@@ -29,7 +30,7 @@ builder.Logging.AddOpenTelemetry(logging =>
 var otelBuilder = builder.Services.AddOpenTelemetry()
     .WithTracing(tracing => tracing
         .AddSource("Microsoft.AspNetCore")
-        .AddSource("AIHub.Worker"))
+        .AddSource("AcaAspireAiTemplate.Worker"))
     .WithMetrics(metrics => metrics
         .AddMeter("Microsoft.AspNetCore.Hosting")
         .AddMeter("Microsoft.AspNetCore.Server.Kestrel"));
@@ -48,6 +49,15 @@ builder.WebHost.UseUrls("http://*:8081");
 var app = builder.Build();
 
 var sqlConnectionString = GetSqlConnectionString(app.Configuration);
+var aiMode = (Environment.GetEnvironmentVariable("AI_MODE") ?? "azure").Trim().ToLowerInvariant();
+if (string.Equals(aiMode, "local", StringComparison.OrdinalIgnoreCase))
+{
+    await EnsureDatabaseExistsAsync(sqlConnectionString);
+}
+else
+{
+    app.Logger.LogInformation("Skipping SQL database creation check in Azure mode.");
+}
 var storageAccountName = Environment.GetEnvironmentVariable("AZURE_STORAGE_ACCOUNT_NAME") ?? string.Empty;
 var storageConnectionString = Environment.GetEnvironmentVariable("AZURE_STORAGE_CONNECTION_STRING") ?? string.Empty;
 var storageContainerName = Environment.GetEnvironmentVariable("AZURE_STORAGE_CONTAINER_NAME") ?? string.Empty;
@@ -57,32 +67,66 @@ var storageAuthMode = (Environment.GetEnvironmentVariable("AZURE_STORAGE_AUTH_MO
 var searchEndpoint = Environment.GetEnvironmentVariable("AZURE_SEARCH_ENDPOINT") ?? string.Empty;
 var searchIndexName = Environment.GetEnvironmentVariable("AZURE_SEARCH_INDEX_NAME") ?? string.Empty;
 var searchApiKey = Environment.GetEnvironmentVariable("AZURE_SEARCH_API_KEY") ?? string.Empty;
+var qdrantUrl = (Environment.GetEnvironmentVariable("QDRANT_URL") ?? "http://qdrant:6333").Trim();
+var qdrantCollection = (Environment.GetEnvironmentVariable("QDRANT_COLLECTION") ?? "documents").Trim();
+var ollamaBaseUrl = (Environment.GetEnvironmentVariable("OLLAMA_BASE_URL") ?? "http://ollama:11434").Trim();
 var openAiEndpointText = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT") ?? string.Empty;
 var openAiApiKey = Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY") ?? string.Empty;
 var openAiAuthMode = (Environment.GetEnvironmentVariable("AZURE_OPENAI_AUTH_MODE") ?? "api-key")
     .Trim()
     .ToLowerInvariant();
 var managedIdentityClientId = Environment.GetEnvironmentVariable("AZURE_CLIENT_ID");
-var embeddingModelId = Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_MODEL_ID") ?? string.Empty;
-var embeddingDimensions = int.TryParse(Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_DIMENSIONS"), out var parsed)
-    ? parsed
-    : 1536;
-var ingestionConfigured =
-    (!string.IsNullOrWhiteSpace(storageConnectionString) || !string.IsNullOrWhiteSpace(storageAccountName)) &&
-    !string.IsNullOrWhiteSpace(storageContainerName) &&
+var embeddingModelId = aiMode == "local"
+    ? (Environment.GetEnvironmentVariable("OLLAMA_EMBED_MODEL") ?? "nomic-embed-text")
+    : (Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_MODEL_ID") ?? string.Empty);
+var embeddingDimensions = aiMode == "local"
+    ? (int.TryParse(Environment.GetEnvironmentVariable("OLLAMA_EMBED_DIMENSIONS"), out var parsedLocalDimensions)
+        ? parsedLocalDimensions
+        : 768)
+    : (int.TryParse(Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_DIMENSIONS"), out var parsed)
+        ? parsed
+        : 1536);
+var storageConfigured =
+    (!string.IsNullOrWhiteSpace(storageConnectionString) || !string.IsNullOrWhiteSpace(storageAccountName))
+    && !string.IsNullOrWhiteSpace(storageContainerName);
+var azureIngestionConfigured =
+    storageConfigured &&
     !string.IsNullOrWhiteSpace(searchEndpoint) &&
     !string.IsNullOrWhiteSpace(searchIndexName) &&
     !string.IsNullOrWhiteSpace(searchApiKey) &&
     !string.IsNullOrWhiteSpace(openAiEndpointText) &&
     (!string.Equals(openAiAuthMode, "api-key", StringComparison.OrdinalIgnoreCase) || !string.IsNullOrWhiteSpace(openAiApiKey)) &&
     !string.IsNullOrWhiteSpace(embeddingModelId);
+var localIngestionConfigured =
+    storageConfigured &&
+    !string.IsNullOrWhiteSpace(qdrantUrl) &&
+    !string.IsNullOrWhiteSpace(qdrantCollection) &&
+    !string.IsNullOrWhiteSpace(ollamaBaseUrl) &&
+    !string.IsNullOrWhiteSpace(embeddingModelId);
+var ingestionConfigured = aiMode == "local" ? localIngestionConfigured : azureIngestionConfigured;
+
+app.Logger.LogInformation(
+    "Worker startup configuration resolved. AiMode={AiMode}, IngestionConfigured={IngestionConfigured}, StorageConfigured={StorageConfigured}, QdrantUrlConfigured={QdrantConfigured}, SearchConfigured={SearchConfigured}, OpenAiEndpointConfigured={OpenAiEndpointConfigured}",
+    aiMode,
+    ingestionConfigured,
+    storageConfigured,
+    !string.IsNullOrWhiteSpace(qdrantUrl),
+    !string.IsNullOrWhiteSpace(searchEndpoint) && !string.IsNullOrWhiteSpace(searchIndexName),
+    !string.IsNullOrWhiteSpace(openAiEndpointText));
+
+if (string.Equals(aiMode, "local", StringComparison.OrdinalIgnoreCase))
+{
+    using var modelWarmupClient = app.Services.GetRequiredService<IHttpClientFactory>().CreateClient();
+    await WarmLocalOllamaModelsAsync(modelWarmupClient, ollamaBaseUrl, [embeddingModelId], app.Logger);
+}
 
 if (ingestionConfigured)
 {
-    await EnsureSearchIndexAsync(searchEndpoint, searchApiKey, searchIndexName, embeddingDimensions);
+    await EnsureVectorStoreAsync(aiMode, searchEndpoint, searchApiKey, searchIndexName, qdrantUrl, qdrantCollection, embeddingDimensions, app.Logger);
     await EnsureWorkerSqlSchemaAsync(sqlConnectionString);
     await RequeueNonTerminalJobsAsync(sqlConnectionString);
     _ = RunIngestionLoopAsync(
+        aiMode,
         sqlConnectionString,
         storageAccountName,
         storageConnectionString,
@@ -91,7 +135,10 @@ if (ingestionConfigured)
         searchEndpoint,
         searchApiKey,
         searchIndexName,
-        new Uri(openAiEndpointText, UriKind.Absolute),
+        qdrantUrl,
+        qdrantCollection,
+        ollamaBaseUrl,
+        string.IsNullOrWhiteSpace(openAiEndpointText) ? new Uri("http://localhost") : new Uri(openAiEndpointText, UriKind.Absolute),
         openAiApiKey,
         openAiAuthMode,
         managedIdentityClientId,
@@ -100,6 +147,15 @@ if (ingestionConfigured)
         httpClientFactory: app.Services.GetRequiredService<IHttpClientFactory>(),
         app.Logger,
         app.Lifetime.ApplicationStopping);
+}
+else
+{
+    app.Logger.LogWarning(
+        "Worker ingestion pipeline disabled. AiMode={AiMode}, StorageConfigured={StorageConfigured}, LocalIngestionConfigured={LocalConfigured}, AzureIngestionConfigured={AzureConfigured}",
+        aiMode,
+        storageConfigured,
+        localIngestionConfigured,
+        azureIngestionConfigured);
 }
 
 if (app.Environment.IsDevelopment())
@@ -155,10 +211,11 @@ app.MapPost("/v1/ingest", async (WorkerIngestRequest request) =>
     return Results.Accepted($"/v1/ingest/{request.DocumentId}", new { request.DocumentId, status = "Queued" });
 });
 
-app.MapGet("/", () => "AI Hub Worker is running!");
+app.MapGet("/", () => "ACA Aspire AI Starter Worker is running!");
 app.Run();
 
 static async Task RunIngestionLoopAsync(
+    string aiMode,
     string sqlConnectionString,
     string storageAccountName,
     string storageConnectionString,
@@ -167,6 +224,9 @@ static async Task RunIngestionLoopAsync(
     string searchEndpoint,
     string searchApiKey,
     string searchIndexName,
+    string qdrantUrl,
+    string qdrantCollection,
+    string ollamaBaseUrl,
     Uri openAiEndpoint,
     string openAiApiKey,
     string openAiAuthMode,
@@ -194,6 +254,7 @@ static async Task RunIngestionLoopAsync(
             }
 
             await ProcessDocumentAsync(
+                aiMode,
                 claimedJob.DocumentId,
                 sqlConnectionString,
                 storageAccountName,
@@ -203,6 +264,9 @@ static async Task RunIngestionLoopAsync(
                 searchEndpoint,
                 searchApiKey,
                 searchIndexName,
+                qdrantUrl,
+                qdrantCollection,
+                ollamaBaseUrl,
                 openAiEndpoint,
                 openAiApiKey,
                 openAiAuthMode,
@@ -253,6 +317,7 @@ static async Task RunIngestionLoopAsync(
 }
 
 static async Task ProcessDocumentAsync(
+    string aiMode,
     Guid documentId,
     string sqlConnectionString,
     string storageAccountName,
@@ -262,6 +327,9 @@ static async Task ProcessDocumentAsync(
     string searchEndpoint,
     string searchApiKey,
     string searchIndexName,
+    string qdrantUrl,
+    string qdrantCollection,
+    string ollamaBaseUrl,
     Uri openAiEndpoint,
     string openAiApiKey,
     string openAiAuthMode,
@@ -306,7 +374,9 @@ static async Task ProcessDocumentAsync(
     {
         var chunk = chunks[index];
         var embedding = await GenerateEmbeddingAsync(
+            aiMode,
             chunk,
+            ollamaBaseUrl,
             openAiEndpoint,
             openAiApiKey,
             openAiAuthMode,
@@ -317,7 +387,7 @@ static async Task ProcessDocumentAsync(
 
         searchDocuments.Add(new SearchChunkDocument
         {
-            Id = $"{documentId:N}-{index:D5}",
+            Id = CreateQdrantPointId(documentId, index),
             DocumentId = documentId.ToString(),
             ChunkId = $"chunk-{index + 1}",
             FileName = job.FileName,
@@ -326,13 +396,27 @@ static async Task ProcessDocumentAsync(
         });
     }
 
+    static string CreateQdrantPointId(Guid documentId, int chunkIndex)
+    {
+        var source = $"{documentId:N}:{chunkIndex:D5}";
+        var bytes = MD5.HashData(Encoding.UTF8.GetBytes(source));
+        return new Guid(bytes).ToString("D");
+    }
+
     await UpdateDocumentIngestionJobStatusAsync(sqlConnectionString, documentId, "Indexing", 85, null);
 
-    var searchClient = new SearchClient(
-        new Uri(searchEndpoint),
-        searchIndexName,
-        new AzureKeyCredential(searchApiKey));
-    await searchClient.MergeOrUploadDocumentsAsync(searchDocuments);
+    if (string.Equals(aiMode, "local", StringComparison.OrdinalIgnoreCase))
+    {
+        await UpsertQdrantDocumentsAsync(qdrantUrl, qdrantCollection, searchDocuments, httpClientFactory);
+    }
+    else
+    {
+        var searchClient = new SearchClient(
+            new Uri(searchEndpoint),
+            searchIndexName,
+            new AzureKeyCredential(searchApiKey));
+        await searchClient.MergeOrUploadDocumentsAsync(searchDocuments);
+    }
 
     await UpdateDocumentIngestionJobStatusAsync(
         sqlConnectionString,
@@ -347,6 +431,35 @@ static async Task ProcessDocumentAsync(
         "Document {DocumentId} ingestion completed successfully. Chunks indexed: {ChunkCount}",
         documentId,
         chunks.Count);
+}
+
+static async Task EnsureVectorStoreAsync(
+    string aiMode,
+    string searchEndpoint,
+    string searchApiKey,
+    string searchIndexName,
+    string qdrantUrl,
+    string qdrantCollection,
+    int embeddingDimensions,
+    ILogger logger)
+{
+    if (string.Equals(aiMode, "local", StringComparison.OrdinalIgnoreCase))
+    {
+        logger.LogInformation(
+            "Ensuring Qdrant collection. Url={QdrantUrl}, Collection={Collection}, Dimensions={Dimensions}",
+            qdrantUrl,
+            qdrantCollection,
+            embeddingDimensions);
+        await EnsureQdrantCollectionAsync(qdrantUrl, qdrantCollection, embeddingDimensions, logger);
+        return;
+    }
+
+    logger.LogInformation(
+        "Ensuring Azure AI Search index. Endpoint={SearchEndpoint}, Index={IndexName}, Dimensions={Dimensions}",
+        searchEndpoint,
+        searchIndexName,
+        embeddingDimensions);
+    await EnsureSearchIndexAsync(searchEndpoint, searchApiKey, searchIndexName, embeddingDimensions);
 }
 
 static async Task EnsureSearchIndexAsync(
@@ -394,8 +507,143 @@ static async Task EnsureSearchIndexAsync(
     await indexClient.CreateOrUpdateIndexAsync(index);
 }
 
+static async Task EnsureQdrantCollectionAsync(string qdrantUrl, string collectionName, int embeddingDimensions, ILogger logger)
+{
+    using var client = new HttpClient();
+    using var response = await CreateQdrantCollectionAsync(client, qdrantUrl, collectionName, embeddingDimensions);
+    if (response.IsSuccessStatusCode)
+    {
+        return;
+    }
+
+    var responseBody = await response.Content.ReadAsStringAsync();
+    if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+    {
+        var existingDimensions = await TryGetQdrantCollectionSizeAsync(client, qdrantUrl, collectionName);
+        if (existingDimensions.HasValue && existingDimensions.Value != embeddingDimensions)
+        {
+            logger.LogWarning(
+                "Qdrant collection dimensions mismatch detected. Recreating collection. Collection={Collection}, ExistingDimensions={ExistingDimensions}, ExpectedDimensions={ExpectedDimensions}",
+                collectionName,
+                existingDimensions.Value,
+                embeddingDimensions);
+
+            using var deleteResponse = await client.DeleteAsync(
+                $"{qdrantUrl.TrimEnd('/')}/collections/{collectionName}");
+            var deleteResponseBody = await deleteResponse.Content.ReadAsStringAsync();
+            if (!deleteResponse.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException(
+                    $"Failed to delete mismatched Qdrant collection '{collectionName}'. Status={(int)deleteResponse.StatusCode}. Body={deleteResponseBody}");
+            }
+
+            using var recreateResponse = await CreateQdrantCollectionAsync(client, qdrantUrl, collectionName, embeddingDimensions);
+            var recreateResponseBody = await recreateResponse.Content.ReadAsStringAsync();
+            if (!recreateResponse.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException(
+                    $"Failed to recreate Qdrant collection '{collectionName}'. Status={(int)recreateResponse.StatusCode}. Body={recreateResponseBody}");
+            }
+
+            logger.LogInformation(
+                "Recreated Qdrant collection with expected dimensions. Collection={Collection}, Dimensions={Dimensions}",
+                collectionName,
+                embeddingDimensions);
+            return;
+        }
+
+        logger.LogInformation(
+            "Qdrant collection already exists; continuing startup. Collection={Collection}, Response={ResponseBody}",
+            collectionName,
+            responseBody);
+        return;
+    }
+
+    throw new HttpRequestException(
+        $"Failed to ensure Qdrant collection '{collectionName}'. Status={(int)response.StatusCode}. Body={responseBody}");
+}
+
+static Task<HttpResponseMessage> CreateQdrantCollectionAsync(HttpClient client, string qdrantUrl, string collectionName, int embeddingDimensions)
+{
+    var payload = new StringContent(
+        JsonSerializer.Serialize(new
+        {
+            vectors = new
+            {
+                size = embeddingDimensions,
+                distance = "Cosine"
+            }
+        }),
+        Encoding.UTF8,
+        "application/json");
+    return client.PutAsync(
+        $"{qdrantUrl.TrimEnd('/')}/collections/{collectionName}",
+        payload);
+}
+
+static async Task<int?> TryGetQdrantCollectionSizeAsync(HttpClient client, string qdrantUrl, string collectionName)
+{
+    using var response = await client.GetAsync(
+        $"{qdrantUrl.TrimEnd('/')}/collections/{collectionName}");
+    if (!response.IsSuccessStatusCode)
+    {
+        return null;
+    }
+
+    var responseBody = await response.Content.ReadAsStringAsync();
+    using var document = JsonDocument.Parse(responseBody);
+    if (!document.RootElement.TryGetProperty("result", out var result) ||
+        !result.TryGetProperty("config", out var config) ||
+        !config.TryGetProperty("params", out var parameters) ||
+        !parameters.TryGetProperty("vectors", out var vectors) ||
+        !vectors.TryGetProperty("size", out var sizeElement))
+    {
+        return null;
+    }
+
+    return sizeElement.GetInt32();
+}
+
+static async Task UpsertQdrantDocumentsAsync(
+    string qdrantUrl,
+    string collectionName,
+    IReadOnlyCollection<SearchChunkDocument> documents,
+    IHttpClientFactory httpClientFactory)
+{
+    var points = documents.Select(document => new
+    {
+        id = document.Id,
+        vector = document.ContentVector,
+        payload = new
+        {
+            id = document.Id,
+            documentId = document.DocumentId,
+            chunkId = document.ChunkId,
+            fileName = document.FileName,
+            content = document.Content
+        }
+    });
+
+    using var payload = new StringContent(
+        JsonSerializer.Serialize(new { points }),
+        Encoding.UTF8,
+        "application/json");
+    using var client = httpClientFactory.CreateClient();
+    using var response = await client.PutAsync(
+        $"{qdrantUrl.TrimEnd('/')}/collections/{collectionName}/points?wait=true",
+        payload);
+    if (!response.IsSuccessStatusCode)
+    {
+        var responseBody = await response.Content.ReadAsStringAsync();
+        throw new HttpRequestException(
+            $"Failed to upsert Qdrant documents for collection '{collectionName}'. Status={(int)response.StatusCode}. Body={responseBody}");
+    }
+}
+
 static async Task<float[]> GenerateEmbeddingAsync(
+    string aiMode,
     string text,
+    string ollamaBaseUrl,
     Uri endpoint,
     string? apiKey,
     string openAiAuthMode,
@@ -404,6 +652,19 @@ static async Task<float[]> GenerateEmbeddingAsync(
     string? managedIdentityClientId,
     IHttpClientFactory httpClientFactory)
 {
+    if (string.Equals(aiMode, "local", StringComparison.OrdinalIgnoreCase))
+    {
+        using var localClient = httpClientFactory.CreateClient();
+        await EnsureOllamaModelPulledAsync(localClient, ollamaBaseUrl, embeddingDeployment);
+        using var localPayload = new StringContent(
+            JsonSerializer.Serialize(new { model = embeddingDeployment, prompt = text }),
+            Encoding.UTF8,
+            "application/json");
+        using var localResponse = await localClient.PostAsync($"{ollamaBaseUrl.TrimEnd('/')}/api/embeddings", localPayload);
+        localResponse.EnsureSuccessStatusCode();
+        return await ParseLocalEmbeddingAsync(localResponse);
+    }
+
     using var client = httpClientFactory.CreateClient();
     var usingManagedIdentity = await ConfigureOpenAiAuthAsync(client, apiKey, openAiAuthMode, managedIdentityClientId, httpClientFactory);
 
@@ -523,6 +784,66 @@ static async Task<float[]> ParseEmbeddingAsync(HttpResponseMessage response)
         .EnumerateArray()
         .Select(element => element.GetSingle())
         .ToArray();
+}
+
+static async Task<float[]> ParseLocalEmbeddingAsync(HttpResponseMessage response)
+{
+    var json = await response.Content.ReadAsStringAsync();
+    using var document = JsonDocument.Parse(json);
+    return document.RootElement
+        .GetProperty("embedding")
+        .EnumerateArray()
+        .Select(element => element.GetSingle())
+        .ToArray();
+}
+
+static async Task EnsureOllamaModelPulledAsync(HttpClient client, string ollamaBaseUrl, string modelName)
+{
+    using var payload = new StringContent(
+        JsonSerializer.Serialize(new { name = modelName, stream = false }),
+        Encoding.UTF8,
+        "application/json");
+    using var response = await client.PostAsync($"{ollamaBaseUrl.TrimEnd('/')}/api/pull", payload);
+    if (!response.IsSuccessStatusCode)
+    {
+        var responseBody = await response.Content.ReadAsStringAsync();
+        throw new InvalidOperationException(
+            $"Ollama failed to pull model '{modelName}' (HTTP {(int)response.StatusCode}). Response: {responseBody}");
+    }
+}
+
+static async Task WarmLocalOllamaModelsAsync(
+    HttpClient client,
+    string ollamaBaseUrl,
+    IReadOnlyList<string> modelNames,
+    ILogger logger)
+{
+    var uniqueModelNames = modelNames
+        .Where(modelName => !string.IsNullOrWhiteSpace(modelName))
+        .Select(modelName => modelName.Trim())
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+    if (uniqueModelNames.Length == 0)
+    {
+        logger.LogWarning("Skipping Ollama model warmup because no local model names were configured.");
+        return;
+    }
+
+    foreach (var modelName in uniqueModelNames)
+    {
+        logger.LogInformation("Preloading Ollama model {ModelName}.", modelName);
+        try
+        {
+            await EnsureOllamaModelPulledAsync(client, ollamaBaseUrl, modelName);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Skipping Ollama model warmup for {ModelName}.", modelName);
+            continue;
+        }
+
+        logger.LogInformation("Ollama model {ModelName} is ready.", modelName);
+    }
 }
 
 static async Task<bool> ConfigureOpenAiAuthAsync(
@@ -789,6 +1110,31 @@ BEGIN
     );
 END;
 """;
+    await command.ExecuteNonQueryAsync();
+}
+
+static async Task EnsureDatabaseExistsAsync(string connectionString)
+{
+    var builder = new SqlConnectionStringBuilder(connectionString);
+    var databaseName = builder.InitialCatalog;
+    if (string.IsNullOrWhiteSpace(databaseName))
+    {
+        return;
+    }
+
+    builder.InitialCatalog = "master";
+    await using var connection = new SqlConnection(builder.ConnectionString);
+    await connection.OpenAsync();
+
+    await using var command = connection.CreateCommand();
+    command.CommandText = """
+IF DB_ID(@databaseName) IS NULL
+BEGIN
+    DECLARE @sql nvarchar(max) = N'CREATE DATABASE [' + REPLACE(@databaseName, ']', ']]') + N']';
+    EXEC (@sql);
+END
+""";
+    command.Parameters.AddWithValue("@databaseName", databaseName);
     await command.ExecuteNonQueryAsync();
 }
 

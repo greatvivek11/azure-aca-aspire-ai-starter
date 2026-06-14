@@ -1,6 +1,6 @@
 # CI/CD & GitHub Actions Deployment
 
-This document describes the automated deployment pipeline for the AI Hub project using GitHub Actions and Azure Developer CLI (azd).
+This document describes the automated deployment pipeline for the ACA Aspire AI Starter project using GitHub Actions and Azure Developer CLI (azd).
 
 ## Overview
 
@@ -114,7 +114,7 @@ AI_SERVICES_PROVISIONING_MODE  # Optional: provision (default) or external
 AZURE_OPENAI_API_KEY        # Required only when AI_SERVICES_PROVISIONING_MODE=external
 AZURE_OPENAI_MODEL_ID       # Required only when AI_SERVICES_PROVISIONING_MODE=external
 AZURE_OPENAI_ENDPOINT       # Required only when AI_SERVICES_PROVISIONING_MODE=external
-AZD_ENVIRONMENT_NAME        # Optional: environment name (default: copilot-sk-azure)
+AZD_ENVIRONMENT_NAME        # Optional: environment name (default: azure-aca-aspire-ai-starter)
 ```
 
 **See**: [GitHub-Secrets-Setup.md](./GitHub-Secrets-Setup.md) for detailed configuration
@@ -139,7 +139,7 @@ Environment secrets are optional. Repository secrets still work.
 AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
 AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-AZD_ENVIRONMENT_NAME: copilot-sk-azure
+AZD_ENVIRONMENT_NAME: azure-aca-aspire-ai-starter
 ```
 
 ### Azure OpenAI Secrets (Injected at Deploy Time)
@@ -218,7 +218,7 @@ Before deploying, the workflow runs a validation script:
 ```bash
 scripts/validate-azure-env.sh \
   "${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
-  "aihub-rg"
+  "azure-aca-aspire-ai-starter-rg"
 ```
 
 **Checks:**
@@ -279,7 +279,7 @@ git push origin main
 
 ```
 ✅ Deployment successful!
-Environment: copilot-sk-azure
+Environment: azure-aca-aspire-ai-starter
 Subscription: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
 
@@ -311,10 +311,10 @@ After deployment completes:
 
 ```bash
 # List deployed container apps
-az containerapp list --resource-group aihub-rg --query "[].{name:name, status:properties.runStatus}"
+az containerapp list --resource-group azure-aca-aspire-ai-starter-rg --query "[].{name:name, status:properties.runStatus}"
 
 # View container app logs
-az containerapp logs show --name aihub-frontend --resource-group aihub-rg
+az containerapp logs show --name web --resource-group azure-aca-aspire-ai-starter-rg
 ```
 
 ---
@@ -327,7 +327,7 @@ az containerapp logs show --name aihub-frontend --resource-group aihub-rg
 
 ```bash
 # Run locally to debug
-dotnet build copilot-sk.sln
+dotnet build azure-aca-aspire-ai-starter.sln
 dotnet test src/Backend.Tests/Backend.Tests.csproj
 npm run build --prefix src/frontend
 ```
@@ -345,7 +345,7 @@ If deploy job uses environment `dev`, federated credential subject must be:
 az ad sp show --id <AZURE_CLIENT_ID>
 
 # Verify OIDC federation
-az identity federated-credential list --resource-group aihub-rg
+az identity federated-credential list --resource-group azure-aca-aspire-ai-starter-rg
 ```
 
 ### ❌ "Azure OpenAI credentials not found"
@@ -381,7 +381,7 @@ dotnet test src/Backend.Tests/Backend.Tests.csproj
 npm run build --prefix src/frontend
 
 # Test validation script
-bash scripts/validate-azure-env.sh <SUBSCRIPTION_ID> aihub-rg
+bash scripts/validate-azure-env.sh <SUBSCRIPTION_ID> azure-aca-aspire-ai-starter-rg
 ```
 
 ---

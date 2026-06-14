@@ -32,10 +32,10 @@ jobs:
           node-version: '20'
 
       - name: Restore dependencies
-        run: dotnet restore copilot-sk.sln
+        run: dotnet restore azure-aca-aspire-ai-starter.sln
 
       - name: Build Backend
-        run: dotnet build copilot-sk.sln --configuration Release --no-restore
+        run: dotnet build azure-aca-aspire-ai-starter.sln --configuration Release --no-restore
 
       - name: Run Architecture Tests
         run: dotnet test src/Backend.Tests/Backend.Tests.csproj --configuration Release --no-build --verbosity normal

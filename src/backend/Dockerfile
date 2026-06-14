@@ -14,4 +14,4 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 COPY --from=build /src/buildout .
 EXPOSE 8080
-ENTRYPOINT ["dotnet", "AIHub.Backend.dll"]
+ENTRYPOINT ["dotnet", "AcaAspireAiTemplate.Backend.dll"]

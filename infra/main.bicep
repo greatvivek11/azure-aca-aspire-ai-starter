@@ -651,8 +651,7 @@ resource sqlDatabase 'Microsoft.Sql/servers/databases@2023-08-01-preview' = if (
   properties: {
     collation: 'SQL_Latin1_General_CP1_CI_AS'
     maxSizeBytes: 2147483648
-    minCapacity: 0.5
-    computeModel: 'Serverless'
+    minCapacity: json('0.5')
     autoPauseDelay: 60
   }
 }

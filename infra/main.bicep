@@ -63,6 +63,9 @@ param aiServicesProvisioningMode string = 'provision'
 @description('Azure AI Foundry (AIServices) account name when aiServicesProvisioningMode is provision. Leave empty to auto-generate.')
 param aiServicesAccountName string = ''
 
+@description('Set to true to restore a soft-deleted Azure AI Foundry account with the same name during provisioning.')
+param aiServicesRestore string = 'false'
+
 @description('Azure AI Foundry project name created under the provisioned AI Services account.')
 param aiFoundryProjectName string = 'enterprise-copilot'
 
@@ -247,6 +250,7 @@ var generatedAiServicesAccountName = toLower(take('${baseName}-aoai', 64))
 var resolvedAiServicesAccountName = empty(aiServicesAccountName)
   ? generatedAiServicesAccountName
   : toLower(aiServicesAccountName)
+var shouldRestoreAiServicesAccount = toLower(aiServicesRestore) == 'true'
 var normalizedSearchAuthMode = toLower(searchAuthMode) == 'managed-identity' ? 'managed-identity' : 'api-key'
 var normalizedEntraAuthEnabled = toLower(entraAuthEnabled) == 'false' ? 'false' : 'true'
 var resolvedEntraAuthority = empty(entraAuthority)
@@ -462,6 +466,7 @@ resource aiServicesAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' = i
     customSubDomainName: resolvedAiServicesAccountName
     publicNetworkAccess: 'Enabled'
     allowProjectManagement: true
+    restore: shouldRestoreAiServicesAccount
   }
 }
 

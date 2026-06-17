@@ -3,6 +3,17 @@ set -euo pipefail
 
 mode_lower="$(echo "${AZURE_SEARCH_PROVISIONING_MODE:-provision}" | tr '[:upper:]' '[:lower:]')"
 failover_enabled="$(echo "${AZURE_SEARCH_FAILOVER_ENABLED:-false}" | tr '[:upper:]' '[:lower:]')"
+ai_mode_lower="$(echo "${AI_SERVICES_PROVISIONING_MODE:-provision}" | tr '[:upper:]' '[:lower:]')"
+
+normalize_bool() {
+  local value
+  value="$(echo "${1:-false}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+  if [[ "${value}" == "true" ]]; then
+    echo "true"
+    return
+  fi
+  echo "false"
+}
 
 is_retryable_ai_services_conflict() {
   local log_file="$1"
@@ -10,10 +21,28 @@ is_retryable_ai_services_conflict() {
   grep -q "RequestConflict: Cannot modify resource with id '.*/Microsoft\.CognitiveServices/accounts/.*provisioning state is not terminal" "${log_file}"
 }
 
+is_soft_deleted_ai_services_restore_required() {
+  local log_file="$1"
+
+  grep -q "FlagMustBeSetForRestore" "${log_file}" && \
+    grep -q "Microsoft\.CognitiveServices/accounts" "${log_file}"
+}
+
+extract_soft_deleted_ai_account_name() {
+  local log_file="$1"
+
+  grep -Eo "Microsoft\.CognitiveServices/accounts/[a-z0-9-]+" "${log_file}" \
+    | awk -F/ '{print $NF}' \
+    | head -n1
+}
+
 run_azd_provision() {
   local region="$1"
   local max_attempts=4
   local attempt exit_code
+  local restore_already_enabled
+
+  restore_already_enabled="$(normalize_bool "${AZURE_AI_SERVICES_RESTORE:-false}")"
 
   for attempt in $(seq 1 "${max_attempts}"); do
     local log_file
@@ -40,6 +69,21 @@ run_azd_provision() {
       fi
 
       echo "Azure AI Services account never reached a terminal provisioning state after ${max_attempts} attempts."
+      return "${exit_code}"
+    fi
+
+    if [[ "${ai_mode_lower}" == "provision" ]] && is_soft_deleted_ai_services_restore_required "${log_file}"; then
+      if [[ "${restore_already_enabled}" != "true" ]]; then
+        local soft_deleted_account
+        soft_deleted_account="$(extract_soft_deleted_ai_account_name "${log_file}")"
+        echo "Detected soft-deleted Azure AI Services account${soft_deleted_account:+ '${soft_deleted_account}'}; enabling AZURE_AI_SERVICES_RESTORE=true and retrying."
+        AZURE_AI_SERVICES_RESTORE="true"
+        restore_already_enabled="true"
+        azd env set AZURE_AI_SERVICES_RESTORE "true"
+        continue
+      fi
+
+      echo "Soft-delete restore was already enabled but the deployment still failed for Azure AI Services account restore."
       return "${exit_code}"
     fi
 
@@ -75,6 +119,10 @@ add_candidate() {
 
 primary_search_location="${AZURE_SEARCH_LOCATION:-${AZURE_LOCATION}}"
 add_candidate "${primary_search_location}"
+
+AZURE_AI_SERVICES_RESTORE="$(normalize_bool "${AZURE_AI_SERVICES_RESTORE:-false}")"
+azd env set AZURE_AI_SERVICES_RESTORE "${AZURE_AI_SERVICES_RESTORE}"
+echo "Using AZURE_AI_SERVICES_RESTORE='${AZURE_AI_SERVICES_RESTORE}'."
 
 if [[ "${mode_lower}" != "provision" || "${failover_enabled}" != "true" ]]; then
   echo "Search failover disabled or not applicable. Using AZURE_SEARCH_LOCATION='${candidates[0]}'."

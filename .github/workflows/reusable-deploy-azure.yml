@@ -333,6 +333,8 @@ jobs:
         run: bash scripts/ci/validate-deploy-inputs.sh entra-auth
 
       - name: Ensure Entra app registrations and API scopes
+        env:
+          ENTRA_AUTH_BOOTSTRAP_OPTIONAL: 'true'
         run: bash scripts/ci/ensure-entra-auth.sh bootstrap
 
       - name: Validate Entra runtime values

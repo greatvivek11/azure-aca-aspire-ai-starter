@@ -2,10 +2,19 @@
 set -euo pipefail
 
 mode="${1:-bootstrap}"
+bootstrap_optional="$(echo "${ENTRA_AUTH_BOOTSTRAP_OPTIONAL:-false}" | tr '[:upper:]' '[:lower:]')"
 
-auth_enabled="$(echo "${ENTRA_AUTH_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')"
-if [[ "${auth_enabled}" != "true" ]]; then
-  echo "Entra auth automation skipped because ENTRA_AUTH_ENABLED=${ENTRA_AUTH_ENABLED:-true}."
+set_entra_disabled_env() {
+  if [[ "${SKIP_AZD_ENV_SET:-false}" != "true" ]]; then
+    azd env set ENTRA_AUTH_ENABLED false >/dev/null
+    azd env set ENTRA_TENANT_ID "" >/dev/null
+    azd env set ENTRA_AUTHORITY "" >/dev/null
+    azd env set ENTRA_API_CLIENT_ID "" >/dev/null
+    azd env set ENTRA_AUDIENCE "" >/dev/null
+    azd env set ENTRA_SPA_CLIENT_ID "" >/dev/null
+    azd env set ENTRA_SCOPE "" >/dev/null
+  fi
+
   if [[ -n "${GITHUB_ENV:-}" ]]; then
     {
       echo "ENTRA_AUTH_ENABLED=false"
@@ -17,6 +26,12 @@ if [[ "${auth_enabled}" != "true" ]]; then
       echo "ENTRA_SCOPE="
     } >> "$GITHUB_ENV"
   fi
+}
+
+auth_enabled="$(echo "${ENTRA_AUTH_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')"
+if [[ "${auth_enabled}" != "true" ]]; then
+  echo "Entra auth automation skipped because ENTRA_AUTH_ENABLED=${ENTRA_AUTH_ENABLED:-true}."
+  set_entra_disabled_env
   exit 0
 fi
 
@@ -257,7 +272,11 @@ if [[ -z "$spa_app_id" ]]; then
   spa_app_id="$(ensure_app "$spa_display_name")"
 fi
 
-if [[ "$mode" == "bootstrap" ]]; then
+run_bootstrap() {
+  local api_object_id
+  local spa_object_id
+  local scope_id
+
   api_object_id="$(get_app_object_id_with_retry "$api_app_id")"
   spa_object_id="$(get_app_object_id_with_retry "$spa_app_id")"
 
@@ -267,6 +286,27 @@ if [[ "$mode" == "bootstrap" ]]; then
   scope_id="$(ensure_scope "$api_app_id" "$api_object_id")"
   configure_spa_permissions "$spa_object_id" "$api_app_id" "$scope_id"
   configure_spa_redirects "$spa_app_id"
+}
+
+if [[ "$mode" == "bootstrap" ]]; then
+  bootstrap_output=""
+  if ! bootstrap_output="$(run_bootstrap 2>&1)"; then
+    echo "$bootstrap_output" >&2
+
+    if [[ "$bootstrap_optional" == "true" ]] && echo "$bootstrap_output" | grep -Eqi "Insufficient privileges|Authorization_RequestDenied|does not have authorization"; then
+      echo "WARNING: Skipping Entra bootstrap due to insufficient Graph privileges."
+      echo "WARNING: Entra auth will be disabled for this CI run."
+      set_entra_disabled_env
+      exit 0
+    fi
+
+    echo "Entra bootstrap failed."
+    exit 1
+  fi
+
+  if [[ -n "$bootstrap_output" ]]; then
+    echo "$bootstrap_output"
+  fi
 elif [[ "$mode" == "finalize" ]]; then
   configure_spa_redirects "$spa_app_id"
 else

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Auth Callback</title>
+  </head>
+  <body>
+    <script>
+      // Forward the authorization response back to the main SPA route,
+      // where MSAL's handleRedirectPromise() runs.
+      const hash = window.location.hash || "";
+      const target = `${window.location.origin}/${hash}`;
+      window.location.replace(target);
+    </script>
+  </body>
+</html>

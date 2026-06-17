@@ -2,6 +2,10 @@
 
 This guide explains how to configure GitHub Secrets for CI/CD deployment using GitHub Actions.
 
+> Source-of-truth note:
+> Required/optional secret handling is ultimately defined by `.github/workflows/reusable-deploy-azure.yml` and `scripts/ci/*.sh` validation scripts.
+> If this document diverges from workflow validation behavior, follow workflow + scripts.
+
 ## Why GitHub Secrets?
 
 Currently, we store sensitive credentials in GitHub Secrets instead of Azure Key Vault for these reasons:
@@ -19,26 +23,22 @@ Currently, we store sensitive credentials in GitHub Secrets instead of Azure Key
 
 Use this if you want the shortest path to first successful deployment.
 
-1. Create CI service principal and capture IDs.
-2. Grant CI principal RBAC on `azure-aca-aspire-ai-starter-rg`:
-  - `Contributor`
-  - `User Access Administrator`
-3. Create GitHub Environment `dev` (UI or `gh api`).
-4. Add Entra federated credential with environment subject:
-  - `repo:<owner>/<repo>:environment:dev`
-5. Add required repository secrets:
+1. Run one-time tenant bootstrap script (required: subscription id, GitHub owner, GitHub repo; optional: resource group and location).
+2. Create GitHub Environment `dev` (UI or `gh api`).
+3. Verify Entra federated credential subject matches your GitHub environment.
+4. Add required repository secrets:
   - `AZURE_SUBSCRIPTION_ID`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`
   - `AZURE_SQL_ADMIN_LOGIN`, `AZURE_SQL_ADMIN_PASSWORD`
+  - `ENTRA_AUTH_ENABLED=true` (recommended)
   - `AI_SERVICES_PROVISIONING_MODE` (optional, defaults to `provision`)
   - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_MODEL_ID`, `AZURE_OPENAI_ENDPOINT` (only when `AI_SERVICES_PROVISIONING_MODE=external`)
   - Optional cost controls: `CONTAINER_REGISTRY_MODE=external`, `ENABLE_LOG_ANALYTICS=false`, replica counts `0`
-6. Trigger workflow:
+5. Trigger workflow:
   - Actions -> Deploy to Azure Container Apps -> Run workflow -> `environment=dev`
-7. If OIDC fails, verify federated credential subject exactly matches environment.
+6. If OIDC fails, verify federated credential subject exactly matches environment.
 
 Jump links:
 - SP creation: [Step 1](#1-create-service-principal-for-github-actions)
-- RBAC roles: [Step 1.1](#11-required-rbac-for-ci-service-principal)
 - GitHub Environment: [Step 2](#2-create-github-environment-required-for-environment-based-oidc)
 - OIDC federated credential: [Step 3](#3-configure-oidc-trust-recommended)
 
@@ -76,6 +76,7 @@ Use these to control infra behavior. Default behavior provisions a new Azure AI 
 |---|---|---|
 | `AI_SERVICES_PROVISIONING_MODE` | `external` (reuse existing) or `provision` (create new Foundry infra) | `provision` |
 | `AZURE_AI_SERVICES_ACCOUNT_NAME` | Optional Azure AI Foundry resource name override | empty (auto-generated) |
+| `AZURE_AI_SERVICES_RESTORE` | Restore soft-deleted Azure AI account when name collision occurs (`true`/`false`) | `false` (auto-enabled during CI retry on restore-required errors) |
 | `AZURE_OPENAI_CHAT_MODEL_NAME` | Chat model catalog name for deployment | `gpt-chat-latest` |
 | `AZURE_OPENAI_CHAT_MODEL_VERSION` | Chat model version (provider/region dependent) | empty (provider chooses compatible default) |
 | `AZURE_OPENAI_EMBEDDING_MODEL_ID` | Embeddings deployment name | `text-embedding-3-small` |
@@ -139,6 +140,25 @@ When `SQL_PROVISIONING_MODE=existing`, both existing-name secrets are required.
 | `AZURE_STORAGE_DOCUMENTS_CONTAINER` | Blob container for document uploads | `documents` |
 | `AZURE_SEARCH_SERVICE_NAME` | Optional AI Search service name override | empty (auto-generated) |
 | `AZURE_SEARCH_INDEX_NAME` | AI Search index name for chunks | `documents-index` |
+| `ENTRA_AUTH_ENABLED` | Enable Entra auth wiring for frontend/backend | `true` |
+| `ENTRA_AUTHORITY` | Optional Entra authority override | auto-generated from tenant |
+| `ENTRA_API_CLIENT_ID` | Optional existing API app client ID to reuse | empty (workflow auto-creates) |
+| `ENTRA_AUDIENCE` | Optional backend token audience override | `api://<api-client-id>` |
+| `ENTRA_SPA_CLIENT_ID` | Optional existing SPA app client ID to reuse | empty (workflow auto-creates) |
+| `ENTRA_SCOPE` | Optional delegated scope override for SPA | `api://<api-client-id>/access_as_user` |
+| `AZURE_ENTRA_API_APP_NAME` | Optional display name for auto-created API app | `<azd-env>-api` |
+| `AZURE_ENTRA_SPA_APP_NAME` | Optional display name for auto-created SPA app | `<azd-env>-spa` |
+
+### Entra App Registration Automation
+
+The deploy workflow now automates Entra app setup when `ENTRA_AUTH_ENABLED=true`:
+
+1. Creates or reuses API and SPA app registrations.
+2. Exposes API scope `access_as_user` on the API app.
+3. Adds SPA delegated permission to that API scope.
+4. Attempts delegated permission grant/admin consent (tenant policies may still require manual approval).
+5. Wires `ENTRA_*` values into azd environment variables used by Bicep.
+6. Updates SPA redirect URIs with localhost defaults and deployed frontend URL.
 
 Default behavior:
 - `CONTAINER_REGISTRY_MODE=external` builds and pushes **public GHCR** images in GitHub Actions, then provisions ACA with those images.
@@ -158,69 +178,48 @@ Important GHCR note:
 ### 1. Create Service Principal for GitHub Actions
 
 ```bash
-# Create a service principal scoped to the deployment resource group
-SUBSCRIPTION_ID="<your-subscription-id>"
-RESOURCE_GROUP="azure-aca-aspire-ai-starter-rg"
-LOCATION="southindia"
-
-# Create the resource group first (no-op if it already exists)
-az group create \
-  --subscription "$SUBSCRIPTION_ID" \
-  --name "$RESOURCE_GROUP" \
-  --location "$LOCATION"
-
-az ad sp create-for-rbac \
-  --name "github-actions-copilot" \
-  --role Contributor \
-  --scopes "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP"
+bash scripts/ci/bootstrap-ci-tenant-setup.sh \
+  --subscription-id "<your-subscription-id>" \
+  --github-owner "<owner>" \
+  --github-repo "<repo>"
 ```
 
-**Output** will contain:
-- `appId` → Set as `AZURE_CLIENT_ID`
-- `tenant` → Set as `AZURE_TENANT_ID`
+Required parameter:
+- `--subscription-id`
+- `--github-owner`
+- `--github-repo`
 
-### 1.1 Required RBAC for CI Service Principal
+Optional parameters (defaults):
+- `--resource-group` (default: `azure-aca-aspire-ai-starter-rg`)
+- `--location` (default: `southindia`)
+- `--sp-name` (default: `github-actions-copilot`)
+- `--azure-client-id` (reuse existing service principal instead of creating one)
 
-This repository's Bicep template creates `Microsoft.Authorization/roleAssignments`
-for Container Apps managed identities **only when `CONTAINER_REGISTRY_MODE=managed`**
-(AcrPull on ACR). In the default `external` mode, no ACR role assignment is created.
+Optional OIDC flag:
+- `--github-environment` (default: `dev`)
 
-Minimum required roles on the target resource group:
-- `external` mode: `Contributor`
-- `managed` mode: `Contributor` + `User Access Administrator`
+What the script does in one run:
+- Creates/reuses resource group.
+- Creates/reuses CI service principal.
+- Assigns Azure RBAC on RG: `Contributor`, `User Access Administrator`.
+- Assigns tenant Entra directory role: `Cloud Application Administrator`.
+- Creates/updates federated credential for GitHub environment subject.
 
-Broader alternative:
-- `Owner`
+Output includes values to copy into GitHub secrets:
+- `AZURE_SUBSCRIPTION_ID`
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
 
-Example (resource-group scope):
-
-```bash
-SUBSCRIPTION_ID="<subscription-id>"
-RESOURCE_GROUP="azure-aca-aspire-ai-starter-rg"
-APP_ID="<AZURE_CLIENT_ID>"
-
-SP_OBJECT_ID=$(az ad sp show --id "$APP_ID" --query id -o tsv)
-
-az role assignment create \
-  --assignee-object-id "$SP_OBJECT_ID" \
-  --assignee-principal-type ServicePrincipal \
-  --role "Contributor" \
-  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP"
-
-az role assignment create \
-  --assignee-object-id "$SP_OBJECT_ID" \
-  --assignee-principal-type ServicePrincipal \
-  --role "User Access Administrator" \
-  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP"
-```
-
-Verify:
+Example with explicit optional values and OIDC upsert:
 
 ```bash
-az role assignment list \
-  --assignee-object-id "$SP_OBJECT_ID" \
-  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP" \
-  -o table
+bash scripts/ci/bootstrap-ci-tenant-setup.sh \
+  --subscription-id "<your-subscription-id>" \
+  --resource-group "azure-aca-aspire-ai-starter-rg" \
+  --location "southindia" \
+  --github-owner "<owner>" \
+  --github-repo "<repo>" \
+  --github-environment "dev"
 ```
 
 ### 2. Create GitHub Environment (Required for environment-based OIDC)
@@ -406,7 +405,11 @@ Monitor the workflow at: **Actions → Deploy to Azure Container Apps → Latest
 ### ❌ "Insufficient permissions" error in GitHub Actions
 
 **Cause**: Service Principal lacks required permissions  
-**Solution**: Ensure both required roles are granted on the resource group:
+**Solution**:
+- Re-run the one-time bootstrap script in Step 1; it assigns required Azure RBAC and Entra directory role.
+- If failure is from `scripts/ci/ensure-entra-auth.sh bootstrap` with `Insufficient privileges to complete the operation`, verify the CI principal has Entra `Cloud Application Administrator` at tenant scope.
+
+Azure RBAC commands:
 ```bash
 az role assignment create \
   --assignee <appId> \

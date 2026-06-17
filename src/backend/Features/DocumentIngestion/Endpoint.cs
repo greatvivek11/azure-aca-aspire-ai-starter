@@ -6,10 +6,10 @@ using Azure.Storage;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Sas;
+using AcaAspireAiTemplate.Backend.Infrastructure.Auth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.Data.SqlClient;
 
 namespace AcaAspireAiTemplate.Backend.Features.DocumentIngestion;
 
@@ -24,7 +24,7 @@ public static class Endpoint
 
     public static void MapDocumentIngestionEndpoints(this IEndpointRouteBuilder app, DocumentIngestionOptions options)
     {
-        app.MapPost("/v1/uploads", async (HttpRequest request, ILoggerFactory loggerFactory) =>
+        app.MapPost("/v1/uploads", async (HttpRequest request, ILoggerFactory loggerFactory, IDocumentIngestionStore store) =>
         {
             var logger = loggerFactory.CreateLogger("DocumentIngestion");
             if (!options.UploadConfigured)
@@ -70,8 +70,7 @@ public static class Endpoint
                     });
             }
 
-            await CreateDocumentIngestionJobAsync(
-                options.SqlConnectionString,
+            await store.CreateOrUpdateJobAsync(
                 documentId,
                 safeFileName!,
                 blobName,
@@ -79,15 +78,14 @@ public static class Endpoint
                 5);
 
             logger.LogInformation(
-                "Uploaded document {DocumentId} directly to blob storage. Blob={BlobName}, SizeBytes={SizeBytes}",
+                "Uploaded document {DocumentId} directly to blob storage. SizeBytes={SizeBytes}",
                 documentId,
-                blobName,
                 file.Length);
 
             return Results.Ok(new DirectUploadResponse(documentId, safeFileName!, blobName));
-        });
+        }).RequireAuthorization(EntraAuthSetup.ApiScopePolicyName);
 
-        app.MapPost("/v1/uploads/signed-url", async (CreateSignedUploadRequest request, IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory) =>
+        app.MapPost("/v1/uploads/signed-url", async (CreateSignedUploadRequest request, IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory, IDocumentIngestionStore store) =>
         {
             var logger = loggerFactory.CreateLogger("DocumentIngestion");
             if (!options.UploadConfigured)
@@ -110,14 +108,10 @@ public static class Endpoint
             var uploadUrl = await CreateBlobUploadSasUrlAsync(blobClient, options, uploadExpiresAtUtc, httpClientFactory);
             var clientUploadUrl = RewriteUploadUrlForClient(uploadUrl, options.StoragePublicBlobEndpoint);
             logger.LogInformation(
-                "Created signed upload URL for document {DocumentId}. Blob={BlobName}, InternalHost={InternalHost}, PublicHost={PublicHost}",
-                documentId,
-                blobName,
-                blobClient.Uri.Host,
-                new Uri(clientUploadUrl).Host);
+                "Created signed upload URL for document {DocumentId}.",
+                documentId);
 
-            await CreateDocumentIngestionJobAsync(
-                options.SqlConnectionString,
+            await store.CreateOrUpdateJobAsync(
                 documentId,
                 safeFileName!,
                 blobName,
@@ -130,18 +124,18 @@ public static class Endpoint
                 blobName,
                 clientUploadUrl,
                 uploadExpiresAtUtc));
-        });
+        }).RequireAuthorization(EntraAuthSetup.ApiScopePolicyName);
 
-        app.MapPost("/v1/ingest", async (IngestRequest request, IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory) =>
+        app.MapPost("/v1/ingest", async (IngestRequest request, IHttpClientFactory httpClientFactory, ILoggerFactory loggerFactory, IDocumentIngestionStore store) =>
         {
             var logger = loggerFactory.CreateLogger("DocumentIngestion");
-            var job = await GetDocumentIngestionJobAsync(options.SqlConnectionString, request.DocumentId);
+            var job = await store.GetJobAsync(request.DocumentId);
             if (job is null)
             {
                 return Results.NotFound($"Document {request.DocumentId} was not found.");
             }
 
-            await UpdateDocumentIngestionJobStatusAsync(options.SqlConnectionString, request.DocumentId, "Queued", 15, null);
+            await store.UpdateJobStatusAsync(request.DocumentId, "Queued", 15, null);
 
             var workerPayload = new WorkerIngestRequest(request.DocumentId);
             try
@@ -165,13 +159,13 @@ public static class Endpoint
             }
 
             return Results.Accepted($"/v1/uploads/{request.DocumentId}/status", new { request.DocumentId, status = "Queued" });
-        });
+        }).RequireAuthorization(EntraAuthSetup.ApiScopePolicyName);
 
-        app.MapGet("/v1/uploads/{documentId:guid}/status", async (Guid documentId) =>
+        app.MapGet("/v1/uploads/{documentId:guid}/status", async (Guid documentId, IDocumentIngestionStore store) =>
         {
-            var status = await GetDocumentIngestionJobAsync(options.SqlConnectionString, documentId);
+            var status = await store.GetJobAsync(documentId);
             return status is null ? Results.NotFound() : Results.Ok(status);
-        });
+        }).RequireAuthorization(EntraAuthSetup.ApiScopePolicyName);
     }
 
     private static string? ValidateFileName(string? fileName, out string? safeFileName)
@@ -422,11 +416,11 @@ public static class Endpoint
         }
         else if (originalSegments.Length > 0 && string.Equals(baseSegments[^1], originalSegments[0], StringComparison.OrdinalIgnoreCase))
         {
-            finalSegments = [..baseSegments, ..originalSegments[1..]];
+            finalSegments = [.. baseSegments, .. originalSegments[1..]];
         }
         else
         {
-            finalSegments = [..baseSegments, ..originalSegments];
+            finalSegments = [.. baseSegments, .. originalSegments];
         }
 
         var builder = new UriBuilder(publicBaseUri.Scheme, publicBaseUri.Host, publicBaseUri.Port)
@@ -438,104 +432,6 @@ public static class Endpoint
         return builder.Uri.ToString();
     }
 
-    private static async Task CreateDocumentIngestionJobAsync(
-        string connectionString,
-        Guid documentId,
-        string fileName,
-        string blobName,
-        string status,
-        int progressPercent)
-    {
-        await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync();
-
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-MERGE dbo.DocumentIngestionJobs AS target
-USING (SELECT @documentId AS DocumentId) AS source
-ON target.DocumentId = source.DocumentId
-WHEN MATCHED THEN
-  UPDATE SET FileName = @fileName,
-             BlobName = @blobName,
-             Status = @status,
-             ProgressPercent = @progressPercent,
-             ErrorMessage = NULL,
-             UpdatedAtUtc = SYSUTCDATETIME()
-WHEN NOT MATCHED THEN
-  INSERT (DocumentId, FileName, BlobName, Status, ProgressPercent, CreatedAtUtc, UpdatedAtUtc)
-  VALUES (@documentId, @fileName, @blobName, @status, @progressPercent, SYSUTCDATETIME(), SYSUTCDATETIME());
-""";
-        command.Parameters.AddWithValue("@documentId", documentId);
-        command.Parameters.AddWithValue("@fileName", fileName);
-        command.Parameters.AddWithValue("@blobName", blobName);
-        command.Parameters.AddWithValue("@status", status);
-        command.Parameters.AddWithValue("@progressPercent", progressPercent);
-        await command.ExecuteNonQueryAsync();
-    }
-
-    private static async Task UpdateDocumentIngestionJobStatusAsync(
-        string connectionString,
-        Guid documentId,
-        string status,
-        int progressPercent,
-        string? errorMessage,
-        int? totalChunks = null,
-        bool isReady = false)
-    {
-        await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync();
-
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-UPDATE dbo.DocumentIngestionJobs
-SET Status = @status,
-    ProgressPercent = @progressPercent,
-    ErrorMessage = @errorMessage,
-    TotalChunks = COALESCE(@totalChunks, TotalChunks),
-    ReadyAtUtc = CASE WHEN @isReady = 1 THEN SYSUTCDATETIME() ELSE ReadyAtUtc END,
-    UpdatedAtUtc = SYSUTCDATETIME()
-WHERE DocumentId = @documentId;
-""";
-        command.Parameters.AddWithValue("@documentId", documentId);
-        command.Parameters.AddWithValue("@status", status);
-        command.Parameters.AddWithValue("@progressPercent", progressPercent);
-        command.Parameters.AddWithValue("@errorMessage", (object?)errorMessage ?? DBNull.Value);
-        command.Parameters.AddWithValue("@totalChunks", (object?)totalChunks ?? DBNull.Value);
-        command.Parameters.AddWithValue("@isReady", isReady ? 1 : 0);
-        await command.ExecuteNonQueryAsync();
-    }
-
-    private static async Task<DocumentIngestionStatus?> GetDocumentIngestionJobAsync(string connectionString, Guid documentId)
-    {
-        await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync();
-
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-SELECT DocumentId, FileName, BlobName, Status, ProgressPercent, TotalChunks, ErrorMessage, CreatedAtUtc, UpdatedAtUtc, ReadyAtUtc
-FROM dbo.DocumentIngestionJobs
-WHERE DocumentId = @documentId;
-""";
-        command.Parameters.AddWithValue("@documentId", documentId);
-
-        await using var reader = await command.ExecuteReaderAsync();
-        if (!await reader.ReadAsync())
-        {
-            return null;
-        }
-
-        return new DocumentIngestionStatus(
-            reader.GetGuid(0),
-            reader.GetString(1),
-            reader.GetString(2),
-            reader.GetString(3),
-            reader.GetInt32(4),
-            reader.IsDBNull(5) ? null : reader.GetInt32(5),
-            reader.IsDBNull(6) ? null : reader.GetString(6),
-            reader.GetDateTime(7),
-            reader.GetDateTime(8),
-            reader.IsDBNull(9) ? null : reader.GetDateTime(9));
-    }
 }
 
 public sealed record DocumentIngestionOptions(
@@ -567,7 +463,7 @@ internal sealed record CreateSignedUploadResponse(
     DateTimeOffset ExpiresAtUtc);
 internal sealed record IngestRequest(Guid DocumentId);
 internal sealed record WorkerIngestRequest(Guid DocumentId);
-internal sealed record DocumentIngestionStatus(
+public sealed record DocumentIngestionStatus(
     Guid DocumentId,
     string FileName,
     string BlobName,

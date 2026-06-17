@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using AcaAspireAiTemplate.Backend.Infrastructure.Ai;
+using AcaAspireAiTemplate.Backend.Infrastructure.Auth;
 
 namespace AcaAspireAiTemplate.Backend.Features.AiPing;
 
@@ -26,6 +27,7 @@ public static class Endpoint
         })
         .WithName("AiPing")
         .WithTags("AI")
+        .RequireAuthorization(EntraAuthSetup.ApiScopePolicyName)
         .Produces<AiPingResponse>(StatusCodes.Status200OK)
         .Produces(StatusCodes.Status503ServiceUnavailable);
     }

@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using AcaAspireAiTemplate.Backend.Infrastructure.Ai;
+using AcaAspireAiTemplate.Backend.Infrastructure.Auth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -91,7 +92,7 @@ public static class Endpoint
 
             var generalAnswer = await aiService.InvokePromptAsync(request.Message);
             return Results.Ok(new ChatResponse(generalAnswer, []));
-        });
+        }).RequireAuthorization(EntraAuthSetup.ApiScopePolicyName);
     }
 
     private static string BuildRagPrompt(string question, IEnumerable<string> contexts)

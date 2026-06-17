@@ -12,6 +12,7 @@ public static class Endpoint
         {
             return Results.Ok(new { status = "Healthy" });
         })
+        .AllowAnonymous()
         .WithName("HealthCheck")
         .WithTags("Health")
         .Produces<HealthResponse>(StatusCodes.Status200OK);

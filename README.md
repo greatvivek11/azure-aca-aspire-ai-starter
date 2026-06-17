@@ -30,7 +30,7 @@ This project is built using a modern, distributed architecture designed for scal
     -   **Azure SQL Database**: For structured, relational data.
     -   **Azure Blob Storage**: For all uploaded documents and files.
     -   **Azure AI Search**: For vector indexing and retrieval in the RAG pipeline.
--   **Security**: Authentication is handled by **Microsoft Entra ID** using the **MSAL** library. All communication between the backend and Azure services uses passwordless **Managed Identities**.
+-   **Security**: Authentication is handled by **Microsoft Entra ID** using the **MSAL** library. All communication between the backend and Azure services uses passwordless **Managed Identities**. Backend APIs enforce request rate limiting and upload payload-size guardrails by default.
 -   **DevOps**: Infrastructure is defined with **Bicep (IaC)** and deployed automatically via a **GitHub Actions** CI/CD pipeline.
 
 For a deeper dive, please see the detailed architectural documents:
@@ -38,6 +38,7 @@ For a deeper dive, please see the detailed architectural documents:
 -   **[Cloud Architecture](./docs/Architecture/Cloud-Architecture.md)**: The holistic, end-to-end deployment and security plan.
 -   **[Backend Architecture](./docs/Architecture/Backend-Architecture.md)**: The internal structure of the .NET backend.
 -   **[Frontend Architecture](./docs/Architecture/Frontend-Architecture.md)**: The technology stack and patterns for the React frontend.
+-   **[Network Hardening Extension](./docs/Architecture/Network-Hardening-Extension.md)**: Optional VNET/subnet/private-endpoint extension guidance.
 
 ---
 
@@ -60,7 +61,24 @@ git clone <repository-url>
 cd <repository-name>
 ```
 
-### 2. Set Up Environment Variables
+### 2. Bootstrap Local Tools (One-Time)
+Run the bootstrap script once after cloning to install/verify local tooling and dependencies:
+```bash
+bash scripts/setup-dev-tools.sh
+```
+
+What it prepares:
+- shellcheck (if available via your OS package manager)
+- actionlint (downloaded locally by `scripts/lint-workflows.sh`)
+- .NET restore
+- frontend npm install + lint
+- backend architecture tests
+
+Notes:
+- The actionlint binary is cached under `.tools/actionlint` and is intentionally gitignored (not committed).
+- shellcheck is expected to be machine-installed (brew/apt/dnf/yum), not checked into the repo.
+
+### 3. Set Up Environment Variables
 Copy the example environment file and fill in your actual values:
 ```bash
 cp src/aspire/.env.example src/aspire/.env
@@ -96,9 +114,32 @@ For both modes, uploads/ingestion use blob storage settings:
 
 Optional tuning:
 - `UPLOAD_URL_EXPIRY_MINUTES` (default 15, min 5, max 120)
+- `UPLOAD_MAX_REQUEST_BYTES` (default 26214400 / 25 MiB, min 1048576 / 1 MiB, max 104857600 / 100 MiB)
 - `AZURE_SEARCH_AUTH_MODE` (`api-key` default, or `managed-identity` for ACA MI-first search auth)
 
-### 3. Run the Application
+### Local Entra Auth (Optional, One Command)
+
+By default local runs keep auth disabled for first-run F5. To enable real Entra auth locally without manually creating app registrations:
+
+```bash
+az login
+bash scripts/setup-local-entra-auth.sh
+```
+
+What this does:
+- Creates or reuses tenant-scoped API and SPA app registrations.
+- Configures API scope `access_as_user` and SPA delegated permission.
+- Writes `ENTRA_*` values into `src/aspire/.env`.
+
+After script completion, restart Aspire (`dotnet run` from `src/aspire`) and use **Sign in** in the frontend.
+
+If you prefer manual setup, set these in `src/aspire/.env`:
+- `ENTRA_AUTH_ENABLED=true`
+- `ENTRA_TENANT_ID`
+- `ENTRA_API_CLIENT_ID`
+- `ENTRA_SPA_CLIENT_ID`
+
+### 4. Run the Application
 Navigate to the Aspire project directory and run the application:
 ```bash
 cd src/aspire
@@ -160,13 +201,20 @@ Validate GitHub Actions workflow syntax and expressions:
 bash scripts/lint-workflows.sh
 ```
 
+If shellcheck is installed locally, the script also lint-checks `scripts/ci/*.sh`.
+For first-time setup, use:
+
+```bash
+bash scripts/setup-dev-tools.sh
+```
+
 ### Architecture Tests
 
 We enforce architectural boundaries and best practices using xUnit tests. These tests validate:
 - ✅ Backend does NOT depend on Frontend
-- ✅ Backend has required infrastructure dependencies (Dapr, SQL, Semantic Kernel)
-- ✅ Features follow Vertical Slice Architecture
+- ✅ Feature slice files exist and remain organized
 - ✅ Features are independent (no cross-feature coupling)
+- ✅ Backend auth middleware is present (`UseAuthentication`, `UseAuthorization`, `AddJwtBearer`)
 
 Run architecture tests locally:
 ```bash
@@ -198,6 +246,7 @@ For detailed information, see [Architecture-Tests.md](./docs/Architecture-Tests.
 5. Add required repository secrets:
    - `AZURE_SUBSCRIPTION_ID`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`
    - `AZURE_SQL_ADMIN_LOGIN`, `AZURE_SQL_ADMIN_PASSWORD`
+   - `ENTRA_AUTH_ENABLED` (recommended `true`)
    - `AI_MODE` (optional, defaults to `azure` in deploy workflow)
    - `AI_SERVICES_PROVISIONING_MODE` (optional, defaults to `provision`)
    - `AZURE_OPENAI_AUTH_MODE`, `AZURE_STORAGE_AUTH_MODE`, `AZURE_AI_FOUNDRY_PROJECT_NAME` (recommended overrides)
@@ -220,6 +269,14 @@ To enable automatic deployment via GitHub Actions, configure these secrets:
 **AI Services:**
 - `AI_SERVICES_PROVISIONING_MODE` (optional, defaults to `provision`)
 - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_MODEL_ID`, `AZURE_OPENAI_ENDPOINT` (required only in `external` mode)
+
+**Entra Authentication:**
+- `ENTRA_AUTH_ENABLED` (optional, defaults to `true`)
+- Optional overrides: `ENTRA_AUTHORITY`, `ENTRA_API_CLIENT_ID`, `ENTRA_AUDIENCE`, `ENTRA_SPA_CLIENT_ID`, `ENTRA_SCOPE`
+
+Notes:
+- If Entra override secrets are not provided, the deployment workflow creates/updates API and SPA app registrations and wires these values automatically.
+- Tenant policies may still require manual admin consent for delegated permissions.
 
 **SQL Provisioning + Entra Setup:**
 - `AZURE_SQL_ADMIN_LOGIN`
@@ -245,7 +302,7 @@ GitHub Actions will automatically:
 1. ✅ Build backend and frontend
 2. ✅ Run architecture tests
 3. ✅ Validate Azure environment prerequisites
-4. ✅ Deploy to Azure Container Apps using `azd up`
+4. ✅ Deploy to Azure Container Apps using `azd provision` + service-level `azd deploy`
 5. ✅ Inject secrets into Container Apps environment
 
 Monitor progress in: **GitHub Actions → Deploy to Azure Container Apps**
@@ -256,7 +313,7 @@ Monitor progress in: **GitHub Actions → Deploy to Azure Container Apps**
 
 The project includes a fully automated GitHub Actions workflow:
 
-**Workflow file**: `.github/workflows/deploy.yml`
+**Workflow files**: `.github/workflows/deploy.yml` (entry) + reusable workflows under `.github/workflows/reusable-*.yml`
 
 ### What the Pipeline Does
 
@@ -268,9 +325,10 @@ The project includes a fully automated GitHub Actions workflow:
 
 2. **Deployment Job** (runs after validation succeeds):
    - Authenticates to Azure using OIDC
+   - Ensures Microsoft Entra API + SPA app registrations and API scope wiring
    - Validates Azure infrastructure prerequisites
-   - Runs `azd up` to deploy all containers
-   - Injects Azure OpenAI secrets from GitHub Secrets
+   - Runs `azd provision` and deploys services with `azd deploy`
+   - Injects runtime auth and AI settings into ACA workloads
    - Reports deployment status
 
 ### Triggering Deployment

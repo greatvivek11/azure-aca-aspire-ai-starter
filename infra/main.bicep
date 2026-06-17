@@ -63,6 +63,9 @@ param aiServicesProvisioningMode string = 'provision'
 @description('Azure AI Foundry (AIServices) account name when aiServicesProvisioningMode is provision. Leave empty to auto-generate.')
 param aiServicesAccountName string = ''
 
+@description('Set to true to restore a soft-deleted Azure AI Foundry account with the same name during provisioning.')
+param aiServicesRestore string = 'false'
+
 @description('Azure AI Foundry project name created under the provisioned AI Services account.')
 param aiFoundryProjectName string = 'enterprise-copilot'
 
@@ -176,6 +179,27 @@ param frontendImage string = 'mcr.microsoft.com/azuredocs/containerapps-hellowor
 @description('Container image for the worker app.')
 param workerImage string = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
 
+@description('Enable Microsoft Entra authentication in frontend and backend workloads.')
+param entraAuthEnabled string = 'true'
+
+@description('Microsoft Entra tenant ID used for token authority and issuer validation.')
+param entraTenantId string = ''
+
+@description('Microsoft Entra authority URL (defaults to login.microsoftonline.com/{tenantId}/v2.0 when empty).')
+param entraAuthority string = ''
+
+@description('Microsoft Entra application (API) client ID used as backend audience.')
+param entraApiClientId string = ''
+
+@description('Expected JWT audience for backend API token validation. Defaults to api://{entraApiClientId}.')
+param entraAudience string = ''
+
+@description('Microsoft Entra SPA client ID used by browser MSAL login.')
+param entraSpaClientId string = ''
+
+@description('Delegated API scope requested by the SPA. Defaults to api://{entraApiClientId}/access_as_user.')
+param entraScope string = ''
+
 // Keep generated resource names short and deterministic so long environment names do not violate provider limits.
 var prefixSlug = take(toLower(replace(resourceNamePrefix, '-', '')), 10)
 var environmentSlug = take(toLower(replace(environmentName, '-', '')), 6)
@@ -226,7 +250,18 @@ var generatedAiServicesAccountName = toLower(take('${baseName}-aoai', 64))
 var resolvedAiServicesAccountName = empty(aiServicesAccountName)
   ? generatedAiServicesAccountName
   : toLower(aiServicesAccountName)
+var shouldRestoreAiServicesAccount = toLower(aiServicesRestore) == 'true'
 var normalizedSearchAuthMode = toLower(searchAuthMode) == 'managed-identity' ? 'managed-identity' : 'api-key'
+var normalizedEntraAuthEnabled = toLower(entraAuthEnabled) == 'false' ? 'false' : 'true'
+var resolvedEntraAuthority = empty(entraAuthority)
+  ? (empty(entraTenantId) ? '' : '${environment().authentication.loginEndpoint}${entraTenantId}/v2.0')
+  : entraAuthority
+var resolvedEntraAudience = empty(entraAudience)
+  ? (empty(entraApiClientId) ? '' : 'api://${entraApiClientId}')
+  : entraAudience
+var resolvedEntraScope = empty(entraScope)
+  ? (empty(entraApiClientId) ? '' : 'api://${entraApiClientId}/access_as_user')
+  : entraScope
 var backendAppId = 'api'
 var frontendAppId = 'web'
 var workerAppId = 'worker'
@@ -431,6 +466,7 @@ resource aiServicesAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' = i
     customSubDomainName: resolvedAiServicesAccountName
     publicNetworkAccess: 'Enabled'
     allowProjectManagement: true
+    restore: shouldRestoreAiServicesAccount
   }
 }
 
@@ -689,7 +725,7 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
       }
       secrets: concat(backendRegistrySecrets, sharedRegistrySecrets)
       ingress: {
-        external: true
+        external: false
         targetPort: 8080
         transport: 'auto'
       }
@@ -779,6 +815,26 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'AZURE_CLIENT_ID'
               value: containerAppsManagedIdentity.properties.clientId
             }
+            {
+              name: 'ENTRA_AUTH_ENABLED'
+              value: normalizedEntraAuthEnabled
+            }
+            {
+              name: 'ENTRA_TENANT_ID'
+              value: entraTenantId
+            }
+            {
+              name: 'ENTRA_AUTHORITY'
+              value: resolvedEntraAuthority
+            }
+            {
+              name: 'ENTRA_API_CLIENT_ID'
+              value: entraApiClientId
+            }
+            {
+              name: 'ENTRA_AUDIENCE'
+              value: resolvedEntraAudience
+            }
           ])
           resources: {
             cpu: json('0.5')
@@ -842,6 +898,30 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'WORKER_DAPR_BASE_URL'
               value: 'http://localhost:3500/v1.0/invoke/${workerAppId}/method'
+            }
+            {
+              name: 'ENTRA_AUTH_ENABLED'
+              value: normalizedEntraAuthEnabled
+            }
+            {
+              name: 'ENTRA_TENANT_ID'
+              value: entraTenantId
+            }
+            {
+              name: 'ENTRA_AUTHORITY'
+              value: resolvedEntraAuthority
+            }
+            {
+              name: 'ENTRA_API_CLIENT_ID'
+              value: entraApiClientId
+            }
+            {
+              name: 'ENTRA_SPA_CLIENT_ID'
+              value: entraSpaClientId
+            }
+            {
+              name: 'ENTRA_SCOPE'
+              value: resolvedEntraScope
             }
           ])
           resources: {
@@ -1007,6 +1087,12 @@ output AZURE_AI_SERVICES_ACCOUNT_NAME string = useProvisionedAiServices ? aiServ
 output AZURE_AI_FOUNDRY_PROJECT_NAME string = useProvisionedAiServices ? aiFoundryProjectName : ''
 output AZURE_OPENAI_AUTH_MODE string = openAiAuthMode
 output AZURE_STORAGE_AUTH_MODE string = storageAuthMode
+output ENTRA_AUTH_ENABLED string = normalizedEntraAuthEnabled
+output ENTRA_TENANT_ID string = entraTenantId
+output ENTRA_API_CLIENT_ID string = entraApiClientId
+output ENTRA_SPA_CLIENT_ID string = entraSpaClientId
+output ENTRA_AUDIENCE string = resolvedEntraAudience
+output ENTRA_SCOPE string = resolvedEntraScope
 output CONTAINER_REGISTRY_MODE string = containerRegistryMode
 output ENABLE_LOG_ANALYTICS string = enableLogAnalytics
 output ENABLE_ASPIRE_DASHBOARD string = enableAspireDashboard

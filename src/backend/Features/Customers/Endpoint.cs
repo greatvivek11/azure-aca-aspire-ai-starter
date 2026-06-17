@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Data.SqlClient;
+using AcaAspireAiTemplate.Backend.Infrastructure.Auth;
 
 namespace AcaAspireAiTemplate.Backend.Features.Customers;
 
@@ -13,7 +14,7 @@ public static class Endpoint
         {
             var customers = await GetCustomersAsync(sqlConnectionString);
             return Results.Ok(customers);
-        });
+        }).RequireAuthorization(EntraAuthSetup.ApiScopePolicyName);
 
         app.MapPost("/v1/customers", async (CreateCustomerRequest request) =>
         {
@@ -27,7 +28,7 @@ public static class Endpoint
 
             var id = await CreateCustomerAsync(sqlConnectionString, request);
             return Results.Created($"/v1/customers/{id}", new { id });
-        });
+        }).RequireAuthorization(EntraAuthSetup.ApiScopePolicyName);
 
         app.MapPut("/v1/customers/{id:int}", async (int id, UpdateCustomerRequest request) =>
         {
@@ -41,13 +42,13 @@ public static class Endpoint
 
             var updated = await UpdateCustomerAsync(sqlConnectionString, id, request);
             return updated ? Results.NoContent() : Results.NotFound();
-        });
+        }).RequireAuthorization(EntraAuthSetup.ApiScopePolicyName);
 
         app.MapDelete("/v1/customers/{id:int}", async (int id) =>
         {
             var deleted = await DeleteCustomerAsync(sqlConnectionString, id);
             return deleted ? Results.NoContent() : Results.NotFound();
-        });
+        }).RequireAuthorization(EntraAuthSetup.ApiScopePolicyName);
     }
 
     private static async Task<List<CustomerRecord>> GetCustomersAsync(string connectionString)

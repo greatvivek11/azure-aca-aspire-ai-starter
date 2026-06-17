@@ -31,9 +31,9 @@
 * **Deployment**: GitHub Actions → Azure Container Apps via `azd`, with service definitions in `azure.yaml`.
 * **Observability**: ACA logs, optional App Insights + Log Analytics (free-tier friendly via sampling).
 
-## B. Phased Implementation Plan
+## B. Implementation Plan
 
-See: [Phased-Plan.md](/docs/plans/Phased_Plan.md).
+See: [Enterprise_Ready_Execution_Plan.md](/docs/plans/Enterprise_Ready_Execution_Plan.md).
 
 ## C. Architecture Principles
 

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
@@ -48,102 +47,55 @@ builder.WebHost.UseUrls("http://*:8081");
 
 var app = builder.Build();
 
-var sqlConnectionString = GetSqlConnectionString(app.Configuration);
-var aiMode = (Environment.GetEnvironmentVariable("AI_MODE") ?? "azure").Trim().ToLowerInvariant();
-if (string.Equals(aiMode, "local", StringComparison.OrdinalIgnoreCase))
+var runtimeOptions = WorkerRuntimeOptions.FromEnvironment(app.Configuration);
+if (string.Equals(runtimeOptions.AiMode, "local", StringComparison.OrdinalIgnoreCase))
 {
-    await EnsureDatabaseExistsAsync(sqlConnectionString);
+    await WorkerStartupTasks.EnsureDatabaseExistsAsync(runtimeOptions.SqlConnectionString);
 }
 else
 {
     app.Logger.LogInformation("Skipping SQL database creation check in Azure mode.");
 }
-var storageAccountName = Environment.GetEnvironmentVariable("AZURE_STORAGE_ACCOUNT_NAME") ?? string.Empty;
-var storageConnectionString = Environment.GetEnvironmentVariable("AZURE_STORAGE_CONNECTION_STRING") ?? string.Empty;
-var storageContainerName = Environment.GetEnvironmentVariable("AZURE_STORAGE_CONTAINER_NAME") ?? string.Empty;
-var storageAuthMode = (Environment.GetEnvironmentVariable("AZURE_STORAGE_AUTH_MODE") ?? "managed-identity")
-    .Trim()
-    .ToLowerInvariant();
-var searchEndpoint = Environment.GetEnvironmentVariable("AZURE_SEARCH_ENDPOINT") ?? string.Empty;
-var searchIndexName = Environment.GetEnvironmentVariable("AZURE_SEARCH_INDEX_NAME") ?? string.Empty;
-var searchApiKey = Environment.GetEnvironmentVariable("AZURE_SEARCH_API_KEY") ?? string.Empty;
-var qdrantUrl = (Environment.GetEnvironmentVariable("QDRANT_URL") ?? "http://qdrant:6333").Trim();
-var qdrantCollection = (Environment.GetEnvironmentVariable("QDRANT_COLLECTION") ?? "documents").Trim();
-var ollamaBaseUrl = (Environment.GetEnvironmentVariable("OLLAMA_BASE_URL") ?? "http://ollama:11434").Trim();
-var openAiEndpointText = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT") ?? string.Empty;
-var openAiApiKey = Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY") ?? string.Empty;
-var openAiAuthMode = (Environment.GetEnvironmentVariable("AZURE_OPENAI_AUTH_MODE") ?? "api-key")
-    .Trim()
-    .ToLowerInvariant();
-var managedIdentityClientId = Environment.GetEnvironmentVariable("AZURE_CLIENT_ID");
-var embeddingModelId = aiMode == "local"
-    ? (Environment.GetEnvironmentVariable("OLLAMA_EMBED_MODEL") ?? "nomic-embed-text")
-    : (Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_MODEL_ID") ?? string.Empty);
-var embeddingDimensions = aiMode == "local"
-    ? (int.TryParse(Environment.GetEnvironmentVariable("OLLAMA_EMBED_DIMENSIONS"), out var parsedLocalDimensions)
-        ? parsedLocalDimensions
-        : 768)
-    : (int.TryParse(Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_DIMENSIONS"), out var parsed)
-        ? parsed
-        : 1536);
-var storageConfigured =
-    (!string.IsNullOrWhiteSpace(storageConnectionString) || !string.IsNullOrWhiteSpace(storageAccountName))
-    && !string.IsNullOrWhiteSpace(storageContainerName);
-var azureIngestionConfigured =
-    storageConfigured &&
-    !string.IsNullOrWhiteSpace(searchEndpoint) &&
-    !string.IsNullOrWhiteSpace(searchIndexName) &&
-    !string.IsNullOrWhiteSpace(searchApiKey) &&
-    !string.IsNullOrWhiteSpace(openAiEndpointText) &&
-    (!string.Equals(openAiAuthMode, "api-key", StringComparison.OrdinalIgnoreCase) || !string.IsNullOrWhiteSpace(openAiApiKey)) &&
-    !string.IsNullOrWhiteSpace(embeddingModelId);
-var localIngestionConfigured =
-    storageConfigured &&
-    !string.IsNullOrWhiteSpace(qdrantUrl) &&
-    !string.IsNullOrWhiteSpace(qdrantCollection) &&
-    !string.IsNullOrWhiteSpace(ollamaBaseUrl) &&
-    !string.IsNullOrWhiteSpace(embeddingModelId);
-var ingestionConfigured = aiMode == "local" ? localIngestionConfigured : azureIngestionConfigured;
 
 app.Logger.LogInformation(
     "Worker startup configuration resolved. AiMode={AiMode}, IngestionConfigured={IngestionConfigured}, StorageConfigured={StorageConfigured}, QdrantUrlConfigured={QdrantConfigured}, SearchConfigured={SearchConfigured}, OpenAiEndpointConfigured={OpenAiEndpointConfigured}",
-    aiMode,
-    ingestionConfigured,
-    storageConfigured,
-    !string.IsNullOrWhiteSpace(qdrantUrl),
-    !string.IsNullOrWhiteSpace(searchEndpoint) && !string.IsNullOrWhiteSpace(searchIndexName),
-    !string.IsNullOrWhiteSpace(openAiEndpointText));
+    runtimeOptions.AiMode,
+    runtimeOptions.IngestionConfigured,
+    runtimeOptions.StorageConfigured,
+    !string.IsNullOrWhiteSpace(runtimeOptions.QdrantUrl),
+    !string.IsNullOrWhiteSpace(runtimeOptions.SearchEndpoint) && !string.IsNullOrWhiteSpace(runtimeOptions.SearchIndexName),
+    !string.IsNullOrWhiteSpace(runtimeOptions.OpenAiEndpointText));
 
-if (string.Equals(aiMode, "local", StringComparison.OrdinalIgnoreCase))
+if (string.Equals(runtimeOptions.AiMode, "local", StringComparison.OrdinalIgnoreCase))
 {
     using var modelWarmupClient = app.Services.GetRequiredService<IHttpClientFactory>().CreateClient();
-    await WarmLocalOllamaModelsAsync(modelWarmupClient, ollamaBaseUrl, [embeddingModelId], app.Logger);
+    await WorkerStartupTasks.WarmLocalOllamaModelsAsync(modelWarmupClient, runtimeOptions.OllamaBaseUrl, [runtimeOptions.EmbeddingModelId], app.Logger);
 }
 
-if (ingestionConfigured)
+if (runtimeOptions.IngestionConfigured)
 {
-    await EnsureVectorStoreAsync(aiMode, searchEndpoint, searchApiKey, searchIndexName, qdrantUrl, qdrantCollection, embeddingDimensions, app.Logger);
-    await EnsureWorkerSqlSchemaAsync(sqlConnectionString);
-    await RequeueNonTerminalJobsAsync(sqlConnectionString);
+    await EnsureVectorStoreAsync(runtimeOptions.AiMode, runtimeOptions.SearchEndpoint, runtimeOptions.SearchApiKey, runtimeOptions.SearchIndexName, runtimeOptions.QdrantUrl, runtimeOptions.QdrantCollection, runtimeOptions.EmbeddingDimensions, app.Logger);
+    await WorkerStartupTasks.EnsureWorkerSqlSchemaAsync(runtimeOptions.SqlConnectionString);
+    await WorkerStartupTasks.RequeueNonTerminalJobsAsync(runtimeOptions.SqlConnectionString);
     _ = RunIngestionLoopAsync(
-        aiMode,
-        sqlConnectionString,
-        storageAccountName,
-        storageConnectionString,
-        storageContainerName,
-        storageAuthMode,
-        searchEndpoint,
-        searchApiKey,
-        searchIndexName,
-        qdrantUrl,
-        qdrantCollection,
-        ollamaBaseUrl,
-        string.IsNullOrWhiteSpace(openAiEndpointText) ? new Uri("http://localhost") : new Uri(openAiEndpointText, UriKind.Absolute),
-        openAiApiKey,
-        openAiAuthMode,
-        managedIdentityClientId,
-        embeddingModelId,
-        embeddingDimensions,
+        runtimeOptions.AiMode,
+        runtimeOptions.SqlConnectionString,
+        runtimeOptions.StorageAccountName,
+        runtimeOptions.StorageConnectionString,
+        runtimeOptions.StorageContainerName,
+        runtimeOptions.StorageAuthMode,
+        runtimeOptions.SearchEndpoint,
+        runtimeOptions.SearchApiKey,
+        runtimeOptions.SearchIndexName,
+        runtimeOptions.QdrantUrl,
+        runtimeOptions.QdrantCollection,
+        runtimeOptions.OllamaBaseUrl,
+        runtimeOptions.GetOpenAiEndpointOrFallback(),
+        runtimeOptions.OpenAiApiKey,
+        runtimeOptions.OpenAiAuthMode,
+        runtimeOptions.ManagedIdentityClientId,
+        runtimeOptions.EmbeddingModelId,
+        runtimeOptions.EmbeddingDimensions,
         httpClientFactory: app.Services.GetRequiredService<IHttpClientFactory>(),
         app.Logger,
         app.Lifetime.ApplicationStopping);
@@ -152,10 +104,10 @@ else
 {
     app.Logger.LogWarning(
         "Worker ingestion pipeline disabled. AiMode={AiMode}, StorageConfigured={StorageConfigured}, LocalIngestionConfigured={LocalConfigured}, AzureIngestionConfigured={AzureConfigured}",
-        aiMode,
-        storageConfigured,
-        localIngestionConfigured,
-        azureIngestionConfigured);
+        runtimeOptions.AiMode,
+        runtimeOptions.StorageConfigured,
+        runtimeOptions.LocalIngestionConfigured,
+        runtimeOptions.AzureIngestionConfigured);
 }
 
 if (app.Environment.IsDevelopment())
@@ -163,31 +115,7 @@ if (app.Environment.IsDevelopment())
     app.UseDeveloperExceptionPage();
 }
 
-app.Use(async (context, next) =>
-{
-    var started = Stopwatch.GetTimestamp();
-
-    try
-    {
-        await next();
-        app.Logger.LogInformation(
-            "HTTP {Method} {Path} responded {StatusCode} in {ElapsedMilliseconds} ms",
-            context.Request.Method,
-            context.Request.Path,
-            context.Response.StatusCode,
-            Stopwatch.GetElapsedTime(started).TotalMilliseconds);
-    }
-    catch (Exception ex)
-    {
-        app.Logger.LogError(
-            ex,
-            "HTTP {Method} {Path} failed after {ElapsedMilliseconds} ms",
-            context.Request.Method,
-            context.Request.Path,
-            Stopwatch.GetElapsedTime(started).TotalMilliseconds);
-        throw;
-    }
-});
+app.UseWorkerRequestLogging();
 
 app.UseCloudEvents();
 app.MapSubscribeHandler();
@@ -195,18 +123,18 @@ app.MapHealthChecks("/v1/health");
 
 app.MapPost("/v1/ingest", async (WorkerIngestRequest request) =>
 {
-    if (!ingestionConfigured)
+    if (!runtimeOptions.IngestionConfigured)
     {
         return Results.Problem("Worker ingestion pipeline is not configured.");
     }
 
-    var job = await GetDocumentIngestionJobAsync(sqlConnectionString, request.DocumentId);
+    var job = await GetDocumentIngestionJobAsync(runtimeOptions.SqlConnectionString, request.DocumentId);
     if (job is null)
     {
         return Results.NotFound($"Document {request.DocumentId} was not found.");
     }
 
-    await UpdateDocumentIngestionJobStatusAsync(sqlConnectionString, request.DocumentId, "Queued", 15, null);
+    await UpdateDocumentIngestionJobStatusAsync(runtimeOptions.SqlConnectionString, request.DocumentId, "Queued", 15, null);
 
     return Results.Accepted($"/v1/ingest/{request.DocumentId}", new { request.DocumentId, status = "Queued" });
 });
@@ -655,7 +583,7 @@ static async Task<float[]> GenerateEmbeddingAsync(
     if (string.Equals(aiMode, "local", StringComparison.OrdinalIgnoreCase))
     {
         using var localClient = httpClientFactory.CreateClient();
-        await EnsureOllamaModelPulledAsync(localClient, ollamaBaseUrl, embeddingDeployment);
+        await WorkerStartupTasks.EnsureOllamaModelPulledAsync(localClient, ollamaBaseUrl, embeddingDeployment);
         using var localPayload = new StringContent(
             JsonSerializer.Serialize(new { model = embeddingDeployment, prompt = text }),
             Encoding.UTF8,
@@ -795,55 +723,6 @@ static async Task<float[]> ParseLocalEmbeddingAsync(HttpResponseMessage response
         .EnumerateArray()
         .Select(element => element.GetSingle())
         .ToArray();
-}
-
-static async Task EnsureOllamaModelPulledAsync(HttpClient client, string ollamaBaseUrl, string modelName)
-{
-    using var payload = new StringContent(
-        JsonSerializer.Serialize(new { name = modelName, stream = false }),
-        Encoding.UTF8,
-        "application/json");
-    using var response = await client.PostAsync($"{ollamaBaseUrl.TrimEnd('/')}/api/pull", payload);
-    if (!response.IsSuccessStatusCode)
-    {
-        var responseBody = await response.Content.ReadAsStringAsync();
-        throw new InvalidOperationException(
-            $"Ollama failed to pull model '{modelName}' (HTTP {(int)response.StatusCode}). Response: {responseBody}");
-    }
-}
-
-static async Task WarmLocalOllamaModelsAsync(
-    HttpClient client,
-    string ollamaBaseUrl,
-    IReadOnlyList<string> modelNames,
-    ILogger logger)
-{
-    var uniqueModelNames = modelNames
-        .Where(modelName => !string.IsNullOrWhiteSpace(modelName))
-        .Select(modelName => modelName.Trim())
-        .Distinct(StringComparer.OrdinalIgnoreCase)
-        .ToArray();
-    if (uniqueModelNames.Length == 0)
-    {
-        logger.LogWarning("Skipping Ollama model warmup because no local model names were configured.");
-        return;
-    }
-
-    foreach (var modelName in uniqueModelNames)
-    {
-        logger.LogInformation("Preloading Ollama model {ModelName}.", modelName);
-        try
-        {
-            await EnsureOllamaModelPulledAsync(client, ollamaBaseUrl, modelName);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Skipping Ollama model warmup for {ModelName}.", modelName);
-            continue;
-        }
-
-        logger.LogInformation("Ollama model {ModelName} is ready.", modelName);
-    }
 }
 
 static async Task<bool> ConfigureOpenAiAuthAsync(
@@ -1070,74 +949,6 @@ WHERE DocumentId = @documentId;
     await command.ExecuteNonQueryAsync();
 }
 
-static async Task RequeueNonTerminalJobsAsync(string connectionString)
-{
-    await using var connection = new SqlConnection(connectionString);
-    await connection.OpenAsync();
-
-    await using var command = connection.CreateCommand();
-    command.CommandText = """
-UPDATE dbo.DocumentIngestionJobs
-SET Status = 'Queued',
-    ProgressPercent = CASE WHEN ProgressPercent < 15 THEN 15 ELSE ProgressPercent END,
-    ErrorMessage = NULL,
-    UpdatedAtUtc = SYSUTCDATETIME()
-WHERE Status IN ('Processing', 'Extracting', 'Chunking', 'Embedding', 'Indexing');
-""";
-    await command.ExecuteNonQueryAsync();
-}
-
-static async Task EnsureWorkerSqlSchemaAsync(string connectionString)
-{
-    await using var connection = new SqlConnection(connectionString);
-    await connection.OpenAsync();
-
-    await using var command = connection.CreateCommand();
-    command.CommandText = """
-IF OBJECT_ID(N'dbo.DocumentIngestionJobs', N'U') IS NULL
-BEGIN
-    CREATE TABLE dbo.DocumentIngestionJobs (
-        DocumentId UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
-        FileName NVARCHAR(260) NOT NULL,
-        BlobName NVARCHAR(512) NOT NULL,
-        Status NVARCHAR(40) NOT NULL,
-        ProgressPercent INT NOT NULL CONSTRAINT DF_DocumentIngestionJobs_Progress DEFAULT (0),
-        TotalChunks INT NULL,
-        ErrorMessage NVARCHAR(MAX) NULL,
-        CreatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_DocumentIngestionJobs_CreatedAt DEFAULT (SYSUTCDATETIME()),
-        UpdatedAtUtc DATETIME2 NOT NULL CONSTRAINT DF_DocumentIngestionJobs_UpdatedAt DEFAULT (SYSUTCDATETIME()),
-        ReadyAtUtc DATETIME2 NULL
-    );
-END;
-""";
-    await command.ExecuteNonQueryAsync();
-}
-
-static async Task EnsureDatabaseExistsAsync(string connectionString)
-{
-    var builder = new SqlConnectionStringBuilder(connectionString);
-    var databaseName = builder.InitialCatalog;
-    if (string.IsNullOrWhiteSpace(databaseName))
-    {
-        return;
-    }
-
-    builder.InitialCatalog = "master";
-    await using var connection = new SqlConnection(builder.ConnectionString);
-    await connection.OpenAsync();
-
-    await using var command = connection.CreateCommand();
-    command.CommandText = """
-IF DB_ID(@databaseName) IS NULL
-BEGIN
-    DECLARE @sql nvarchar(max) = N'CREATE DATABASE [' + REPLACE(@databaseName, ']', ']]') + N']';
-    EXEC (@sql);
-END
-""";
-    command.Parameters.AddWithValue("@databaseName", databaseName);
-    await command.ExecuteNonQueryAsync();
-}
-
 static async Task<DocumentIngestionJob?> TryClaimNextQueuedJobAsync(string connectionString)
 {
     await using var connection = new SqlConnection(connectionString);
@@ -1172,33 +983,6 @@ INNER JOIN next_job ON jobs.DocumentId = next_job.DocumentId;
         reader.GetString(1),
         reader.GetString(2),
         reader.GetString(3));
-}
-
-static string GetSqlConnectionString(IConfiguration configuration)
-{
-    var explicitConnectionString = configuration.GetConnectionString("SqlServer")
-        ?? Environment.GetEnvironmentVariable("ConnectionStrings__SqlServer");
-    if (!string.IsNullOrWhiteSpace(explicitConnectionString))
-    {
-        return explicitConnectionString;
-    }
-
-    var sqlServer = Environment.GetEnvironmentVariable("SQL_SERVER");
-    var sqlDatabase = Environment.GetEnvironmentVariable("SQL_DATABASE");
-    var uamiClientId = Environment.GetEnvironmentVariable("AZURE_CLIENT_ID");
-
-    var missing = new List<string>();
-    if (string.IsNullOrWhiteSpace(sqlServer)) missing.Add("SQL_SERVER");
-    if (string.IsNullOrWhiteSpace(sqlDatabase)) missing.Add("SQL_DATABASE");
-    if (string.IsNullOrWhiteSpace(uamiClientId)) missing.Add("AZURE_CLIENT_ID");
-    if (missing.Count > 0)
-    {
-        throw new InvalidOperationException($"SQL configuration is incomplete. Missing: {string.Join(", ", missing)}.");
-    }
-
-    return $"Server=tcp:{sqlServer},1433;Initial Catalog={sqlDatabase};"
-         + $"Authentication=Active Directory Managed Identity;User Id={uamiClientId};"
-         + "Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;";
 }
 
 internal sealed record WorkerIngestRequest(Guid DocumentId);

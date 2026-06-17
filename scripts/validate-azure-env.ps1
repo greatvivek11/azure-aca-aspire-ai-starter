@@ -55,12 +55,12 @@ try {
         
         # Check for the database
         $database = az sql db list --resource-group $ResourceGroup --server-name $sqlServers `
-            --query "[?name=='AiHubDb'].name" -o tsv 2>$null
+            --query "[?name=='acaaspireaistarter'].name" -o tsv 2>$null
         
         if ([string]::IsNullOrEmpty($database)) {
-            Write-Host "⚠️  Database 'AiHubDb' not found. It will be created during provisioning" -ForegroundColor Yellow
+            Write-Host "⚠️  Database 'acaaspireaistarter' not found. It will be created during provisioning" -ForegroundColor Yellow
         } else {
-            Write-Host "✅ Database 'AiHubDb' exists on server '$sqlServers'" -ForegroundColor Green
+            Write-Host "✅ Database 'acaaspireaistarter' exists on server '$sqlServers'" -ForegroundColor Green
         }
     }
 

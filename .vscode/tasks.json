@@ -74,6 +74,38 @@
 			}
 		},
 		{
+			"label": "setup-dev-tools",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"${workspaceFolder}/scripts/setup-dev-tools.sh"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "frontend-lint",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"lint"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/src/frontend"
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "backend-tests",
+			"type": "shell",
+			"command": "dotnet",
+			"args": [
+				"test",
+				"${workspaceFolder}/src/Backend.Tests/Backend.Tests.csproj"
+			],
+			"problemMatcher": "$msCompile"
+		},
+		{
 			"label": "noop",
 			"type": "shell",
 			"command": "true"

@@ -2,6 +2,10 @@
 
 This document describes the automated deployment pipeline for the ACA Aspire AI Starter project using GitHub Actions and Azure Developer CLI (azd).
 
+> Source-of-truth note:
+> The authoritative implementation is in `.github/workflows/deploy.yml`, `.github/workflows/reusable-validate-build.yml`, and `.github/workflows/reusable-deploy-azure.yml`.
+> If this document and workflow YAML differ, follow the workflow YAML.
+
 ## Overview
 
 The CI/CD pipeline automates:
@@ -10,6 +14,7 @@ The CI/CD pipeline automates:
 - ✅ Validating Azure infrastructure prerequisites
 - ✅ Deploying to Azure Container Apps using `azd provision` + `azd deploy`
 - ✅ Using Managed Identity for backend SQL runtime authentication
+- ✅ Bootstrapping and finalizing Entra app registration wiring for SPA + API auth during deployment
 
 **Deployment triggers:**
 - Push to `main` branch (automatic)
@@ -57,7 +62,11 @@ The CI/CD pipeline automates:
 
 ## Workflow File Structure
 
-Location: `.github/workflows/deploy.yml`
+Entry workflow: `.github/workflows/deploy.yml`
+
+Reusable workflows:
+- `.github/workflows/reusable-validate-build.yml`
+- `.github/workflows/reusable-deploy-azure.yml`
 
 ### 1. Validation & Build Job
 
@@ -91,10 +100,13 @@ deploy:
   steps:
     - Setup tools (azd, .NET, Node.js)
     - Authenticate to Azure (OpenID Connect)
+    - Preflight deploy/auth validation (includes Entra input validation)
+    - Entra bootstrap (idempotent app registration + scope wiring)
     - Configure azd to use Azure CLI auth
     - Validate Azure environment
     - Run: azd provision --no-prompt
     - Run: azd deploy backend/frontend/worker --no-prompt
+    - Entra finalize (redirect URI and app metadata finalization)
     - Display deployment summary
 ```
 

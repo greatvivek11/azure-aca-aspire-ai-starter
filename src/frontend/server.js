@@ -3,7 +3,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import appInsights from "applicationinsights";
 import { Hono } from "hono";
 
 const app = new Hono();
@@ -12,26 +11,139 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const indexHtmlPath = path.join(__dirname, "dist", "index.html");
 
-const connectionString = process.env.APPLICATIONINSIGHTS_CONNECTION_STRING;
-if (connectionString) {
-	appInsights
-		.setup(connectionString)
-		.setAutoCollectRequests(true)
-		.setAutoCollectDependencies(true)
-		.setAutoCollectExceptions(true)
-		.setAutoCollectConsole(true, true)
-		.setUseDiskRetryCaching(true)
-		.start();
+const appInsightsConfig = parseAppInsightsConnectionString(
+	process.env.APPLICATIONINSIGHTS_CONNECTION_STRING || "",
+);
+
+function parseAppInsightsConnectionString(connectionString) {
+	if (!connectionString) {
+		return null;
+	}
+
+	const values = Object.fromEntries(
+		connectionString
+			.split(";")
+			.map((part) => part.trim())
+			.filter(Boolean)
+			.map((part) => {
+				const separatorIndex = part.indexOf("=");
+				if (separatorIndex < 0) {
+					return [part, ""];
+				}
+
+				return [part.slice(0, separatorIndex), part.slice(separatorIndex + 1)];
+			}),
+	);
+
+	const instrumentationKey = values.InstrumentationKey || values.InstrumentationKey?.trim();
+	if (!instrumentationKey) {
+		return null;
+	}
+
+	const ingestionEndpoint = (values.IngestionEndpoint || "https://dc.services.visualstudio.com").replace(/\/$/, "");
+
+	return {
+		instrumentationKey,
+		ingestionEndpoint,
+		roleName: "frontend",
+		roleInstance: process.env.CONTAINER_APP_NAME || process.env.HOSTNAME || "local",
+	};
 }
 
-const telemetryClient = appInsights.defaultClient;
+function appInsightsEnvelope(name, baseType, baseData) {
+	if (!appInsightsConfig) {
+		return null;
+	}
+
+	return {
+		name: `Microsoft.ApplicationInsights.${appInsightsConfig.instrumentationKey}.${name}`,
+		time: new Date().toISOString(),
+		iKey: appInsightsConfig.instrumentationKey,
+		tags: {
+			"ai.cloud.role": appInsightsConfig.roleName,
+			"ai.cloud.roleInstance": appInsightsConfig.roleInstance,
+		},
+		data: {
+			baseType,
+			baseData,
+		},
+	};
+}
+
+async function sendAppInsightsTelemetry(envelope) {
+	if (!envelope || !appInsightsConfig) {
+		return;
+	}
+
+	try {
+		await fetch(`${appInsightsConfig.ingestionEndpoint}/v2/track`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json; charset=utf-8",
+			},
+			body: JSON.stringify(envelope),
+		});
+	} catch (error) {
+		console.error(
+			JSON.stringify({
+				timestamp: new Date().toISOString(),
+				severity: "Error",
+				eventName: "FrontendAppInsightsTransportError",
+				service: "frontend",
+				message: toError(error).message,
+			}),
+		);
+	}
+}
 
 function trackTrace(message, properties = {}) {
-	telemetryClient?.trackTrace({ message, properties });
+	const traceRecord = {
+		timestamp: new Date().toISOString(),
+		severity: "Info",
+		eventName: "FrontendTrace",
+		service: "frontend",
+		message,
+		properties,
+	};
+
+	void sendAppInsightsTelemetry(
+		appInsightsEnvelope("Message", "MessageData", {
+			ver: 2,
+			message,
+			severityLevel: 1,
+			properties,
+		}),
+	);
+	console.log(JSON.stringify(traceRecord));
 }
 
 function trackException(error, properties = {}) {
-	telemetryClient?.trackException({ exception: error, properties });
+	const normalizedError = toError(error);
+	const exceptionRecord = {
+		timestamp: new Date().toISOString(),
+		severity: "Error",
+		eventName: "FrontendExceptionTelemetry",
+		service: "frontend",
+		message: normalizedError.message,
+		stack: normalizedError.stack,
+		properties,
+	};
+
+	void sendAppInsightsTelemetry(
+		appInsightsEnvelope("Exception", "ExceptionData", {
+			ver: 2,
+			exceptions: [
+				{
+					typeName: normalizedError.name,
+					message: normalizedError.message,
+					stack: normalizedError.stack,
+				},
+			],
+			severityLevel: 3,
+			properties,
+		}),
+	);
+	console.error(JSON.stringify(exceptionRecord));
 }
 
 function toError(error) {

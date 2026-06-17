@@ -1,1129 +1,1103 @@
 {
-  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-  "contentVersion": "1.0.0.0",
-  "metadata": {
-    "_generator": {
-      "name": "bicep",
-      "version": "0.43.8.12551",
-      "templateHash": "15220121548557929387"
-    }
-  },
-  "parameters": {
-    "location": {
-      "type": "string",
-      "defaultValue": "[resourceGroup().location]",
-      "metadata": {
-        "description": "Primary deployment location for all resources."
-      }
-    },
-    "environmentName": {
-      "type": "string",
-      "defaultValue": "dev",
-      "metadata": {
-        "description": "Environment name for resource naming and tagging."
-      }
-    },
-    "resourceNamePrefix": {
-      "type": "string",
-      "defaultValue": "aih-azure-aca-aspire-ai-starter",
-      "metadata": {
-        "description": "Deterministic prefix for Azure resource names."
-      }
-    },
-    "tags": {
-      "type": "object",
-      "defaultValue": {},
-      "metadata": {
-        "description": "Optional tags applied to all resources."
-      }
-    },
-    "sqlAdminLogin": {
-      "type": "string",
-      "metadata": {
-        "description": "SQL admin login for Azure SQL server."
-      }
-    },
-    "sqlAdminPassword": {
-      "type": "securestring",
-      "metadata": {
-        "description": "SQL admin password for Azure SQL server."
-      }
-    },
-    "sqlDatabaseName": {
-      "type": "string",
-      "defaultValue": "acaaspireaistarter",
-      "metadata": {
-        "description": "Azure SQL database name used by backend API."
-      }
-    },
-    "sqlLocation": {
-      "type": "string",
-      "defaultValue": "[parameters('location')]",
-      "metadata": {
-        "description": "Azure SQL server/database location. Defaults to deployment location but can be overridden for regional capacity constraints."
-      }
-    },
-    "sqlProvisioningMode": {
-      "type": "string",
-      "defaultValue": "provision",
-      "allowedValues": [
-        "provision",
-        "existing"
-      ],
-      "metadata": {
-        "description": "SQL strategy: provision creates SQL resources via IaC; existing uses pre-created SQL resources."
-      }
-    },
-    "existingSqlServerName": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Existing Azure SQL server name (without .database.windows.net). Required when sqlProvisioningMode is existing."
-      }
-    },
-    "existingSqlDatabaseName": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Existing Azure SQL database name. Required when sqlProvisioningMode is existing."
-      }
-    },
-    "sqlEntraAdminLogin": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Entra AD admin login (email) for Azure SQL server. Optional."
-      }
-    },
-    "sqlEntraAdminObjectId": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Entra AD admin object ID for Azure SQL server. Required if sqlEntraAdminLogin is provided."
-      }
-    },
-    "azureOpenAiApiKey": {
-      "type": "securestring",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Azure OpenAI API key for backend AI calls."
-      }
-    },
-    "azureOpenAiModelId": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Azure OpenAI model deployment ID used by backend."
-      }
-    },
-    "azureOpenAiEndpoint": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Azure OpenAI endpoint URL used by backend."
-      }
-    },
-    "aiServicesProvisioningMode": {
-      "type": "string",
-      "defaultValue": "provision",
-      "allowedValues": [
-        "external",
-        "provision"
-      ],
-      "metadata": {
-        "description": "AI services strategy: external uses provided endpoint/key; provision creates an Azure AI Foundry (AIServices) resource, project, and model deployments."
-      }
-    },
-    "aiServicesAccountName": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Azure AI Foundry (AIServices) account name when aiServicesProvisioningMode is provision. Leave empty to auto-generate."
-      }
-    },
-    "aiFoundryProjectName": {
-      "type": "string",
-      "defaultValue": "enterprise-copilot",
-      "metadata": {
-        "description": "Azure AI Foundry project name created under the provisioned AI Services account."
-      }
-    },
-    "aiFoundryProjectProvisioningMode": {
-      "type": "string",
-      "defaultValue": "cli",
-      "allowedValues": [
-        "arm",
-        "cli"
-      ],
-      "metadata": {
-        "description": "Foundry project provisioning mode. arm creates the project in Bicep; cli defers project creation to post-provision CLI automation for reliability."
-      }
-    },
-    "openAiChatDeploymentName": {
-      "type": "string",
-      "defaultValue": "gpt-5.1",
-      "metadata": {
-        "description": "Chat model deployment name. When provisioning, this deployment is created and used as AZURE_OPENAI_MODEL_ID."
-      }
-    },
-    "openAiChatModelName": {
-      "type": "string",
-      "defaultValue": "gpt-5.1",
-      "metadata": {
-        "description": "Chat model catalog name for Azure OpenAI deployment."
-      }
-    },
-    "openAiChatModelVersion": {
-      "type": "string",
-      "defaultValue": "2025-11-13",
-      "metadata": {
-        "description": "Chat model version for Azure OpenAI deployment."
-      }
-    },
-    "openAiEmbeddingDeploymentName": {
-      "type": "string",
-      "defaultValue": "text-embedding-3-small",
-      "metadata": {
-        "description": "Embeddings model deployment name provisioned for ingestion/RAG."
-      }
-    },
-    "openAiEmbeddingModelName": {
-      "type": "string",
-      "defaultValue": "text-embedding-3-small",
-      "metadata": {
-        "description": "Embeddings model catalog name."
-      }
-    },
-    "openAiEmbeddingModelVersion": {
-      "type": "string",
-      "defaultValue": "1",
-      "metadata": {
-        "description": "Embeddings model version."
-      }
-    },
-    "openAiEmbeddingDimensions": {
-      "type": "int",
-      "defaultValue": 1536,
-      "metadata": {
-        "description": "Embedding vector dimensions for the embeddings deployment used by Azure AI Search vector field."
-      }
-    },
-    "openAiAuthMode": {
-      "type": "string",
-      "defaultValue": "managed-identity",
-      "metadata": {
-        "description": "OpenAI/Foundry auth mode for backend and worker. managed-identity tries MI first with API-key fallback."
-      }
-    },
-    "aiMode": {
-      "type": "string",
-      "defaultValue": "azure",
-      "allowedValues": [
-        "azure",
-        "local"
-      ],
-      "metadata": {
-        "description": "AI runtime mode for backend/worker. Use azure for cloud deployments."
-      }
-    },
-    "storageAccountName": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Storage account name override. Leave empty to auto-generate."
-      }
-    },
-    "documentsContainerName": {
-      "type": "string",
-      "defaultValue": "documents",
-      "metadata": {
-        "description": "Blob container name used for uploaded documents."
-      }
-    },
-    "blobCorsAllowedOriginsJson": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "JSON array string of allowed origins for browser-based Blob SAS uploads."
-      }
-    },
-    "storageAuthMode": {
-      "type": "string",
-      "defaultValue": "managed-identity",
-      "metadata": {
-        "description": "Storage auth mode for backend/worker. managed-identity tries MI first with connection-string fallback."
-      }
-    },
-    "searchServiceName": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Azure AI Search service name override. Leave empty to auto-generate."
-      }
-    },
-    "searchLocation": {
-      "type": "string",
-      "defaultValue": "[parameters('location')]",
-      "metadata": {
-        "description": "Azure AI Search service location. Defaults to deployment location but can be overridden to a region with available capacity."
-      }
-    },
-    "searchProvisioningMode": {
-      "type": "string",
-      "defaultValue": "provision",
-      "allowedValues": [
-        "provision",
-        "existing"
-      ],
-      "metadata": {
-        "description": "Azure AI Search strategy: provision creates Search via IaC; existing reuses a pre-created Search service."
-      }
-    },
-    "searchIndexName": {
-      "type": "string",
-      "defaultValue": "documents-index",
-      "metadata": {
-        "description": "Azure AI Search index name for document chunks."
-      }
-    },
-    "searchAuthMode": {
-      "type": "string",
-      "defaultValue": "api-key",
-      "metadata": {
-        "description": "Backend Azure AI Search authentication mode. api-key uses AZURE_SEARCH_API_KEY, managed-identity uses ACA managed identity token with API-key fallback."
-      }
-    },
-    "containerRegistryMode": {
-      "type": "string",
-      "defaultValue": "external",
-      "allowedValues": [
-        "managed",
-        "external"
-      ],
-      "metadata": {
-        "description": "Container image registry mode. managed provisions Azure Container Registry; external uses public/authenticated external images such as GHCR."
-      }
-    },
-    "externalRegistryServer": {
-      "type": "string",
-      "defaultValue": "ghcr.io",
-      "metadata": {
-        "description": "External registry server used when containerRegistryMode is external."
-      }
-    },
-    "externalRegistryUsername": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "External registry username used when containerRegistryMode is external and the registry requires authentication."
-      }
-    },
-    "externalRegistryPassword": {
-      "type": "securestring",
-      "defaultValue": "",
-      "metadata": {
-        "description": "External registry password or token used when containerRegistryMode is external and the registry requires authentication."
-      }
-    },
-    "enableLogAnalytics": {
-      "type": "string",
-      "defaultValue": "false",
-      "metadata": {
-        "description": "Enable Log Analytics and workspace-based Application Insights for the Container Apps environment."
-      }
-    },
-    "enableAspireDashboard": {
-      "type": "string",
-      "defaultValue": "true",
-      "metadata": {
-        "description": "Enable Aspire Dashboard in the Container Apps environment."
-      }
-    },
-    "backendMinReplicas": {
-      "type": "string",
-      "defaultValue": "0",
-      "metadata": {
-        "description": "Minimum replicas for the backend container app."
-      }
-    },
-    "frontendMinReplicas": {
-      "type": "string",
-      "defaultValue": "0",
-      "metadata": {
-        "description": "Minimum replicas for the frontend container app."
-      }
-    },
-    "workerMinReplicas": {
-      "type": "string",
-      "defaultValue": "0",
-      "metadata": {
-        "description": "Minimum replicas for the worker container app."
-      }
-    },
-    "backendImage": {
-      "type": "string",
-      "defaultValue": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
-      "metadata": {
-        "description": "Container image for the backend app."
-      }
-    },
-    "frontendImage": {
-      "type": "string",
-      "defaultValue": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
-      "metadata": {
-        "description": "Container image for the frontend app."
-      }
-    },
-    "workerImage": {
-      "type": "string",
-      "defaultValue": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
-      "metadata": {
-        "description": "Container image for the worker app."
-      }
-    }
-  },
-  "variables": {
-    "prefixSlug": "[take(toLower(replace(parameters('resourceNamePrefix'), '-', '')), 10)]",
-    "environmentSlug": "[take(toLower(replace(parameters('environmentName'), '-', '')), 6)]",
-    "nameSeed": "[take(uniqueString(subscription().subscriptionId, resourceGroup().id, parameters('environmentName')), 6)]",
-    "baseName": "[format('{0}-{1}-{2}', variables('prefixSlug'), variables('environmentSlug'), variables('nameSeed'))]",
-    "acrPullRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
-    "storageBlobDataContributorRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
-    "searchIndexDataReaderRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '1407120a-92aa-4202-b7e9-c0e197c71c8f')]",
-    "cognitiveServicesOpenAiUserRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')]",
-    "backendAppName": "backend",
-    "frontendAppName": "frontend",
-    "workerAppName": "worker",
-    "containerAppsManagedIdentityName": "[format('{0}-cai', variables('baseName'))]",
-    "sqlLocationSeed": "[take(uniqueString(parameters('sqlLocation')), 4)]",
-    "sqlServerName": "[take(format('{0}-{1}-sql', variables('baseName'), variables('sqlLocationSeed')), 63)]",
-    "useExistingSql": "[equals(toLower(parameters('sqlProvisioningMode')), 'existing')]",
-    "useManagedRegistry": "[equals(toLower(parameters('containerRegistryMode')), 'managed')]",
-    "useExternalRegistry": "[not(variables('useManagedRegistry'))]",
-    "useProvisionedAiServices": "[equals(toLower(parameters('aiServicesProvisioningMode')), 'provision')]",
-    "useArmFoundryProjectProvisioning": "[and(variables('useProvisionedAiServices'), equals(toLower(parameters('aiFoundryProjectProvisioningMode')), 'arm'))]",
-    "hasExternalRegistryCredentials": "[and(and(variables('useExternalRegistry'), not(empty(parameters('externalRegistryUsername')))), not(empty(parameters('externalRegistryPassword'))))]",
-    "logAnalyticsEnabled": "[equals(toLower(parameters('enableLogAnalytics')), 'true')]",
-    "aspireDashboardEnabled": "[equals(toLower(parameters('enableAspireDashboard')), 'true')]",
-    "appLogsDestination": "[if(variables('logAnalyticsEnabled'), 'log-analytics', if(variables('aspireDashboardEnabled'), 'azure-monitor', 'none'))]",
-    "resolvedBackendMinReplicas": "[int(parameters('backendMinReplicas'))]",
-    "resolvedFrontendMinReplicas": "[int(parameters('frontendMinReplicas'))]",
-    "resolvedWorkerMinReplicas": "[int(parameters('workerMinReplicas'))]",
-    "resolvedSqlServerName": "[if(variables('useExistingSql'), parameters('existingSqlServerName'), variables('sqlServerName'))]",
-    "resolvedSqlDatabaseName": "[if(variables('useExistingSql'), parameters('existingSqlDatabaseName'), parameters('sqlDatabaseName'))]",
-    "generatedStorageAccountName": "[toLower(take(replace(format('{0}st', variables('baseName')), '-', ''), 24))]",
-    "resolvedStorageAccountName": "[if(empty(parameters('storageAccountName')), variables('generatedStorageAccountName'), toLower(parameters('storageAccountName')))]",
-    "generatedSearchServiceName": "[toLower(take(format('{0}-srch', variables('baseName')), 60))]",
-    "resolvedSearchServiceName": "[if(empty(parameters('searchServiceName')), variables('generatedSearchServiceName'), toLower(parameters('searchServiceName')))]",
-    "useExistingSearch": "[equals(toLower(parameters('searchProvisioningMode')), 'existing')]",
-    "generatedAiServicesAccountName": "[toLower(take(format('{0}-aoai', variables('baseName')), 64))]",
-    "resolvedAiServicesAccountName": "[if(empty(parameters('aiServicesAccountName')), variables('generatedAiServicesAccountName'), toLower(parameters('aiServicesAccountName')))]",
-    "normalizedSearchAuthMode": "[if(equals(toLower(parameters('searchAuthMode')), 'managed-identity'), 'managed-identity', 'api-key')]",
-    "backendAppId": "api",
-    "frontendAppId": "web",
-    "workerAppId": "worker",
-    "resolvedOpenAiModelId": "[if(variables('useProvisionedAiServices'), parameters('openAiChatDeploymentName'), parameters('azureOpenAiModelId'))]",
-    "chatModel": "[if(empty(parameters('openAiChatModelVersion')), createObject('format', 'OpenAI', 'name', parameters('openAiChatModelName')), createObject('format', 'OpenAI', 'name', parameters('openAiChatModelName'), 'version', parameters('openAiChatModelVersion')))]",
-    "searchEndpoint": "[format('https://{0}.search.windows.net', variables('resolvedSearchServiceName'))]",
-    "sharedRegistrySecrets": "[if(variables('hasExternalRegistryCredentials'), createArray(createObject('name', 'registry-password', 'value', parameters('externalRegistryPassword'))), createArray())]"
-  },
-  "resources": [
-    {
-      "condition": "[and(not(variables('useExistingSql')), not(empty(parameters('sqlEntraAdminLogin'))))]",
-      "type": "Microsoft.Sql/servers/administrators",
-      "apiVersion": "2023-08-01-preview",
-      "name": "[format('{0}/{1}', variables('sqlServerName'), 'ActiveDirectory')]",
-      "properties": {
-        "administratorType": "ActiveDirectory",
-        "login": "[parameters('sqlEntraAdminLogin')]",
-        "sid": "[parameters('sqlEntraAdminObjectId')]",
-        "tenantId": "[subscription().tenantId]"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"
-      ]
-    },
-    {
-      "condition": "[variables('logAnalyticsEnabled')]",
-      "type": "Microsoft.OperationalInsights/workspaces",
-      "apiVersion": "2023-09-01",
-      "name": "[format('{0}-law', variables('baseName'))]",
-      "location": "[parameters('location')]",
-      "tags": "[parameters('tags')]",
-      "properties": {
-        "sku": {
-          "name": "PerGB2018"
-        },
-        "retentionInDays": 30,
-        "features": {
-          "searchVersion": 1,
-          "enableLogAccessUsingOnlyResourcePermissions": true
-        }
-      }
-    },
-    {
-      "condition": "[variables('logAnalyticsEnabled')]",
-      "type": "Microsoft.Insights/components",
-      "apiVersion": "2020-02-02",
-      "name": "[format('{0}-appi', variables('baseName'))]",
-      "location": "[parameters('location')]",
-      "tags": "[parameters('tags')]",
-      "kind": "web",
-      "properties": {
-        "Application_Type": "web",
-        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName')))]",
-        "IngestionMode": "LogAnalytics"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName')))]"
-      ]
-    },
-    {
-      "type": "Microsoft.App/managedEnvironments",
-      "apiVersion": "2024-03-01",
-      "name": "[format('{0}-acae', variables('baseName'))]",
-      "location": "[parameters('location')]",
-      "tags": "[parameters('tags')]",
-      "properties": {
-        "appLogsConfiguration": "[if(equals(variables('appLogsDestination'), 'log-analytics'), createObject('destination', variables('appLogsDestination'), 'logAnalyticsConfiguration', createObject('customerId', reference(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName'))), '2023-09-01').customerId, 'sharedKey', listKeys(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName'))), '2023-09-01').primarySharedKey)), createObject('destination', variables('appLogsDestination')))]",
-        "daprAIConnectionString": "[if(variables('logAnalyticsEnabled'), reference(resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName'))), '2020-02-02').ConnectionString, null())]"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName')))]",
-        "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName')))]"
-      ]
-    },
-    {
-      "condition": "[variables('aspireDashboardEnabled')]",
-      "type": "Microsoft.App/managedEnvironments/dotNetComponents",
-      "apiVersion": "2025-10-02-preview",
-      "name": "[format('{0}/{1}', format('{0}-acae', variables('baseName')), 'aspire-dashboard')]",
-      "properties": {
-        "componentType": "AspireDashboard",
-        "configurations": [],
-        "serviceBinds": []
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]"
-      ]
-    },
-    {
-      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
-      "apiVersion": "2023-01-31",
-      "name": "[variables('containerAppsManagedIdentityName')]",
-      "location": "[parameters('location')]",
-      "tags": "[parameters('tags')]"
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts",
-      "apiVersion": "2023-05-01",
-      "name": "[variables('resolvedStorageAccountName')]",
-      "location": "[parameters('location')]",
-      "tags": "[parameters('tags')]",
-      "sku": {
-        "name": "Standard_LRS"
-      },
-      "kind": "StorageV2",
-      "properties": {
-        "allowBlobPublicAccess": false,
-        "minimumTlsVersion": "TLS1_2",
-        "supportsHttpsTrafficOnly": true
-      }
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/blobServices",
-      "apiVersion": "2023-05-01",
-      "name": "[format('{0}/{1}', variables('resolvedStorageAccountName'), 'default')]",
-      "properties": {
-        "cors": {
-          "corsRules": [
-            {
-              "allowedOrigins": "[if(empty(parameters('blobCorsAllowedOriginsJson')), createArray('http://localhost:3000', 'https://localhost:3000', format('https://{0}.{1}', variables('frontendAppName'), reference(resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName'))), '2024-03-01').defaultDomain)), json(parameters('blobCorsAllowedOriginsJson')))]",
-              "allowedMethods": [
-                "OPTIONS",
-                "PUT",
-                "HEAD"
-              ],
-              "allowedHeaders": [
-                "x-ms-blob-type",
-                "content-type",
-                "x-ms-version",
-                "x-ms-date",
-                "x-ms-client-request-id",
-                "origin",
-                "accept"
-              ],
-              "exposedHeaders": [
-                "ETag",
-                "x-ms-request-id",
-                "x-ms-version"
-              ],
-              "maxAgeInSeconds": 3600
-            }
-          ]
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('resolvedStorageAccountName'))]"
-      ]
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
-      "apiVersion": "2023-05-01",
-      "name": "[format('{0}/{1}/{2}', variables('resolvedStorageAccountName'), 'default', parameters('documentsContainerName'))]",
-      "properties": {
-        "publicAccess": "None"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('resolvedStorageAccountName'), 'default')]"
-      ]
-    },
-    {
-      "type": "Microsoft.Authorization/roleAssignments",
-      "apiVersion": "2022-04-01",
-      "scope": "[resourceId('Microsoft.Storage/storageAccounts', variables('resolvedStorageAccountName'))]",
-      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('resolvedStorageAccountName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), 'StorageBlobDataContributor')]",
-      "properties": {
-        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').principalId]",
-        "principalType": "ServicePrincipal",
-        "roleDefinitionId": "[variables('storageBlobDataContributorRoleDefinitionId')]"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('resolvedStorageAccountName'))]"
-      ]
-    },
-    {
-      "condition": "[not(variables('useExistingSearch'))]",
-      "type": "Microsoft.Search/searchServices",
-      "apiVersion": "2023-11-01",
-      "name": "[variables('resolvedSearchServiceName')]",
-      "location": "[parameters('searchLocation')]",
-      "tags": "[parameters('tags')]",
-      "sku": {
-        "name": "free"
-      },
-      "properties": {
-        "replicaCount": 1,
-        "partitionCount": 1,
-        "hostingMode": "default",
-        "publicNetworkAccess": "enabled",
-        "disableLocalAuth": false,
-        "authOptions": {
-          "aadOrApiKey": {
-            "aadAuthFailureMode": "http401WithBearerChallenge"
-          }
-        }
-      }
-    },
-    {
-      "condition": "[not(variables('useExistingSearch'))]",
-      "type": "Microsoft.Authorization/roleAssignments",
-      "apiVersion": "2022-04-01",
-      "scope": "[resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName'))]",
-      "name": "[guid(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), 'SearchIndexDataReader')]",
-      "properties": {
-        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').principalId]",
-        "principalType": "ServicePrincipal",
-        "roleDefinitionId": "[variables('searchIndexDataReaderRoleDefinitionId')]"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName'))]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]"
-      ]
-    },
-    {
-      "condition": "[variables('useExistingSearch')]",
-      "type": "Microsoft.Authorization/roleAssignments",
-      "apiVersion": "2022-04-01",
-      "scope": "[resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName'))]",
-      "name": "[guid(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), 'SearchIndexDataReader')]",
-      "properties": {
-        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').principalId]",
-        "principalType": "ServicePrincipal",
-        "roleDefinitionId": "[variables('searchIndexDataReaderRoleDefinitionId')]"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]"
-      ]
-    },
-    {
-      "condition": "[variables('useProvisionedAiServices')]",
-      "type": "Microsoft.CognitiveServices/accounts",
-      "apiVersion": "2025-06-01",
-      "name": "[variables('resolvedAiServicesAccountName')]",
-      "location": "[parameters('location')]",
-      "tags": "[parameters('tags')]",
-      "kind": "AIServices",
-      "identity": {
-        "type": "SystemAssigned"
-      },
-      "sku": {
-        "name": "S0"
-      },
-      "properties": {
-        "customSubDomainName": "[variables('resolvedAiServicesAccountName')]",
-        "publicNetworkAccess": "Enabled",
-        "allowProjectManagement": true
-      }
-    },
-    {
-      "condition": "[variables('useArmFoundryProjectProvisioning')]",
-      "type": "Microsoft.CognitiveServices/accounts/projects",
-      "apiVersion": "2025-06-01",
-      "name": "[format('{0}/{1}', variables('resolvedAiServicesAccountName'), parameters('aiFoundryProjectName'))]",
-      "location": "[parameters('location')]",
-      "tags": "[parameters('tags')]",
-      "properties": {},
-      "dependsOn": [
-        "[resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName'))]"
-      ]
-    },
-    {
-      "condition": "[variables('useProvisionedAiServices')]",
-      "type": "Microsoft.Authorization/roleAssignments",
-      "apiVersion": "2022-04-01",
-      "scope": "[resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName'))]",
-      "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), 'CognitiveServicesOpenAiUser')]",
-      "properties": {
-        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').principalId]",
-        "principalType": "ServicePrincipal",
-        "roleDefinitionId": "[variables('cognitiveServicesOpenAiUserRoleDefinitionId')]"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName'))]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]"
-      ]
-    },
-    {
-      "condition": "[variables('useProvisionedAiServices')]",
-      "type": "Microsoft.CognitiveServices/accounts/deployments",
-      "apiVersion": "2025-06-01",
-      "name": "[format('{0}/{1}', variables('resolvedAiServicesAccountName'), parameters('openAiChatDeploymentName'))]",
-      "sku": {
-        "name": "GlobalStandard",
-        "capacity": 1
-      },
-      "properties": {
-        "model": "[variables('chatModel')]"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName'))]"
-      ]
-    },
-    {
-      "condition": "[variables('useProvisionedAiServices')]",
-      "type": "Microsoft.CognitiveServices/accounts/deployments",
-      "apiVersion": "2025-06-01",
-      "name": "[format('{0}/{1}', variables('resolvedAiServicesAccountName'), parameters('openAiEmbeddingDeploymentName'))]",
-      "sku": {
-        "name": "GlobalStandard",
-        "capacity": 1
-      },
-      "properties": {
-        "model": {
-          "format": "OpenAI",
-          "name": "[parameters('openAiEmbeddingModelName')]",
-          "version": "[parameters('openAiEmbeddingModelVersion')]"
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName'))]",
-        "[resourceId('Microsoft.CognitiveServices/accounts/deployments', variables('resolvedAiServicesAccountName'), parameters('openAiChatDeploymentName'))]"
-      ]
-    },
-    {
-      "condition": "[variables('useManagedRegistry')]",
-      "type": "Microsoft.ContainerRegistry/registries",
-      "apiVersion": "2023-07-01",
-      "name": "[toLower(replace(format('{0}acr', variables('baseName')), '-', ''))]",
-      "location": "[parameters('location')]",
-      "tags": "[parameters('tags')]",
-      "sku": {
-        "name": "Basic"
-      },
-      "properties": {
-        "adminUserEnabled": false,
-        "publicNetworkAccess": "Enabled"
-      }
-    },
-    {
-      "condition": "[variables('useManagedRegistry')]",
-      "type": "Microsoft.Authorization/roleAssignments",
-      "apiVersion": "2022-04-01",
-      "scope": "[resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', '')))]",
-      "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), 'AcrPull')]",
-      "properties": {
-        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').principalId]",
-        "principalType": "ServicePrincipal",
-        "roleDefinitionId": "[variables('acrPullRoleDefinitionId')]"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]",
-        "[resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', '')))]"
-      ]
-    },
-    {
-      "condition": "[not(variables('useExistingSql'))]",
-      "type": "Microsoft.Sql/servers",
-      "apiVersion": "2023-08-01-preview",
-      "name": "[variables('sqlServerName')]",
-      "location": "[parameters('sqlLocation')]",
-      "tags": "[parameters('tags')]",
-      "properties": {
-        "administratorLogin": "[parameters('sqlAdminLogin')]",
-        "administratorLoginPassword": "[parameters('sqlAdminPassword')]",
-        "publicNetworkAccess": "Enabled",
-        "minimalTlsVersion": "1.2"
-      }
-    },
-    {
-      "condition": "[not(variables('useExistingSql'))]",
-      "type": "Microsoft.Sql/servers/firewallRules",
-      "apiVersion": "2023-08-01-preview",
-      "name": "[format('{0}/{1}', variables('sqlServerName'), 'AllowAllAzureIPs')]",
-      "properties": {
-        "startIpAddress": "0.0.0.0",
-        "endIpAddress": "0.0.0.0"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"
-      ]
-    },
-    {
-      "condition": "[not(variables('useExistingSql'))]",
-      "type": "Microsoft.Sql/servers/databases",
-      "apiVersion": "2023-08-01-preview",
-      "name": "[format('{0}/{1}', variables('sqlServerName'), parameters('sqlDatabaseName'))]",
-      "location": "[parameters('sqlLocation')]",
-      "tags": "[parameters('tags')]",
-      "sku": {
-        "name": "GP_S_Gen5_1",
-        "tier": "GeneralPurpose",
-        "capacity": 1,
-        "family": "Gen5"
-      },
-      "properties": {
-        "collation": "SQL_Latin1_General_CP1_CI_AS",
-        "maxSizeBytes": 2147483648,
-        "minCapacity": "[json('0.5')]",
-        "autoPauseDelay": 60
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"
-      ]
-    },
-    {
-      "type": "Microsoft.App/containerApps",
-      "apiVersion": "2024-03-01",
-      "name": "[variables('backendAppName')]",
-      "location": "[parameters('location')]",
-      "identity": {
-        "type": "UserAssigned",
-        "userAssignedIdentities": {
-          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')))]": {}
-        }
-      },
-      "tags": "[union(parameters('tags'), createObject('azd-service-name', 'backend'))]",
-      "properties": {
-        "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
-        "configuration": {
-          "activeRevisionsMode": "Single",
-          "dapr": {
-            "enabled": true,
-            "appId": "[variables('backendAppId')]",
-            "appPort": 8080,
-            "appProtocol": "http"
-          },
-          "secrets": "[concat(concat(createArray(createObject('name', 'azure-openai-api-key', 'value', if(variables('useProvisionedAiServices'), listKeys(resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName')), '2025-06-01').key1, parameters('azureOpenAiApiKey'))), createObject('name', 'storage-connection-string', 'value', format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', variables('resolvedStorageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('resolvedStorageAccountName')), '2023-05-01').keys[0].value, environment().suffixes.storage)), createObject('name', 'search-api-key', 'value', if(variables('useExistingSearch'), listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').primaryKey, listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').primaryKey)), createObject('name', 'search-query-key', 'value', if(empty(if(variables('useExistingSearch'), listQueryKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').value, listQueryKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').value)), if(variables('useExistingSearch'), listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').primaryKey, listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').primaryKey), first(if(variables('useExistingSearch'), listQueryKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').value, listQueryKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').value)).key))), createArray()), variables('sharedRegistrySecrets'))]",
-          "ingress": {
-            "external": true,
-            "targetPort": 8080,
-            "transport": "auto"
-          },
-          "registries": "[if(variables('useManagedRegistry'), createArray(createObject('server', reference(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), '2023-07-01').loginServer, 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')))), if(variables('hasExternalRegistryCredentials'), createArray(createObject('server', parameters('externalRegistryServer'), 'username', parameters('externalRegistryUsername'), 'passwordSecretRef', 'registry-password')), createArray()))]"
-        },
-        "template": {
-          "containers": [
-            {
-              "name": "backend",
-              "image": "[parameters('backendImage')]",
-              "env": "[concat(if(variables('logAnalyticsEnabled'), createArray(createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', reference(resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName'))), '2020-02-02').ConnectionString)), createArray()), createArray(createObject('name', 'AI_MODE', 'value', parameters('aiMode')), createObject('name', 'AZURE_OPENAI_API_KEY', 'secretRef', 'azure-openai-api-key'), createObject('name', 'AZURE_OPENAI_MODEL_ID', 'value', variables('resolvedOpenAiModelId')), createObject('name', 'AZURE_OPENAI_ENDPOINT', 'value', if(variables('useProvisionedAiServices'), reference(resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName')), '2025-06-01').endpoint, parameters('azureOpenAiEndpoint'))), createObject('name', 'AZURE_OPENAI_AUTH_MODE', 'value', parameters('openAiAuthMode')), createObject('name', 'AZURE_OPENAI_EMBEDDING_MODEL_ID', 'value', parameters('openAiEmbeddingDeploymentName')), createObject('name', 'AZURE_OPENAI_EMBEDDING_DIMENSIONS', 'value', string(parameters('openAiEmbeddingDimensions'))), createObject('name', 'AZURE_STORAGE_ACCOUNT_NAME', 'value', variables('resolvedStorageAccountName')), createObject('name', 'AZURE_STORAGE_CONTAINER_NAME', 'value', parameters('documentsContainerName')), createObject('name', 'AZURE_STORAGE_CONNECTION_STRING', 'secretRef', 'storage-connection-string'), createObject('name', 'AZURE_STORAGE_AUTH_MODE', 'value', parameters('storageAuthMode')), createObject('name', 'AZURE_SEARCH_ENDPOINT', 'value', variables('searchEndpoint')), createObject('name', 'AZURE_SEARCH_INDEX_NAME', 'value', parameters('searchIndexName')), createObject('name', 'AZURE_SEARCH_API_KEY', 'secretRef', 'search-query-key'), createObject('name', 'AZURE_SEARCH_AUTH_MODE', 'value', variables('normalizedSearchAuthMode')), createObject('name', 'WORKER_DAPR_BASE_URL', 'value', format('http://localhost:3500/v1.0/invoke/{0}/method', variables('workerAppId'))), createObject('name', 'SQL_SERVER', 'value', format('{0}{1}', variables('resolvedSqlServerName'), environment().suffixes.sqlServerHostname)), createObject('name', 'SQL_DATABASE', 'value', variables('resolvedSqlDatabaseName')), createObject('name', 'AZURE_CLIENT_ID', 'value', reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').clientId)))]",
-              "resources": {
-                "cpu": "[json('0.5')]",
-                "memory": "1Gi"
-              }
-            }
-          ],
-          "scale": {
-            "minReplicas": "[variables('resolvedBackendMinReplicas')]",
-            "maxReplicas": 2
-          }
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
-        "[resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName'))]",
-        "[resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName'))]",
-        "[resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName')))]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]",
-        "[resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', '')))]",
-        "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('resolvedStorageAccountName'), 'default', parameters('documentsContainerName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('resolvedStorageAccountName'))]"
-      ]
-    },
-    {
-      "type": "Microsoft.App/containerApps",
-      "apiVersion": "2024-03-01",
-      "name": "[variables('frontendAppName')]",
-      "location": "[parameters('location')]",
-      "identity": {
-        "type": "UserAssigned",
-        "userAssignedIdentities": {
-          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')))]": {}
-        }
-      },
-      "tags": "[union(parameters('tags'), createObject('azd-service-name', 'frontend'))]",
-      "properties": {
-        "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
-        "configuration": {
-          "activeRevisionsMode": "Single",
-          "dapr": {
-            "enabled": true,
-            "appId": "[variables('frontendAppId')]",
-            "appPort": 3000,
-            "appProtocol": "http"
-          },
-          "secrets": "[variables('sharedRegistrySecrets')]",
-          "ingress": {
-            "external": true,
-            "targetPort": 3000,
-            "transport": "auto"
-          },
-          "registries": "[if(variables('useManagedRegistry'), createArray(createObject('server', reference(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), '2023-07-01').loginServer, 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')))), if(variables('hasExternalRegistryCredentials'), createArray(createObject('server', parameters('externalRegistryServer'), 'username', parameters('externalRegistryUsername'), 'passwordSecretRef', 'registry-password')), createArray()))]"
-        },
-        "template": {
-          "containers": [
-            {
-              "name": "frontend",
-              "image": "[parameters('frontendImage')]",
-              "env": "[concat(if(variables('logAnalyticsEnabled'), createArray(createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', reference(resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName'))), '2020-02-02').ConnectionString)), createArray()), createArray(createObject('name', 'AI_MODE', 'value', parameters('aiMode')), createObject('name', 'BACKEND_DAPR_BASE_URL', 'value', format('http://localhost:3500/v1.0/invoke/{0}/method', variables('backendAppId'))), createObject('name', 'WORKER_DAPR_BASE_URL', 'value', format('http://localhost:3500/v1.0/invoke/{0}/method', variables('workerAppId')))))]",
-              "resources": {
-                "cpu": "[json('0.5')]",
-                "memory": "1Gi"
-              }
-            }
-          ],
-          "scale": {
-            "minReplicas": "[variables('resolvedFrontendMinReplicas')]",
-            "maxReplicas": 2
-          }
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
-        "[resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName')))]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]",
-        "[resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', '')))]"
-      ]
-    },
-    {
-      "type": "Microsoft.App/containerApps",
-      "apiVersion": "2024-03-01",
-      "name": "[variables('workerAppName')]",
-      "location": "[parameters('location')]",
-      "identity": {
-        "type": "UserAssigned",
-        "userAssignedIdentities": {
-          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')))]": {}
-        }
-      },
-      "tags": "[union(parameters('tags'), createObject('azd-service-name', 'worker'))]",
-      "properties": {
-        "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
-        "configuration": {
-          "activeRevisionsMode": "Single",
-          "dapr": {
-            "enabled": true,
-            "appId": "[variables('workerAppId')]",
-            "appPort": 8081,
-            "appProtocol": "http"
-          },
-          "secrets": "[concat(createArray(createObject('name', 'azure-openai-api-key', 'value', if(variables('useProvisionedAiServices'), listKeys(resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName')), '2025-06-01').key1, parameters('azureOpenAiApiKey'))), createObject('name', 'storage-connection-string', 'value', format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', variables('resolvedStorageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('resolvedStorageAccountName')), '2023-05-01').keys[0].value, environment().suffixes.storage)), createObject('name', 'search-api-key', 'value', if(variables('useExistingSearch'), listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').primaryKey, listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').primaryKey)), createObject('name', 'search-query-key', 'value', if(empty(if(variables('useExistingSearch'), listQueryKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').value, listQueryKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').value)), if(variables('useExistingSearch'), listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').primaryKey, listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').primaryKey), first(if(variables('useExistingSearch'), listQueryKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').value, listQueryKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').value)).key))), variables('sharedRegistrySecrets'))]",
-          "ingress": {
-            "external": false,
-            "targetPort": 8081,
-            "transport": "auto"
-          },
-          "registries": "[if(variables('useManagedRegistry'), createArray(createObject('server', reference(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), '2023-07-01').loginServer, 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')))), if(variables('hasExternalRegistryCredentials'), createArray(createObject('server', parameters('externalRegistryServer'), 'username', parameters('externalRegistryUsername'), 'passwordSecretRef', 'registry-password')), createArray()))]"
-        },
-        "template": {
-          "containers": [
-            {
-              "name": "worker",
-              "image": "[parameters('workerImage')]",
-              "env": "[concat(if(variables('logAnalyticsEnabled'), createArray(createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', reference(resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName'))), '2020-02-02').ConnectionString)), createArray()), createArray(createObject('name', 'AI_MODE', 'value', parameters('aiMode')), createObject('name', 'AZURE_OPENAI_API_KEY', 'secretRef', 'azure-openai-api-key'), createObject('name', 'AZURE_OPENAI_MODEL_ID', 'value', variables('resolvedOpenAiModelId')), createObject('name', 'AZURE_OPENAI_ENDPOINT', 'value', if(variables('useProvisionedAiServices'), reference(resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName')), '2025-06-01').endpoint, parameters('azureOpenAiEndpoint'))), createObject('name', 'AZURE_OPENAI_AUTH_MODE', 'value', parameters('openAiAuthMode')), createObject('name', 'AZURE_OPENAI_EMBEDDING_MODEL_ID', 'value', parameters('openAiEmbeddingDeploymentName')), createObject('name', 'AZURE_OPENAI_EMBEDDING_DIMENSIONS', 'value', string(parameters('openAiEmbeddingDimensions'))), createObject('name', 'AZURE_STORAGE_ACCOUNT_NAME', 'value', variables('resolvedStorageAccountName')), createObject('name', 'AZURE_STORAGE_CONTAINER_NAME', 'value', parameters('documentsContainerName')), createObject('name', 'AZURE_STORAGE_CONNECTION_STRING', 'secretRef', 'storage-connection-string'), createObject('name', 'AZURE_STORAGE_AUTH_MODE', 'value', parameters('storageAuthMode')), createObject('name', 'AZURE_SEARCH_ENDPOINT', 'value', variables('searchEndpoint')), createObject('name', 'AZURE_SEARCH_INDEX_NAME', 'value', parameters('searchIndexName')), createObject('name', 'AZURE_SEARCH_API_KEY', 'secretRef', 'search-api-key'), createObject('name', 'SQL_SERVER', 'value', format('{0}{1}', variables('resolvedSqlServerName'), environment().suffixes.sqlServerHostname)), createObject('name', 'SQL_DATABASE', 'value', variables('resolvedSqlDatabaseName')), createObject('name', 'AZURE_CLIENT_ID', 'value', reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').clientId)))]",
-              "resources": {
-                "cpu": "[json('0.25')]",
-                "memory": "0.5Gi"
-              }
-            }
-          ],
-          "scale": {
-            "minReplicas": "[variables('resolvedWorkerMinReplicas')]",
-            "maxReplicas": 2
-          }
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
-        "[resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName'))]",
-        "[resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName'))]",
-        "[resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName')))]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]",
-        "[resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', '')))]",
-        "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('resolvedStorageAccountName'), 'default', parameters('documentsContainerName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('resolvedStorageAccountName'))]"
-      ]
-    }
-  ],
-  "outputs": {
-    "AZURE_LOCATION": {
-      "type": "string",
-      "value": "[parameters('location')]"
-    },
-    "AZURE_ENV_NAME": {
-      "type": "string",
-      "value": "[parameters('environmentName')]"
-    },
-    "AZURE_CONTAINER_APPS_ENVIRONMENT_ID": {
-      "type": "string",
-      "value": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]"
-    },
-    "AZURE_CONTAINER_APPS_ENVIRONMENT_NAME": {
-      "type": "string",
-      "value": "[format('{0}-acae', variables('baseName'))]"
-    },
-    "AZURE_CONTAINER_REGISTRY_NAME": {
-      "type": "string",
-      "value": "[if(variables('useManagedRegistry'), toLower(replace(format('{0}acr', variables('baseName')), '-', '')), '')]"
-    },
-    "AZURE_CONTAINER_REGISTRY_ENDPOINT": {
-      "type": "string",
-      "value": "[if(variables('useManagedRegistry'), reference(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), '2023-07-01').loginServer, '')]"
-    },
-    "BACKEND_CONTAINER_APP_NAME": {
-      "type": "string",
-      "value": "[variables('backendAppName')]"
-    },
-    "UAMI_CLIENT_ID": {
-      "type": "string",
-      "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').clientId]"
-    },
-    "UAMI_PRINCIPAL_ID": {
-      "type": "string",
-      "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').principalId]"
-    },
-    "UAMI_NAME": {
-      "type": "string",
-      "value": "[variables('containerAppsManagedIdentityName')]"
-    },
-    "FRONTEND_CONTAINER_APP_NAME": {
-      "type": "string",
-      "value": "[variables('frontendAppName')]"
-    },
-    "WORKER_CONTAINER_APP_NAME": {
-      "type": "string",
-      "value": "[variables('workerAppName')]"
-    },
-    "AZURE_SQL_SERVER_NAME": {
-      "type": "string",
-      "value": "[variables('resolvedSqlServerName')]"
-    },
-    "AZURE_SQL_DATABASE_NAME": {
-      "type": "string",
-      "value": "[variables('resolvedSqlDatabaseName')]"
-    },
-    "AZURE_SQL_PROVISIONING_MODE": {
-      "type": "string",
-      "value": "[parameters('sqlProvisioningMode')]"
-    },
-    "AZURE_STORAGE_ACCOUNT_NAME": {
-      "type": "string",
-      "value": "[variables('resolvedStorageAccountName')]"
-    },
-    "AZURE_STORAGE_DOCUMENTS_CONTAINER": {
-      "type": "string",
-      "value": "[parameters('documentsContainerName')]"
-    },
-    "AZURE_SEARCH_SERVICE_NAME": {
-      "type": "string",
-      "value": "[variables('resolvedSearchServiceName')]"
-    },
-    "AZURE_SEARCH_ENDPOINT": {
-      "type": "string",
-      "value": "[variables('searchEndpoint')]"
-    },
-    "AZURE_SEARCH_INDEX_NAME": {
-      "type": "string",
-      "value": "[parameters('searchIndexName')]"
-    },
-    "AZURE_AI_SERVICES_PROVISIONING_MODE": {
-      "type": "string",
-      "value": "[parameters('aiServicesProvisioningMode')]"
-    },
-    "AZURE_OPENAI_EFFECTIVE_ENDPOINT": {
-      "type": "string",
-      "value": "[if(variables('useProvisionedAiServices'), reference(resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName')), '2025-06-01').endpoint, parameters('azureOpenAiEndpoint'))]"
-    },
-    "AZURE_OPENAI_EFFECTIVE_MODEL_ID": {
-      "type": "string",
-      "value": "[variables('resolvedOpenAiModelId')]"
-    },
-    "AZURE_OPENAI_EMBEDDING_MODEL_ID": {
-      "type": "string",
-      "value": "[parameters('openAiEmbeddingDeploymentName')]"
-    },
-    "AZURE_OPENAI_EMBEDDING_DIMENSIONS": {
-      "type": "int",
-      "value": "[parameters('openAiEmbeddingDimensions')]"
-    },
-    "AZURE_AI_SERVICES_ACCOUNT_NAME": {
-      "type": "string",
-      "value": "[if(variables('useProvisionedAiServices'), variables('resolvedAiServicesAccountName'), '')]"
-    },
-    "AZURE_AI_FOUNDRY_PROJECT_NAME": {
-      "type": "string",
-      "value": "[if(variables('useProvisionedAiServices'), parameters('aiFoundryProjectName'), '')]"
-    },
-    "AZURE_OPENAI_AUTH_MODE": {
-      "type": "string",
-      "value": "[parameters('openAiAuthMode')]"
-    },
-    "AZURE_STORAGE_AUTH_MODE": {
-      "type": "string",
-      "value": "[parameters('storageAuthMode')]"
-    },
-    "CONTAINER_REGISTRY_MODE": {
-      "type": "string",
-      "value": "[parameters('containerRegistryMode')]"
-    },
-    "ENABLE_LOG_ANALYTICS": {
-      "type": "string",
-      "value": "[parameters('enableLogAnalytics')]"
-    },
-    "ENABLE_ASPIRE_DASHBOARD": {
-      "type": "string",
-      "value": "[parameters('enableAspireDashboard')]"
-    },
-    "FRONTEND_URL": {
-      "type": "string",
-      "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', variables('frontendAppName')), '2024-03-01').configuration.ingress.fqdn)]"
-    },
-    "BACKEND_URL": {
-      "type": "string",
-      "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', variables('backendAppName')), '2024-03-01').configuration.ingress.fqdn)]"
-    }
-  }
+	"$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"metadata": {
+		"_generator": {
+			"name": "bicep",
+			"version": "0.43.8.12551",
+			"templateHash": "15220121548557929387"
+		}
+	},
+	"parameters": {
+		"location": {
+			"type": "string",
+			"defaultValue": "[resourceGroup().location]",
+			"metadata": {
+				"description": "Primary deployment location for all resources."
+			}
+		},
+		"environmentName": {
+			"type": "string",
+			"defaultValue": "dev",
+			"metadata": {
+				"description": "Environment name for resource naming and tagging."
+			}
+		},
+		"resourceNamePrefix": {
+			"type": "string",
+			"defaultValue": "aih-azure-aca-aspire-ai-starter",
+			"metadata": {
+				"description": "Deterministic prefix for Azure resource names."
+			}
+		},
+		"tags": {
+			"type": "object",
+			"defaultValue": {},
+			"metadata": {
+				"description": "Optional tags applied to all resources."
+			}
+		},
+		"sqlAdminLogin": {
+			"type": "string",
+			"metadata": {
+				"description": "SQL admin login for Azure SQL server."
+			}
+		},
+		"sqlAdminPassword": {
+			"type": "securestring",
+			"metadata": {
+				"description": "SQL admin password for Azure SQL server."
+			}
+		},
+		"sqlDatabaseName": {
+			"type": "string",
+			"defaultValue": "acaaspireaistarter",
+			"metadata": {
+				"description": "Azure SQL database name used by backend API."
+			}
+		},
+		"sqlLocation": {
+			"type": "string",
+			"defaultValue": "[parameters('location')]",
+			"metadata": {
+				"description": "Azure SQL server/database location. Defaults to deployment location but can be overridden for regional capacity constraints."
+			}
+		},
+		"sqlProvisioningMode": {
+			"type": "string",
+			"defaultValue": "provision",
+			"allowedValues": ["provision", "existing"],
+			"metadata": {
+				"description": "SQL strategy: provision creates SQL resources via IaC; existing uses pre-created SQL resources."
+			}
+		},
+		"existingSqlServerName": {
+			"type": "string",
+			"defaultValue": "",
+			"metadata": {
+				"description": "Existing Azure SQL server name (without .database.windows.net). Required when sqlProvisioningMode is existing."
+			}
+		},
+		"existingSqlDatabaseName": {
+			"type": "string",
+			"defaultValue": "",
+			"metadata": {
+				"description": "Existing Azure SQL database name. Required when sqlProvisioningMode is existing."
+			}
+		},
+		"sqlEntraAdminLogin": {
+			"type": "string",
+			"defaultValue": "",
+			"metadata": {
+				"description": "Entra AD admin login (email) for Azure SQL server. Optional."
+			}
+		},
+		"sqlEntraAdminObjectId": {
+			"type": "string",
+			"defaultValue": "",
+			"metadata": {
+				"description": "Entra AD admin object ID for Azure SQL server. Required if sqlEntraAdminLogin is provided."
+			}
+		},
+		"azureOpenAiApiKey": {
+			"type": "securestring",
+			"defaultValue": "",
+			"metadata": {
+				"description": "Azure OpenAI API key for backend AI calls."
+			}
+		},
+		"azureOpenAiModelId": {
+			"type": "string",
+			"defaultValue": "",
+			"metadata": {
+				"description": "Azure OpenAI model deployment ID used by backend."
+			}
+		},
+		"azureOpenAiEndpoint": {
+			"type": "string",
+			"defaultValue": "",
+			"metadata": {
+				"description": "Azure OpenAI endpoint URL used by backend."
+			}
+		},
+		"aiServicesProvisioningMode": {
+			"type": "string",
+			"defaultValue": "provision",
+			"allowedValues": ["external", "provision"],
+			"metadata": {
+				"description": "AI services strategy: external uses provided endpoint/key; provision creates an Azure AI Foundry (AIServices) resource, project, and model deployments."
+			}
+		},
+		"aiServicesAccountName": {
+			"type": "string",
+			"defaultValue": "",
+			"metadata": {
+				"description": "Azure AI Foundry (AIServices) account name when aiServicesProvisioningMode is provision. Leave empty to auto-generate."
+			}
+		},
+		"aiFoundryProjectName": {
+			"type": "string",
+			"defaultValue": "enterprise-copilot",
+			"metadata": {
+				"description": "Azure AI Foundry project name created under the provisioned AI Services account."
+			}
+		},
+		"aiFoundryProjectProvisioningMode": {
+			"type": "string",
+			"defaultValue": "cli",
+			"allowedValues": ["arm", "cli"],
+			"metadata": {
+				"description": "Foundry project provisioning mode. arm creates the project in Bicep; cli defers project creation to post-provision CLI automation for reliability."
+			}
+		},
+		"openAiChatDeploymentName": {
+			"type": "string",
+			"defaultValue": "gpt-5.1",
+			"metadata": {
+				"description": "Chat model deployment name. When provisioning, this deployment is created and used as AZURE_OPENAI_MODEL_ID."
+			}
+		},
+		"openAiChatModelName": {
+			"type": "string",
+			"defaultValue": "gpt-5.1",
+			"metadata": {
+				"description": "Chat model catalog name for Azure OpenAI deployment."
+			}
+		},
+		"openAiChatModelVersion": {
+			"type": "string",
+			"defaultValue": "2025-11-13",
+			"metadata": {
+				"description": "Chat model version for Azure OpenAI deployment."
+			}
+		},
+		"openAiEmbeddingDeploymentName": {
+			"type": "string",
+			"defaultValue": "text-embedding-3-small",
+			"metadata": {
+				"description": "Embeddings model deployment name provisioned for ingestion/RAG."
+			}
+		},
+		"openAiEmbeddingModelName": {
+			"type": "string",
+			"defaultValue": "text-embedding-3-small",
+			"metadata": {
+				"description": "Embeddings model catalog name."
+			}
+		},
+		"openAiEmbeddingModelVersion": {
+			"type": "string",
+			"defaultValue": "1",
+			"metadata": {
+				"description": "Embeddings model version."
+			}
+		},
+		"openAiEmbeddingDimensions": {
+			"type": "int",
+			"defaultValue": 1536,
+			"metadata": {
+				"description": "Embedding vector dimensions for the embeddings deployment used by Azure AI Search vector field."
+			}
+		},
+		"openAiAuthMode": {
+			"type": "string",
+			"defaultValue": "managed-identity",
+			"metadata": {
+				"description": "OpenAI/Foundry auth mode for backend and worker. managed-identity tries MI first with API-key fallback."
+			}
+		},
+		"aiMode": {
+			"type": "string",
+			"defaultValue": "azure",
+			"allowedValues": ["azure", "local"],
+			"metadata": {
+				"description": "AI runtime mode for backend/worker. Use azure for cloud deployments."
+			}
+		},
+		"storageAccountName": {
+			"type": "string",
+			"defaultValue": "",
+			"metadata": {
+				"description": "Storage account name override. Leave empty to auto-generate."
+			}
+		},
+		"documentsContainerName": {
+			"type": "string",
+			"defaultValue": "documents",
+			"metadata": {
+				"description": "Blob container name used for uploaded documents."
+			}
+		},
+		"blobCorsAllowedOriginsJson": {
+			"type": "string",
+			"defaultValue": "",
+			"metadata": {
+				"description": "JSON array string of allowed origins for browser-based Blob SAS uploads."
+			}
+		},
+		"storageAuthMode": {
+			"type": "string",
+			"defaultValue": "managed-identity",
+			"metadata": {
+				"description": "Storage auth mode for backend/worker. managed-identity tries MI first with connection-string fallback."
+			}
+		},
+		"searchServiceName": {
+			"type": "string",
+			"defaultValue": "",
+			"metadata": {
+				"description": "Azure AI Search service name override. Leave empty to auto-generate."
+			}
+		},
+		"searchLocation": {
+			"type": "string",
+			"defaultValue": "[parameters('location')]",
+			"metadata": {
+				"description": "Azure AI Search service location. Defaults to deployment location but can be overridden to a region with available capacity."
+			}
+		},
+		"searchProvisioningMode": {
+			"type": "string",
+			"defaultValue": "provision",
+			"allowedValues": ["provision", "existing"],
+			"metadata": {
+				"description": "Azure AI Search strategy: provision creates Search via IaC; existing reuses a pre-created Search service."
+			}
+		},
+		"searchIndexName": {
+			"type": "string",
+			"defaultValue": "documents-index",
+			"metadata": {
+				"description": "Azure AI Search index name for document chunks."
+			}
+		},
+		"searchAuthMode": {
+			"type": "string",
+			"defaultValue": "api-key",
+			"metadata": {
+				"description": "Backend Azure AI Search authentication mode. api-key uses AZURE_SEARCH_API_KEY, managed-identity uses ACA managed identity token with API-key fallback."
+			}
+		},
+		"containerRegistryMode": {
+			"type": "string",
+			"defaultValue": "external",
+			"allowedValues": ["managed", "external"],
+			"metadata": {
+				"description": "Container image registry mode. managed provisions Azure Container Registry; external uses public/authenticated external images such as GHCR."
+			}
+		},
+		"externalRegistryServer": {
+			"type": "string",
+			"defaultValue": "ghcr.io",
+			"metadata": {
+				"description": "External registry server used when containerRegistryMode is external."
+			}
+		},
+		"externalRegistryUsername": {
+			"type": "string",
+			"defaultValue": "",
+			"metadata": {
+				"description": "External registry username used when containerRegistryMode is external and the registry requires authentication."
+			}
+		},
+		"externalRegistryPassword": {
+			"type": "securestring",
+			"defaultValue": "",
+			"metadata": {
+				"description": "External registry password or token used when containerRegistryMode is external and the registry requires authentication."
+			}
+		},
+		"enableLogAnalytics": {
+			"type": "string",
+			"defaultValue": "false",
+			"metadata": {
+				"description": "Enable Log Analytics and workspace-based Application Insights for the Container Apps environment."
+			}
+		},
+		"enableAspireDashboard": {
+			"type": "string",
+			"defaultValue": "true",
+			"metadata": {
+				"description": "Enable Aspire Dashboard in the Container Apps environment."
+			}
+		},
+		"backendMinReplicas": {
+			"type": "string",
+			"defaultValue": "0",
+			"metadata": {
+				"description": "Minimum replicas for the backend container app."
+			}
+		},
+		"frontendMinReplicas": {
+			"type": "string",
+			"defaultValue": "0",
+			"metadata": {
+				"description": "Minimum replicas for the frontend container app."
+			}
+		},
+		"workerMinReplicas": {
+			"type": "string",
+			"defaultValue": "0",
+			"metadata": {
+				"description": "Minimum replicas for the worker container app."
+			}
+		},
+		"backendImage": {
+			"type": "string",
+			"defaultValue": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
+			"metadata": {
+				"description": "Container image for the backend app."
+			}
+		},
+		"frontendImage": {
+			"type": "string",
+			"defaultValue": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
+			"metadata": {
+				"description": "Container image for the frontend app."
+			}
+		},
+		"workerImage": {
+			"type": "string",
+			"defaultValue": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
+			"metadata": {
+				"description": "Container image for the worker app."
+			}
+		}
+	},
+	"variables": {
+		"prefixSlug": "[take(toLower(replace(parameters('resourceNamePrefix'), '-', '')), 10)]",
+		"environmentSlug": "[take(toLower(replace(parameters('environmentName'), '-', '')), 6)]",
+		"nameSeed": "[take(uniqueString(subscription().subscriptionId, resourceGroup().id, parameters('environmentName')), 6)]",
+		"baseName": "[format('{0}-{1}-{2}', variables('prefixSlug'), variables('environmentSlug'), variables('nameSeed'))]",
+		"acrPullRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
+		"storageBlobDataContributorRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
+		"searchIndexDataReaderRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '1407120a-92aa-4202-b7e9-c0e197c71c8f')]",
+		"cognitiveServicesOpenAiUserRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd')]",
+		"backendAppName": "backend",
+		"frontendAppName": "frontend",
+		"workerAppName": "worker",
+		"containerAppsManagedIdentityName": "[format('{0}-cai', variables('baseName'))]",
+		"sqlLocationSeed": "[take(uniqueString(parameters('sqlLocation')), 4)]",
+		"sqlServerName": "[take(format('{0}-{1}-sql', variables('baseName'), variables('sqlLocationSeed')), 63)]",
+		"useExistingSql": "[equals(toLower(parameters('sqlProvisioningMode')), 'existing')]",
+		"useManagedRegistry": "[equals(toLower(parameters('containerRegistryMode')), 'managed')]",
+		"useExternalRegistry": "[not(variables('useManagedRegistry'))]",
+		"useProvisionedAiServices": "[equals(toLower(parameters('aiServicesProvisioningMode')), 'provision')]",
+		"useArmFoundryProjectProvisioning": "[and(variables('useProvisionedAiServices'), equals(toLower(parameters('aiFoundryProjectProvisioningMode')), 'arm'))]",
+		"hasExternalRegistryCredentials": "[and(and(variables('useExternalRegistry'), not(empty(parameters('externalRegistryUsername')))), not(empty(parameters('externalRegistryPassword'))))]",
+		"logAnalyticsEnabled": "[equals(toLower(parameters('enableLogAnalytics')), 'true')]",
+		"aspireDashboardEnabled": "[equals(toLower(parameters('enableAspireDashboard')), 'true')]",
+		"appLogsDestination": "[if(variables('logAnalyticsEnabled'), 'log-analytics', if(variables('aspireDashboardEnabled'), 'azure-monitor', 'none'))]",
+		"resolvedBackendMinReplicas": "[int(parameters('backendMinReplicas'))]",
+		"resolvedFrontendMinReplicas": "[int(parameters('frontendMinReplicas'))]",
+		"resolvedWorkerMinReplicas": "[int(parameters('workerMinReplicas'))]",
+		"resolvedSqlServerName": "[if(variables('useExistingSql'), parameters('existingSqlServerName'), variables('sqlServerName'))]",
+		"resolvedSqlDatabaseName": "[if(variables('useExistingSql'), parameters('existingSqlDatabaseName'), parameters('sqlDatabaseName'))]",
+		"generatedStorageAccountName": "[toLower(take(replace(format('{0}st', variables('baseName')), '-', ''), 24))]",
+		"resolvedStorageAccountName": "[if(empty(parameters('storageAccountName')), variables('generatedStorageAccountName'), toLower(parameters('storageAccountName')))]",
+		"generatedSearchServiceName": "[toLower(take(format('{0}-srch', variables('baseName')), 60))]",
+		"resolvedSearchServiceName": "[if(empty(parameters('searchServiceName')), variables('generatedSearchServiceName'), toLower(parameters('searchServiceName')))]",
+		"useExistingSearch": "[equals(toLower(parameters('searchProvisioningMode')), 'existing')]",
+		"generatedAiServicesAccountName": "[toLower(take(format('{0}-aoai', variables('baseName')), 64))]",
+		"resolvedAiServicesAccountName": "[if(empty(parameters('aiServicesAccountName')), variables('generatedAiServicesAccountName'), toLower(parameters('aiServicesAccountName')))]",
+		"normalizedSearchAuthMode": "[if(equals(toLower(parameters('searchAuthMode')), 'managed-identity'), 'managed-identity', 'api-key')]",
+		"backendAppId": "api",
+		"frontendAppId": "web",
+		"workerAppId": "worker",
+		"resolvedOpenAiModelId": "[if(variables('useProvisionedAiServices'), parameters('openAiChatDeploymentName'), parameters('azureOpenAiModelId'))]",
+		"chatModel": "[if(empty(parameters('openAiChatModelVersion')), createObject('format', 'OpenAI', 'name', parameters('openAiChatModelName')), createObject('format', 'OpenAI', 'name', parameters('openAiChatModelName'), 'version', parameters('openAiChatModelVersion')))]",
+		"searchEndpoint": "[format('https://{0}.search.windows.net', variables('resolvedSearchServiceName'))]",
+		"sharedRegistrySecrets": "[if(variables('hasExternalRegistryCredentials'), createArray(createObject('name', 'registry-password', 'value', parameters('externalRegistryPassword'))), createArray())]"
+	},
+	"resources": [
+		{
+			"condition": "[and(not(variables('useExistingSql')), not(empty(parameters('sqlEntraAdminLogin'))))]",
+			"type": "Microsoft.Sql/servers/administrators",
+			"apiVersion": "2023-08-01-preview",
+			"name": "[format('{0}/{1}', variables('sqlServerName'), 'ActiveDirectory')]",
+			"properties": {
+				"administratorType": "ActiveDirectory",
+				"login": "[parameters('sqlEntraAdminLogin')]",
+				"sid": "[parameters('sqlEntraAdminObjectId')]",
+				"tenantId": "[subscription().tenantId]"
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"
+			]
+		},
+		{
+			"condition": "[variables('logAnalyticsEnabled')]",
+			"type": "Microsoft.OperationalInsights/workspaces",
+			"apiVersion": "2023-09-01",
+			"name": "[format('{0}-law', variables('baseName'))]",
+			"location": "[parameters('location')]",
+			"tags": "[parameters('tags')]",
+			"properties": {
+				"sku": {
+					"name": "PerGB2018"
+				},
+				"retentionInDays": 30,
+				"features": {
+					"searchVersion": 1,
+					"enableLogAccessUsingOnlyResourcePermissions": true
+				}
+			}
+		},
+		{
+			"condition": "[variables('logAnalyticsEnabled')]",
+			"type": "Microsoft.Insights/components",
+			"apiVersion": "2020-02-02",
+			"name": "[format('{0}-appi', variables('baseName'))]",
+			"location": "[parameters('location')]",
+			"tags": "[parameters('tags')]",
+			"kind": "web",
+			"properties": {
+				"Application_Type": "web",
+				"WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName')))]",
+				"IngestionMode": "LogAnalytics"
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName')))]"
+			]
+		},
+		{
+			"type": "Microsoft.App/managedEnvironments",
+			"apiVersion": "2024-03-01",
+			"name": "[format('{0}-acae', variables('baseName'))]",
+			"location": "[parameters('location')]",
+			"tags": "[parameters('tags')]",
+			"properties": {
+				"appLogsConfiguration": "[if(equals(variables('appLogsDestination'), 'log-analytics'), createObject('destination', variables('appLogsDestination'), 'logAnalyticsConfiguration', createObject('customerId', reference(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName'))), '2023-09-01').customerId, 'sharedKey', listKeys(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName'))), '2023-09-01').primarySharedKey)), createObject('destination', variables('appLogsDestination')))]",
+				"daprAIConnectionString": "[if(variables('logAnalyticsEnabled'), reference(resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName'))), '2020-02-02').ConnectionString, null())]"
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName')))]",
+				"[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-law', variables('baseName')))]"
+			]
+		},
+		{
+			"condition": "[variables('aspireDashboardEnabled')]",
+			"type": "Microsoft.App/managedEnvironments/dotNetComponents",
+			"apiVersion": "2025-10-02-preview",
+			"name": "[format('{0}/{1}', format('{0}-acae', variables('baseName')), 'aspire-dashboard')]",
+			"properties": {
+				"componentType": "AspireDashboard",
+				"configurations": [],
+				"serviceBinds": []
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]"
+			]
+		},
+		{
+			"type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+			"apiVersion": "2023-01-31",
+			"name": "[variables('containerAppsManagedIdentityName')]",
+			"location": "[parameters('location')]",
+			"tags": "[parameters('tags')]"
+		},
+		{
+			"type": "Microsoft.Storage/storageAccounts",
+			"apiVersion": "2023-05-01",
+			"name": "[variables('resolvedStorageAccountName')]",
+			"location": "[parameters('location')]",
+			"tags": "[parameters('tags')]",
+			"sku": {
+				"name": "Standard_LRS"
+			},
+			"kind": "StorageV2",
+			"properties": {
+				"allowBlobPublicAccess": false,
+				"minimumTlsVersion": "TLS1_2",
+				"supportsHttpsTrafficOnly": true
+			}
+		},
+		{
+			"type": "Microsoft.Storage/storageAccounts/blobServices",
+			"apiVersion": "2023-05-01",
+			"name": "[format('{0}/{1}', variables('resolvedStorageAccountName'), 'default')]",
+			"properties": {
+				"cors": {
+					"corsRules": [
+						{
+							"allowedOrigins": "[if(empty(parameters('blobCorsAllowedOriginsJson')), createArray('http://localhost:3000', 'https://localhost:3000', format('https://{0}.{1}', variables('frontendAppName'), reference(resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName'))), '2024-03-01').defaultDomain)), json(parameters('blobCorsAllowedOriginsJson')))]",
+							"allowedMethods": ["OPTIONS", "PUT", "HEAD"],
+							"allowedHeaders": [
+								"x-ms-blob-type",
+								"content-type",
+								"x-ms-version",
+								"x-ms-date",
+								"x-ms-client-request-id",
+								"origin",
+								"accept"
+							],
+							"exposedHeaders": ["ETag", "x-ms-request-id", "x-ms-version"],
+							"maxAgeInSeconds": 3600
+						}
+					]
+				}
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
+				"[resourceId('Microsoft.Storage/storageAccounts', variables('resolvedStorageAccountName'))]"
+			]
+		},
+		{
+			"type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+			"apiVersion": "2023-05-01",
+			"name": "[format('{0}/{1}/{2}', variables('resolvedStorageAccountName'), 'default', parameters('documentsContainerName'))]",
+			"properties": {
+				"publicAccess": "None"
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('resolvedStorageAccountName'), 'default')]"
+			]
+		},
+		{
+			"type": "Microsoft.Authorization/roleAssignments",
+			"apiVersion": "2022-04-01",
+			"scope": "[resourceId('Microsoft.Storage/storageAccounts', variables('resolvedStorageAccountName'))]",
+			"name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('resolvedStorageAccountName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), 'StorageBlobDataContributor')]",
+			"properties": {
+				"principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').principalId]",
+				"principalType": "ServicePrincipal",
+				"roleDefinitionId": "[variables('storageBlobDataContributorRoleDefinitionId')]"
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]",
+				"[resourceId('Microsoft.Storage/storageAccounts', variables('resolvedStorageAccountName'))]"
+			]
+		},
+		{
+			"condition": "[not(variables('useExistingSearch'))]",
+			"type": "Microsoft.Search/searchServices",
+			"apiVersion": "2023-11-01",
+			"name": "[variables('resolvedSearchServiceName')]",
+			"location": "[parameters('searchLocation')]",
+			"tags": "[parameters('tags')]",
+			"sku": {
+				"name": "free"
+			},
+			"properties": {
+				"replicaCount": 1,
+				"partitionCount": 1,
+				"hostingMode": "default",
+				"publicNetworkAccess": "enabled",
+				"disableLocalAuth": false,
+				"authOptions": {
+					"aadOrApiKey": {
+						"aadAuthFailureMode": "http401WithBearerChallenge"
+					}
+				}
+			}
+		},
+		{
+			"condition": "[not(variables('useExistingSearch'))]",
+			"type": "Microsoft.Authorization/roleAssignments",
+			"apiVersion": "2022-04-01",
+			"scope": "[resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName'))]",
+			"name": "[guid(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), 'SearchIndexDataReader')]",
+			"properties": {
+				"principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').principalId]",
+				"principalType": "ServicePrincipal",
+				"roleDefinitionId": "[variables('searchIndexDataReaderRoleDefinitionId')]"
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName'))]",
+				"[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]"
+			]
+		},
+		{
+			"condition": "[variables('useExistingSearch')]",
+			"type": "Microsoft.Authorization/roleAssignments",
+			"apiVersion": "2022-04-01",
+			"scope": "[resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName'))]",
+			"name": "[guid(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), 'SearchIndexDataReader')]",
+			"properties": {
+				"principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').principalId]",
+				"principalType": "ServicePrincipal",
+				"roleDefinitionId": "[variables('searchIndexDataReaderRoleDefinitionId')]"
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]"
+			]
+		},
+		{
+			"condition": "[variables('useProvisionedAiServices')]",
+			"type": "Microsoft.CognitiveServices/accounts",
+			"apiVersion": "2025-06-01",
+			"name": "[variables('resolvedAiServicesAccountName')]",
+			"location": "[parameters('location')]",
+			"tags": "[parameters('tags')]",
+			"kind": "AIServices",
+			"identity": {
+				"type": "SystemAssigned"
+			},
+			"sku": {
+				"name": "S0"
+			},
+			"properties": {
+				"customSubDomainName": "[variables('resolvedAiServicesAccountName')]",
+				"publicNetworkAccess": "Enabled",
+				"allowProjectManagement": true
+			}
+		},
+		{
+			"condition": "[variables('useArmFoundryProjectProvisioning')]",
+			"type": "Microsoft.CognitiveServices/accounts/projects",
+			"apiVersion": "2025-06-01",
+			"name": "[format('{0}/{1}', variables('resolvedAiServicesAccountName'), parameters('aiFoundryProjectName'))]",
+			"location": "[parameters('location')]",
+			"tags": "[parameters('tags')]",
+			"properties": {},
+			"dependsOn": [
+				"[resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName'))]"
+			]
+		},
+		{
+			"condition": "[variables('useProvisionedAiServices')]",
+			"type": "Microsoft.Authorization/roleAssignments",
+			"apiVersion": "2022-04-01",
+			"scope": "[resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName'))]",
+			"name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), 'CognitiveServicesOpenAiUser')]",
+			"properties": {
+				"principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').principalId]",
+				"principalType": "ServicePrincipal",
+				"roleDefinitionId": "[variables('cognitiveServicesOpenAiUserRoleDefinitionId')]"
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName'))]",
+				"[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]"
+			]
+		},
+		{
+			"condition": "[variables('useProvisionedAiServices')]",
+			"type": "Microsoft.CognitiveServices/accounts/deployments",
+			"apiVersion": "2025-06-01",
+			"name": "[format('{0}/{1}', variables('resolvedAiServicesAccountName'), parameters('openAiChatDeploymentName'))]",
+			"sku": {
+				"name": "GlobalStandard",
+				"capacity": 1
+			},
+			"properties": {
+				"model": "[variables('chatModel')]"
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName'))]"
+			]
+		},
+		{
+			"condition": "[variables('useProvisionedAiServices')]",
+			"type": "Microsoft.CognitiveServices/accounts/deployments",
+			"apiVersion": "2025-06-01",
+			"name": "[format('{0}/{1}', variables('resolvedAiServicesAccountName'), parameters('openAiEmbeddingDeploymentName'))]",
+			"sku": {
+				"name": "GlobalStandard",
+				"capacity": 1
+			},
+			"properties": {
+				"model": {
+					"format": "OpenAI",
+					"name": "[parameters('openAiEmbeddingModelName')]",
+					"version": "[parameters('openAiEmbeddingModelVersion')]"
+				}
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName'))]",
+				"[resourceId('Microsoft.CognitiveServices/accounts/deployments', variables('resolvedAiServicesAccountName'), parameters('openAiChatDeploymentName'))]"
+			]
+		},
+		{
+			"condition": "[variables('useManagedRegistry')]",
+			"type": "Microsoft.ContainerRegistry/registries",
+			"apiVersion": "2023-07-01",
+			"name": "[toLower(replace(format('{0}acr', variables('baseName')), '-', ''))]",
+			"location": "[parameters('location')]",
+			"tags": "[parameters('tags')]",
+			"sku": {
+				"name": "Basic"
+			},
+			"properties": {
+				"adminUserEnabled": false,
+				"publicNetworkAccess": "Enabled"
+			}
+		},
+		{
+			"condition": "[variables('useManagedRegistry')]",
+			"type": "Microsoft.Authorization/roleAssignments",
+			"apiVersion": "2022-04-01",
+			"scope": "[resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', '')))]",
+			"name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), 'AcrPull')]",
+			"properties": {
+				"principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').principalId]",
+				"principalType": "ServicePrincipal",
+				"roleDefinitionId": "[variables('acrPullRoleDefinitionId')]"
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]",
+				"[resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', '')))]"
+			]
+		},
+		{
+			"condition": "[not(variables('useExistingSql'))]",
+			"type": "Microsoft.Sql/servers",
+			"apiVersion": "2023-08-01-preview",
+			"name": "[variables('sqlServerName')]",
+			"location": "[parameters('sqlLocation')]",
+			"tags": "[parameters('tags')]",
+			"properties": {
+				"administratorLogin": "[parameters('sqlAdminLogin')]",
+				"administratorLoginPassword": "[parameters('sqlAdminPassword')]",
+				"publicNetworkAccess": "Enabled",
+				"minimalTlsVersion": "1.2"
+			}
+		},
+		{
+			"condition": "[not(variables('useExistingSql'))]",
+			"type": "Microsoft.Sql/servers/firewallRules",
+			"apiVersion": "2023-08-01-preview",
+			"name": "[format('{0}/{1}', variables('sqlServerName'), 'AllowAllAzureIPs')]",
+			"properties": {
+				"startIpAddress": "0.0.0.0",
+				"endIpAddress": "0.0.0.0"
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"
+			]
+		},
+		{
+			"condition": "[not(variables('useExistingSql'))]",
+			"type": "Microsoft.Sql/servers/databases",
+			"apiVersion": "2023-08-01-preview",
+			"name": "[format('{0}/{1}', variables('sqlServerName'), parameters('sqlDatabaseName'))]",
+			"location": "[parameters('sqlLocation')]",
+			"tags": "[parameters('tags')]",
+			"sku": {
+				"name": "GP_S_Gen5_1",
+				"tier": "GeneralPurpose",
+				"capacity": 1,
+				"family": "Gen5"
+			},
+			"properties": {
+				"collation": "SQL_Latin1_General_CP1_CI_AS",
+				"maxSizeBytes": 2147483648,
+				"minCapacity": "[json('0.5')]",
+				"autoPauseDelay": 60
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"
+			]
+		},
+		{
+			"type": "Microsoft.App/containerApps",
+			"apiVersion": "2024-03-01",
+			"name": "[variables('backendAppName')]",
+			"location": "[parameters('location')]",
+			"identity": {
+				"type": "UserAssigned",
+				"userAssignedIdentities": {
+					"[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')))]": {}
+				}
+			},
+			"tags": "[union(parameters('tags'), createObject('azd-service-name', 'backend'))]",
+			"properties": {
+				"managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
+				"configuration": {
+					"activeRevisionsMode": "Single",
+					"dapr": {
+						"enabled": true,
+						"appId": "[variables('backendAppId')]",
+						"appPort": 8080,
+						"appProtocol": "http"
+					},
+					"secrets": "[concat(concat(createArray(createObject('name', 'azure-openai-api-key', 'value', if(variables('useProvisionedAiServices'), listKeys(resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName')), '2025-06-01').key1, parameters('azureOpenAiApiKey'))), createObject('name', 'storage-connection-string', 'value', format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', variables('resolvedStorageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('resolvedStorageAccountName')), '2023-05-01').keys[0].value, environment().suffixes.storage)), createObject('name', 'search-api-key', 'value', if(variables('useExistingSearch'), listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').primaryKey, listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').primaryKey)), createObject('name', 'search-query-key', 'value', if(empty(if(variables('useExistingSearch'), listQueryKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').value, listQueryKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').value)), if(variables('useExistingSearch'), listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').primaryKey, listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').primaryKey), first(if(variables('useExistingSearch'), listQueryKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').value, listQueryKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').value)).key))), createArray()), variables('sharedRegistrySecrets'))]",
+					"ingress": {
+						"external": true,
+						"targetPort": 8080,
+						"transport": "auto"
+					},
+					"registries": "[if(variables('useManagedRegistry'), createArray(createObject('server', reference(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), '2023-07-01').loginServer, 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')))), if(variables('hasExternalRegistryCredentials'), createArray(createObject('server', parameters('externalRegistryServer'), 'username', parameters('externalRegistryUsername'), 'passwordSecretRef', 'registry-password')), createArray()))]"
+				},
+				"template": {
+					"containers": [
+						{
+							"name": "backend",
+							"image": "[parameters('backendImage')]",
+							"env": "[concat(if(variables('logAnalyticsEnabled'), createArray(createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', reference(resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName'))), '2020-02-02').ConnectionString)), createArray()), createArray(createObject('name', 'AI_MODE', 'value', parameters('aiMode')), createObject('name', 'AZURE_OPENAI_API_KEY', 'secretRef', 'azure-openai-api-key'), createObject('name', 'AZURE_OPENAI_MODEL_ID', 'value', variables('resolvedOpenAiModelId')), createObject('name', 'AZURE_OPENAI_ENDPOINT', 'value', if(variables('useProvisionedAiServices'), reference(resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName')), '2025-06-01').endpoint, parameters('azureOpenAiEndpoint'))), createObject('name', 'AZURE_OPENAI_AUTH_MODE', 'value', parameters('openAiAuthMode')), createObject('name', 'AZURE_OPENAI_EMBEDDING_MODEL_ID', 'value', parameters('openAiEmbeddingDeploymentName')), createObject('name', 'AZURE_OPENAI_EMBEDDING_DIMENSIONS', 'value', string(parameters('openAiEmbeddingDimensions'))), createObject('name', 'AZURE_STORAGE_ACCOUNT_NAME', 'value', variables('resolvedStorageAccountName')), createObject('name', 'AZURE_STORAGE_CONTAINER_NAME', 'value', parameters('documentsContainerName')), createObject('name', 'AZURE_STORAGE_CONNECTION_STRING', 'secretRef', 'storage-connection-string'), createObject('name', 'AZURE_STORAGE_AUTH_MODE', 'value', parameters('storageAuthMode')), createObject('name', 'AZURE_SEARCH_ENDPOINT', 'value', variables('searchEndpoint')), createObject('name', 'AZURE_SEARCH_INDEX_NAME', 'value', parameters('searchIndexName')), createObject('name', 'AZURE_SEARCH_API_KEY', 'secretRef', 'search-query-key'), createObject('name', 'AZURE_SEARCH_AUTH_MODE', 'value', variables('normalizedSearchAuthMode')), createObject('name', 'WORKER_DAPR_BASE_URL', 'value', format('http://localhost:3500/v1.0/invoke/{0}/method', variables('workerAppId'))), createObject('name', 'SQL_SERVER', 'value', format('{0}{1}', variables('resolvedSqlServerName'), environment().suffixes.sqlServerHostname)), createObject('name', 'SQL_DATABASE', 'value', variables('resolvedSqlDatabaseName')), createObject('name', 'AZURE_CLIENT_ID', 'value', reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').clientId)))]",
+							"resources": {
+								"cpu": "[json('0.5')]",
+								"memory": "1Gi"
+							}
+						}
+					],
+					"scale": {
+						"minReplicas": "[variables('resolvedBackendMinReplicas')]",
+						"maxReplicas": 2
+					}
+				}
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
+				"[resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName'))]",
+				"[resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName'))]",
+				"[resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName')))]",
+				"[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]",
+				"[resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', '')))]",
+				"[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('resolvedStorageAccountName'), 'default', parameters('documentsContainerName'))]",
+				"[resourceId('Microsoft.Storage/storageAccounts', variables('resolvedStorageAccountName'))]"
+			]
+		},
+		{
+			"type": "Microsoft.App/containerApps",
+			"apiVersion": "2024-03-01",
+			"name": "[variables('frontendAppName')]",
+			"location": "[parameters('location')]",
+			"identity": {
+				"type": "UserAssigned",
+				"userAssignedIdentities": {
+					"[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')))]": {}
+				}
+			},
+			"tags": "[union(parameters('tags'), createObject('azd-service-name', 'frontend'))]",
+			"properties": {
+				"managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
+				"configuration": {
+					"activeRevisionsMode": "Single",
+					"dapr": {
+						"enabled": true,
+						"appId": "[variables('frontendAppId')]",
+						"appPort": 3000,
+						"appProtocol": "http"
+					},
+					"secrets": "[variables('sharedRegistrySecrets')]",
+					"ingress": {
+						"external": true,
+						"targetPort": 3000,
+						"transport": "auto"
+					},
+					"registries": "[if(variables('useManagedRegistry'), createArray(createObject('server', reference(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), '2023-07-01').loginServer, 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')))), if(variables('hasExternalRegistryCredentials'), createArray(createObject('server', parameters('externalRegistryServer'), 'username', parameters('externalRegistryUsername'), 'passwordSecretRef', 'registry-password')), createArray()))]"
+				},
+				"template": {
+					"containers": [
+						{
+							"name": "frontend",
+							"image": "[parameters('frontendImage')]",
+							"env": "[concat(if(variables('logAnalyticsEnabled'), createArray(createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', reference(resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName'))), '2020-02-02').ConnectionString)), createArray()), createArray(createObject('name', 'AI_MODE', 'value', parameters('aiMode')), createObject('name', 'BACKEND_DAPR_BASE_URL', 'value', format('http://localhost:3500/v1.0/invoke/{0}/method', variables('backendAppId'))), createObject('name', 'WORKER_DAPR_BASE_URL', 'value', format('http://localhost:3500/v1.0/invoke/{0}/method', variables('workerAppId')))))]",
+							"resources": {
+								"cpu": "[json('0.5')]",
+								"memory": "1Gi"
+							}
+						}
+					],
+					"scale": {
+						"minReplicas": "[variables('resolvedFrontendMinReplicas')]",
+						"maxReplicas": 2
+					}
+				}
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
+				"[resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName')))]",
+				"[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]",
+				"[resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', '')))]"
+			]
+		},
+		{
+			"type": "Microsoft.App/containerApps",
+			"apiVersion": "2024-03-01",
+			"name": "[variables('workerAppName')]",
+			"location": "[parameters('location')]",
+			"identity": {
+				"type": "UserAssigned",
+				"userAssignedIdentities": {
+					"[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')))]": {}
+				}
+			},
+			"tags": "[union(parameters('tags'), createObject('azd-service-name', 'worker'))]",
+			"properties": {
+				"managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
+				"configuration": {
+					"activeRevisionsMode": "Single",
+					"dapr": {
+						"enabled": true,
+						"appId": "[variables('workerAppId')]",
+						"appPort": 8081,
+						"appProtocol": "http"
+					},
+					"secrets": "[concat(createArray(createObject('name', 'azure-openai-api-key', 'value', if(variables('useProvisionedAiServices'), listKeys(resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName')), '2025-06-01').key1, parameters('azureOpenAiApiKey'))), createObject('name', 'storage-connection-string', 'value', format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', variables('resolvedStorageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('resolvedStorageAccountName')), '2023-05-01').keys[0].value, environment().suffixes.storage)), createObject('name', 'search-api-key', 'value', if(variables('useExistingSearch'), listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').primaryKey, listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').primaryKey)), createObject('name', 'search-query-key', 'value', if(empty(if(variables('useExistingSearch'), listQueryKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').value, listQueryKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').value)), if(variables('useExistingSearch'), listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').primaryKey, listAdminKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').primaryKey), first(if(variables('useExistingSearch'), listQueryKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').value, listQueryKeys(resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName')), '2023-11-01').value)).key))), variables('sharedRegistrySecrets'))]",
+					"ingress": {
+						"external": false,
+						"targetPort": 8081,
+						"transport": "auto"
+					},
+					"registries": "[if(variables('useManagedRegistry'), createArray(createObject('server', reference(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), '2023-07-01').loginServer, 'identity', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')))), if(variables('hasExternalRegistryCredentials'), createArray(createObject('server', parameters('externalRegistryServer'), 'username', parameters('externalRegistryUsername'), 'passwordSecretRef', 'registry-password')), createArray()))]"
+				},
+				"template": {
+					"containers": [
+						{
+							"name": "worker",
+							"image": "[parameters('workerImage')]",
+							"env": "[concat(if(variables('logAnalyticsEnabled'), createArray(createObject('name', 'APPLICATIONINSIGHTS_CONNECTION_STRING', 'value', reference(resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName'))), '2020-02-02').ConnectionString)), createArray()), createArray(createObject('name', 'AI_MODE', 'value', parameters('aiMode')), createObject('name', 'AZURE_OPENAI_API_KEY', 'secretRef', 'azure-openai-api-key'), createObject('name', 'AZURE_OPENAI_MODEL_ID', 'value', variables('resolvedOpenAiModelId')), createObject('name', 'AZURE_OPENAI_ENDPOINT', 'value', if(variables('useProvisionedAiServices'), reference(resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName')), '2025-06-01').endpoint, parameters('azureOpenAiEndpoint'))), createObject('name', 'AZURE_OPENAI_AUTH_MODE', 'value', parameters('openAiAuthMode')), createObject('name', 'AZURE_OPENAI_EMBEDDING_MODEL_ID', 'value', parameters('openAiEmbeddingDeploymentName')), createObject('name', 'AZURE_OPENAI_EMBEDDING_DIMENSIONS', 'value', string(parameters('openAiEmbeddingDimensions'))), createObject('name', 'AZURE_STORAGE_ACCOUNT_NAME', 'value', variables('resolvedStorageAccountName')), createObject('name', 'AZURE_STORAGE_CONTAINER_NAME', 'value', parameters('documentsContainerName')), createObject('name', 'AZURE_STORAGE_CONNECTION_STRING', 'secretRef', 'storage-connection-string'), createObject('name', 'AZURE_STORAGE_AUTH_MODE', 'value', parameters('storageAuthMode')), createObject('name', 'AZURE_SEARCH_ENDPOINT', 'value', variables('searchEndpoint')), createObject('name', 'AZURE_SEARCH_INDEX_NAME', 'value', parameters('searchIndexName')), createObject('name', 'AZURE_SEARCH_API_KEY', 'secretRef', 'search-api-key'), createObject('name', 'SQL_SERVER', 'value', format('{0}{1}', variables('resolvedSqlServerName'), environment().suffixes.sqlServerHostname)), createObject('name', 'SQL_DATABASE', 'value', variables('resolvedSqlDatabaseName')), createObject('name', 'AZURE_CLIENT_ID', 'value', reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').clientId)))]",
+							"resources": {
+								"cpu": "[json('0.25')]",
+								"memory": "0.5Gi"
+							}
+						}
+					],
+					"scale": {
+						"minReplicas": "[variables('resolvedWorkerMinReplicas')]",
+						"maxReplicas": 2
+					}
+				}
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]",
+				"[resourceId('Microsoft.Search/searchServices', variables('resolvedSearchServiceName'))]",
+				"[resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName'))]",
+				"[resourceId('Microsoft.Insights/components', format('{0}-appi', variables('baseName')))]",
+				"[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName'))]",
+				"[resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', '')))]",
+				"[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', variables('resolvedStorageAccountName'), 'default', parameters('documentsContainerName'))]",
+				"[resourceId('Microsoft.Storage/storageAccounts', variables('resolvedStorageAccountName'))]"
+			]
+		}
+	],
+	"outputs": {
+		"AZURE_LOCATION": {
+			"type": "string",
+			"value": "[parameters('location')]"
+		},
+		"AZURE_ENV_NAME": {
+			"type": "string",
+			"value": "[parameters('environmentName')]"
+		},
+		"AZURE_CONTAINER_APPS_ENVIRONMENT_ID": {
+			"type": "string",
+			"value": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-acae', variables('baseName')))]"
+		},
+		"AZURE_CONTAINER_APPS_ENVIRONMENT_NAME": {
+			"type": "string",
+			"value": "[format('{0}-acae', variables('baseName'))]"
+		},
+		"AZURE_CONTAINER_REGISTRY_NAME": {
+			"type": "string",
+			"value": "[if(variables('useManagedRegistry'), toLower(replace(format('{0}acr', variables('baseName')), '-', '')), '')]"
+		},
+		"AZURE_CONTAINER_REGISTRY_ENDPOINT": {
+			"type": "string",
+			"value": "[if(variables('useManagedRegistry'), reference(resourceId('Microsoft.ContainerRegistry/registries', toLower(replace(format('{0}acr', variables('baseName')), '-', ''))), '2023-07-01').loginServer, '')]"
+		},
+		"BACKEND_CONTAINER_APP_NAME": {
+			"type": "string",
+			"value": "[variables('backendAppName')]"
+		},
+		"UAMI_CLIENT_ID": {
+			"type": "string",
+			"value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').clientId]"
+		},
+		"UAMI_PRINCIPAL_ID": {
+			"type": "string",
+			"value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('containerAppsManagedIdentityName')), '2023-01-31').principalId]"
+		},
+		"UAMI_NAME": {
+			"type": "string",
+			"value": "[variables('containerAppsManagedIdentityName')]"
+		},
+		"FRONTEND_CONTAINER_APP_NAME": {
+			"type": "string",
+			"value": "[variables('frontendAppName')]"
+		},
+		"WORKER_CONTAINER_APP_NAME": {
+			"type": "string",
+			"value": "[variables('workerAppName')]"
+		},
+		"AZURE_SQL_SERVER_NAME": {
+			"type": "string",
+			"value": "[variables('resolvedSqlServerName')]"
+		},
+		"AZURE_SQL_DATABASE_NAME": {
+			"type": "string",
+			"value": "[variables('resolvedSqlDatabaseName')]"
+		},
+		"AZURE_SQL_PROVISIONING_MODE": {
+			"type": "string",
+			"value": "[parameters('sqlProvisioningMode')]"
+		},
+		"AZURE_STORAGE_ACCOUNT_NAME": {
+			"type": "string",
+			"value": "[variables('resolvedStorageAccountName')]"
+		},
+		"AZURE_STORAGE_DOCUMENTS_CONTAINER": {
+			"type": "string",
+			"value": "[parameters('documentsContainerName')]"
+		},
+		"AZURE_SEARCH_SERVICE_NAME": {
+			"type": "string",
+			"value": "[variables('resolvedSearchServiceName')]"
+		},
+		"AZURE_SEARCH_ENDPOINT": {
+			"type": "string",
+			"value": "[variables('searchEndpoint')]"
+		},
+		"AZURE_SEARCH_INDEX_NAME": {
+			"type": "string",
+			"value": "[parameters('searchIndexName')]"
+		},
+		"AZURE_AI_SERVICES_PROVISIONING_MODE": {
+			"type": "string",
+			"value": "[parameters('aiServicesProvisioningMode')]"
+		},
+		"AZURE_OPENAI_EFFECTIVE_ENDPOINT": {
+			"type": "string",
+			"value": "[if(variables('useProvisionedAiServices'), reference(resourceId('Microsoft.CognitiveServices/accounts', variables('resolvedAiServicesAccountName')), '2025-06-01').endpoint, parameters('azureOpenAiEndpoint'))]"
+		},
+		"AZURE_OPENAI_EFFECTIVE_MODEL_ID": {
+			"type": "string",
+			"value": "[variables('resolvedOpenAiModelId')]"
+		},
+		"AZURE_OPENAI_EMBEDDING_MODEL_ID": {
+			"type": "string",
+			"value": "[parameters('openAiEmbeddingDeploymentName')]"
+		},
+		"AZURE_OPENAI_EMBEDDING_DIMENSIONS": {
+			"type": "int",
+			"value": "[parameters('openAiEmbeddingDimensions')]"
+		},
+		"AZURE_AI_SERVICES_ACCOUNT_NAME": {
+			"type": "string",
+			"value": "[if(variables('useProvisionedAiServices'), variables('resolvedAiServicesAccountName'), '')]"
+		},
+		"AZURE_AI_FOUNDRY_PROJECT_NAME": {
+			"type": "string",
+			"value": "[if(variables('useProvisionedAiServices'), parameters('aiFoundryProjectName'), '')]"
+		},
+		"AZURE_OPENAI_AUTH_MODE": {
+			"type": "string",
+			"value": "[parameters('openAiAuthMode')]"
+		},
+		"AZURE_STORAGE_AUTH_MODE": {
+			"type": "string",
+			"value": "[parameters('storageAuthMode')]"
+		},
+		"CONTAINER_REGISTRY_MODE": {
+			"type": "string",
+			"value": "[parameters('containerRegistryMode')]"
+		},
+		"ENABLE_LOG_ANALYTICS": {
+			"type": "string",
+			"value": "[parameters('enableLogAnalytics')]"
+		},
+		"ENABLE_ASPIRE_DASHBOARD": {
+			"type": "string",
+			"value": "[parameters('enableAspireDashboard')]"
+		},
+		"FRONTEND_URL": {
+			"type": "string",
+			"value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', variables('frontendAppName')), '2024-03-01').configuration.ingress.fqdn)]"
+		},
+		"BACKEND_URL": {
+			"type": "string",
+			"value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', variables('backendAppName')), '2024-03-01').configuration.ingress.fqdn)]"
+		}
+	}
 }

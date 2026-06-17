@@ -36,7 +36,11 @@ fi
 echo "[vuln-check] .NET checks passed"
 
 echo "[vuln-check] Checking npm production dependency vulnerabilities"
-audit_json="$(cd "$repo_root/src/frontend" && npm audit --omit=dev --json || true)"
+audit_json=""
+if ! audit_json="$(cd "$repo_root/src/frontend" && npm audit --omit=dev --json)"; then
+  # npm audit exits non-zero when vulnerabilities are found; parse JSON and enforce thresholds below.
+  :
+fi
 
 counts="$(node -e '
 let s = "";
@@ -47,7 +51,7 @@ process.stdin.on("end", () => {
   const moderate = Number(v.moderate || 0);
   const high = Number(v.high || 0);
   const critical = Number(v.critical || 0);
-  console.log(`${moderate} ${high} ${critical}`);
+  console.log([moderate, high, critical].join(" "));
 });
 ' <<<"$audit_json")"
 

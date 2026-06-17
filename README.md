@@ -61,7 +61,24 @@ git clone <repository-url>
 cd <repository-name>
 ```
 
-### 2. Set Up Environment Variables
+### 2. Bootstrap Local Tools (One-Time)
+Run the bootstrap script once after cloning to install/verify local tooling and dependencies:
+```bash
+bash scripts/setup-dev-tools.sh
+```
+
+What it prepares:
+- shellcheck (if available via your OS package manager)
+- actionlint (downloaded locally by `scripts/lint-workflows.sh`)
+- .NET restore
+- frontend npm install + lint
+- backend architecture tests
+
+Notes:
+- The actionlint binary is cached under `.tools/actionlint` and is intentionally gitignored (not committed).
+- shellcheck is expected to be machine-installed (brew/apt/dnf/yum), not checked into the repo.
+
+### 3. Set Up Environment Variables
 Copy the example environment file and fill in your actual values:
 ```bash
 cp src/aspire/.env.example src/aspire/.env
@@ -122,7 +139,7 @@ If you prefer manual setup, set these in `src/aspire/.env`:
 - `ENTRA_API_CLIENT_ID`
 - `ENTRA_SPA_CLIENT_ID`
 
-### 3. Run the Application
+### 4. Run the Application
 Navigate to the Aspire project directory and run the application:
 ```bash
 cd src/aspire
@@ -182,6 +199,13 @@ Validate GitHub Actions workflow syntax and expressions:
 
 ```bash
 bash scripts/lint-workflows.sh
+```
+
+If shellcheck is installed locally, the script also lint-checks `scripts/ci/*.sh`.
+For first-time setup, use:
+
+```bash
+bash scripts/setup-dev-tools.sh
 ```
 
 ### Architecture Tests

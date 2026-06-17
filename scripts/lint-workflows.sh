@@ -90,8 +90,14 @@ main() {
   if [[ "${#shell_script_files[@]}" -gt 0 ]]; then
     if command -v shellcheck >/dev/null 2>&1; then
       (cd "${REPO_ROOT}" && shellcheck -x "${shell_script_files[@]}")
+    elif command -v docker >/dev/null 2>&1; then
+      echo "shellcheck is not installed locally; using Docker image koalaman/shellcheck:stable" >&2
+      (
+        cd "${REPO_ROOT}"
+        docker run --rm -v "${REPO_ROOT}:/mnt" koalaman/shellcheck:stable -x "${shell_script_files[@]}"
+      )
     else
-      echo "shellcheck is not installed; skipping shell script linting." >&2
+      echo "shellcheck is not installed and Docker is unavailable; skipping shell script linting." >&2
     fi
   fi
 }

@@ -90,9 +90,62 @@ case "${mode}" in
     echo "Azure AI Search failover validated: ${enabled_lower}"
     ;;
 
+  entra-auth)
+    enabled_lower="$(echo "${ENTRA_AUTH_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')"
+    if [[ "${enabled_lower}" != "true" && "${enabled_lower}" != "false" ]]; then
+      echo "ENTRA_AUTH_ENABLED must be 'true' or 'false'."
+      exit 1
+    fi
+
+    if [[ "${enabled_lower}" == "true" && -z "${AZURE_TENANT_ID:-}" ]]; then
+      echo "AZURE_TENANT_ID is required when ENTRA_AUTH_ENABLED=true."
+      exit 1
+    fi
+
+    echo "Entra auth mode validated: ${enabled_lower}"
+    ;;
+
+  entra-runtime)
+    enabled_lower="$(echo "${ENTRA_AUTH_ENABLED:-true}" | tr '[:upper:]' '[:lower:]')"
+    if [[ "${enabled_lower}" != "true" && "${enabled_lower}" != "false" ]]; then
+      echo "ENTRA_AUTH_ENABLED must be 'true' or 'false'."
+      exit 1
+    fi
+
+    if [[ "${enabled_lower}" == "false" ]]; then
+      echo "Entra runtime validation skipped because ENTRA_AUTH_ENABLED=false."
+      exit 0
+    fi
+
+    missing=()
+    required_vars=(
+      ENTRA_TENANT_ID
+      ENTRA_API_CLIENT_ID
+      ENTRA_SPA_CLIENT_ID
+    )
+
+    for required_var in "${required_vars[@]}"; do
+      if [[ -z "${!required_var:-}" ]]; then
+        missing+=("${required_var}")
+      fi
+    done
+
+    if (( ${#missing[@]} > 0 )); then
+      echo "Missing required Entra runtime values: ${missing[*]}"
+      exit 1
+    fi
+
+    if [[ -n "${ENTRA_AUTHORITY:-}" ]] && ! echo "${ENTRA_AUTHORITY}" | grep -Eq '^https://'; then
+      echo "ENTRA_AUTHORITY must be an absolute https URL when provided."
+      exit 1
+    fi
+
+    echo "Entra runtime values validated."
+    ;;
+
   *)
     echo "Unknown validation mode: ${mode}"
-    echo "Supported: sql-admin-login, sql-provisioning, search-provisioning, search-failover"
+    echo "Supported: sql-admin-login, sql-provisioning, search-provisioning, search-failover, entra-auth, entra-runtime"
     exit 1
     ;;
 esac

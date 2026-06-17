@@ -74,7 +74,7 @@ This application enables employees to:
 
 ## Roadmap
 
-See: [Phased-Plan.md](/docs/plans/Phased_Plan.md) for detailed roadmap and milestones.
+See: [Enterprise_Ready_Execution_Plan.md](/docs/plans/Enterprise_Ready_Execution_Plan.md) for the current execution plan and milestones.
 
 ## Constraints
 

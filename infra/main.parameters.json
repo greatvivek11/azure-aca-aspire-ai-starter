@@ -140,6 +140,27 @@
 		"workerImage": {
 			"value": "${WORKER_IMAGE}"
 		},
+		"entraAuthEnabled": {
+			"value": "${ENTRA_AUTH_ENABLED}"
+		},
+		"entraTenantId": {
+			"value": "${ENTRA_TENANT_ID}"
+		},
+		"entraAuthority": {
+			"value": "${ENTRA_AUTHORITY}"
+		},
+		"entraApiClientId": {
+			"value": "${ENTRA_API_CLIENT_ID}"
+		},
+		"entraAudience": {
+			"value": "${ENTRA_AUDIENCE}"
+		},
+		"entraSpaClientId": {
+			"value": "${ENTRA_SPA_CLIENT_ID}"
+		},
+		"entraScope": {
+			"value": "${ENTRA_SCOPE}"
+		},
 		"sqlProvisioningMode": {
 			"value": "${SQL_PROVISIONING_MODE}"
 		},

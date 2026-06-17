@@ -57,6 +57,13 @@ var azureSearchEndpoint = Environment.GetEnvironmentVariable("AZURE_SEARCH_ENDPO
 var azureSearchIndexName = Environment.GetEnvironmentVariable("AZURE_SEARCH_INDEX_NAME") ?? "documents-index";
 var azureSearchApiKey = Environment.GetEnvironmentVariable("AZURE_SEARCH_API_KEY") ?? string.Empty;
 var azureSearchAuthMode = Environment.GetEnvironmentVariable("AZURE_SEARCH_AUTH_MODE") ?? "api-key";
+var entraAuthEnabled = Environment.GetEnvironmentVariable("ENTRA_AUTH_ENABLED") ?? "false";
+var entraTenantId = Environment.GetEnvironmentVariable("ENTRA_TENANT_ID") ?? string.Empty;
+var entraAuthority = Environment.GetEnvironmentVariable("ENTRA_AUTHORITY") ?? string.Empty;
+var entraApiClientId = Environment.GetEnvironmentVariable("ENTRA_API_CLIENT_ID") ?? string.Empty;
+var entraAudience = Environment.GetEnvironmentVariable("ENTRA_AUDIENCE") ?? string.Empty;
+var entraSpaClientId = Environment.GetEnvironmentVariable("ENTRA_SPA_CLIENT_ID") ?? string.Empty;
+var entraScope = Environment.GetEnvironmentVariable("ENTRA_SCOPE") ?? string.Empty;
 var frontendMode = (Environment.GetEnvironmentVariable("ASPIRE_FRONTEND_MODE") ?? "container")
     .Trim()
     .ToLowerInvariant();
@@ -131,6 +138,13 @@ var backend = builder.AddDockerfile("backend", "../backend")
     .WithEnvironment("AZURE_SEARCH_INDEX_NAME", azureSearchIndexName)
     .WithEnvironment("AZURE_SEARCH_API_KEY", azureSearchApiKey)
     .WithEnvironment("AZURE_SEARCH_AUTH_MODE", azureSearchAuthMode)
+    .WithEnvironment("ENTRA_AUTH_ENABLED", entraAuthEnabled)
+    .WithEnvironment("ENTRA_TENANT_ID", entraTenantId)
+    .WithEnvironment("ENTRA_AUTHORITY", entraAuthority)
+    .WithEnvironment("ENTRA_API_CLIENT_ID", entraApiClientId)
+    .WithEnvironment("ENTRA_AUDIENCE", entraAudience)
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
+    .WithEnvironment("DOTNET_ENVIRONMENT", "Development")
     .WithEnvironment("WORKER_DAPR_BASE_URL", "http://localhost:3500/v1.0/invoke/worker/method")
     .WithEnvironment("ConnectionStrings__SqlServer", "Server=sql,1433;Database=AcaAspireAiTemplate;User Id=sa;Password=P@ssw0rd;TrustServerCertificate=true")
     .WithEnvironment("ConnectionStrings__Redis", "redis:6379")
@@ -172,7 +186,9 @@ var worker = builder.AddDockerfile("worker", "../worker")
     .WithEnvironment("AZURE_STORAGE_AUTH_MODE", resolvedStorageAuthMode)
     .WithEnvironment("AZURE_SEARCH_ENDPOINT", azureSearchEndpoint)
     .WithEnvironment("AZURE_SEARCH_INDEX_NAME", azureSearchIndexName)
-    .WithEnvironment("AZURE_SEARCH_API_KEY", azureSearchApiKey);
+    .WithEnvironment("AZURE_SEARCH_API_KEY", azureSearchApiKey)
+    .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development")
+    .WithEnvironment("DOTNET_ENVIRONMENT", "Development");
 
 if (frontendMode == "vite-dev")
 {
@@ -189,6 +205,12 @@ if (frontendMode == "vite-dev")
         })
         .WithEnvironment("BACKEND_API_BASE_URL", "http://localhost:8080")
         .WithEnvironment("AI_MODE", aiMode)
+        .WithEnvironment("ENTRA_AUTH_ENABLED", entraAuthEnabled)
+        .WithEnvironment("ENTRA_TENANT_ID", entraTenantId)
+        .WithEnvironment("ENTRA_AUTHORITY", entraAuthority)
+        .WithEnvironment("ENTRA_API_CLIENT_ID", entraApiClientId)
+        .WithEnvironment("ENTRA_SPA_CLIENT_ID", entraSpaClientId)
+        .WithEnvironment("ENTRA_SCOPE", entraScope)
         .WithEnvironment("REDIS_URL", "redis://redis:6379");
 }
 else
@@ -207,6 +229,12 @@ else
         .WithEnvironment("BACKEND_API_BASE_URL", "http://backend:8080")
         .WithEnvironment("BACKEND_DAPR_BASE_URL", "http://localhost:3500/v1.0/invoke/api/method")
         .WithEnvironment("AI_MODE", aiMode)
+        .WithEnvironment("ENTRA_AUTH_ENABLED", entraAuthEnabled)
+        .WithEnvironment("ENTRA_TENANT_ID", entraTenantId)
+        .WithEnvironment("ENTRA_AUTHORITY", entraAuthority)
+        .WithEnvironment("ENTRA_API_CLIENT_ID", entraApiClientId)
+        .WithEnvironment("ENTRA_SPA_CLIENT_ID", entraSpaClientId)
+        .WithEnvironment("ENTRA_SCOPE", entraScope)
         .WithEnvironment("REDIS_URL", "redis://redis:6379");
 }
 
@@ -226,7 +254,17 @@ static void LoadEnvFile(string filePath)
         var parts = line.Split('=', 2);
         if (parts.Length == 2)
         {
-            Environment.SetEnvironmentVariable(parts[0].Trim(), parts[1].Trim());
+            var key = parts[0].Trim();
+            var existingValue = Environment.GetEnvironmentVariable(key);
+
+            // Respect launch profile / parent process variables (for example VS Code F5)
+            // and only backfill from .env when the variable is not already set.
+            if (!string.IsNullOrWhiteSpace(existingValue))
+            {
+                continue;
+            }
+
+            Environment.SetEnvironmentVariable(key, parts[1].Trim());
         }
     }
 }

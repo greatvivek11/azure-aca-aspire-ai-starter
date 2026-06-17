@@ -1,4 +1,4 @@
-<Project Sdk="Aspire.AppHost.Sdk/13.4.2">
+<Project Sdk="Aspire.AppHost.Sdk/13.4.3">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -12,7 +12,8 @@
     <PackageReference Include="Aspire.Hosting.Dapr" Version="9.1.0" />
     <PackageReference Include="Aspire.Hosting.NodeJs" Version="9.5.2" />
     <PackageReference Include="CommunityToolkit.Aspire.Hosting.Dapr" Version="9.7.2" />
-    <PackageReference Include="Aspire.Hosting.Docker" Version="13.4.2" />
+    <PackageReference Include="Aspire.Hosting.Docker" Version="13.4.3" />
+    <PackageReference Include="StreamJsonRpc" Version="2.25.28" />
   </ItemGroup>
 
   <ItemGroup>

@@ -2,6 +2,10 @@
 
 This guide explains how to configure GitHub Secrets for CI/CD deployment using GitHub Actions.
 
+> Source-of-truth note:
+> Required/optional secret handling is ultimately defined by `.github/workflows/reusable-deploy-azure.yml` and `scripts/ci/*.sh` validation scripts.
+> If this document diverges from workflow validation behavior, follow workflow + scripts.
+
 ## Why GitHub Secrets?
 
 Currently, we store sensitive credentials in GitHub Secrets instead of Azure Key Vault for these reasons:
@@ -29,6 +33,7 @@ Use this if you want the shortest path to first successful deployment.
 5. Add required repository secrets:
   - `AZURE_SUBSCRIPTION_ID`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`
   - `AZURE_SQL_ADMIN_LOGIN`, `AZURE_SQL_ADMIN_PASSWORD`
+  - `ENTRA_AUTH_ENABLED=true` (recommended)
   - `AI_SERVICES_PROVISIONING_MODE` (optional, defaults to `provision`)
   - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_MODEL_ID`, `AZURE_OPENAI_ENDPOINT` (only when `AI_SERVICES_PROVISIONING_MODE=external`)
   - Optional cost controls: `CONTAINER_REGISTRY_MODE=external`, `ENABLE_LOG_ANALYTICS=false`, replica counts `0`
@@ -139,6 +144,25 @@ When `SQL_PROVISIONING_MODE=existing`, both existing-name secrets are required.
 | `AZURE_STORAGE_DOCUMENTS_CONTAINER` | Blob container for document uploads | `documents` |
 | `AZURE_SEARCH_SERVICE_NAME` | Optional AI Search service name override | empty (auto-generated) |
 | `AZURE_SEARCH_INDEX_NAME` | AI Search index name for chunks | `documents-index` |
+| `ENTRA_AUTH_ENABLED` | Enable Entra auth wiring for frontend/backend | `true` |
+| `ENTRA_AUTHORITY` | Optional Entra authority override | auto-generated from tenant |
+| `ENTRA_API_CLIENT_ID` | Optional existing API app client ID to reuse | empty (workflow auto-creates) |
+| `ENTRA_AUDIENCE` | Optional backend token audience override | `api://<api-client-id>` |
+| `ENTRA_SPA_CLIENT_ID` | Optional existing SPA app client ID to reuse | empty (workflow auto-creates) |
+| `ENTRA_SCOPE` | Optional delegated scope override for SPA | `api://<api-client-id>/access_as_user` |
+| `AZURE_ENTRA_API_APP_NAME` | Optional display name for auto-created API app | `<azd-env>-api` |
+| `AZURE_ENTRA_SPA_APP_NAME` | Optional display name for auto-created SPA app | `<azd-env>-spa` |
+
+### Entra App Registration Automation
+
+The deploy workflow now automates Entra app setup when `ENTRA_AUTH_ENABLED=true`:
+
+1. Creates or reuses API and SPA app registrations.
+2. Exposes API scope `access_as_user` on the API app.
+3. Adds SPA delegated permission to that API scope.
+4. Attempts delegated permission grant/admin consent (tenant policies may still require manual approval).
+5. Wires `ENTRA_*` values into azd environment variables used by Bicep.
+6. Updates SPA redirect URIs with localhost defaults and deployed frontend URL.
 
 Default behavior:
 - `CONTAINER_REGISTRY_MODE=external` builds and pushes **public GHCR** images in GitHub Actions, then provisions ACA with those images.

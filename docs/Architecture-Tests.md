@@ -4,7 +4,7 @@ This document explains the architecture tests used to maintain code quality and 
 
 ## Overview
 
-**Architecture tests** validate that the codebase follows the intended design patterns and maintains proper separation of concerns. They use reflection to check project dependencies, namespace organization, and feature isolation.
+**Architecture tests** validate that the codebase follows intended boundaries and security middleware requirements. They currently use source-level checks for feature isolation, expected slice presence, and auth middleware enforcement.
 
 **Why are they important?**
 - Prevent accidental dependencies between layers
@@ -18,7 +18,7 @@ This document explains the architecture tests used to maintain code quality and 
 
 - **Test Framework**: [xUnit](https://xunit.net/) (C# testing framework)
 - **Assertion Library**: [Shouldly](https://shouldly.io/) (fluent assertions)
-- **Test Approach**: Reflection-based checks of assemblies and types
+- **Test Approach**: Source-level checks for boundaries and middleware requirements
 
 **Project location**: `src/Backend.Tests/`
 
@@ -26,25 +26,25 @@ This document explains the architecture tests used to maintain code quality and 
 
 ## Test Categories
 
-### 1. Dependency Boundary Tests
+### 1. Feature Structure Tests
 
-Ensure projects don't accidentally reference inappropriate dependencies.
+Ensure expected feature slices remain present and discoverable.
 
-#### Test: BackendProject_ShouldNotHaveDependencyOnFrontend
+#### Test: Backend_Should_Contain_Expected_Feature_Slices
 
 ```csharp
 [Fact]
 public void BackendProject_ShouldNotHaveDependencyOnFrontend()
 {
     // Arrange
-    var backendReferences = GetProjectReferences(BackendAssembly);
-    
-    // Act
-    var frontendReference = backendReferences.FirstOrDefault(r => 
-        r.Name.Equals("Frontend", StringComparison.OrdinalIgnoreCase));
-    
-    // Assert
-    frontendReference.ShouldBeNull("Backend should never depend on Frontend");
+    var expectedFeaturePaths = new[]
+    {
+        "src/backend/Features/Health/Endpoint.cs",
+        "src/backend/Features/AiPing/Endpoint.cs",
+        "src/backend/Features/Customers/Endpoint.cs",
+        "src/backend/Features/DocumentIngestion/Endpoint.cs",
+        "src/backend/Features/Chat/Endpoint.cs"
+    };
 }
 ```
 
@@ -75,29 +75,21 @@ public void BackendProject_ShouldHaveRequiredInfrastructureDependencies()
 
 ---
 
-### 2. Namespace Organization Tests
+### 2. Feature Independence Tests
 
-Ensure the codebase follows Vertical Slice Architecture (VSA).
+Ensure features don't depend on each other (preventing tangled dependencies).
 
-#### Test: BackendNamespaces_ShouldFollowVerticalSliceStructure
+#### Test: Features_Should_Not_Depends_On_Other_Features
 
 ```csharp
 [Fact]
 public void BackendNamespaces_ShouldFollowVerticalSliceStructure()
 {
     // Arrange
-    var backendTypes = BackendAssembly.GetTypes();
-    var namespaces = backendTypes.Select(t => t.Namespace).Distinct().ToList();
-    
-    // Act
-    var hasFeatureNamespace = namespaces.Any(ns => ns?.Contains("Features") == true);
-    var hasInfrastructureNamespace = namespaces.Any(ns => ns?.Contains("Infrastructure") == true);
-    var hasDomainNamespace = namespaces.Any(ns => ns?.Contains("Domain") == true);
-    
-    // Assert
-    hasFeatureNamespace.ShouldBeTrue();
-    hasInfrastructureNamespace.ShouldBeTrue();
-    hasDomainNamespace.ShouldBeTrue();
+    // Detect cross-feature using statements.
+    // Example disallowed dependency:
+    // using AcaAspireAiTemplate.Backend.Features.Chat;
+    // inside Features/Customers/*
 }
 ```
 
@@ -121,39 +113,20 @@ AcaAspireAiTemplate.Backend
 
 ---
 
-### 3. Feature Independence Tests
+### 3. Auth Middleware Tests
 
-Ensure features don't depend on each other (preventing tangled dependencies).
+Ensure backend auth middleware remains enabled as a regression guard.
 
-#### Test: BackendFeatures_ShouldBeIndependent
+#### Test: Program_Should_Enforce_Auth_Middleware
 
 ```csharp
 [Fact]
 public void BackendFeatures_ShouldBeIndependent()
 {
     // Arrange
-    var backendTypes = BackendAssembly.GetTypes()
-        .Where(t => t.Namespace?.Contains("Features") == true)
-        .ToList();
-    
-    var featureGroups = backendTypes
-        .GroupBy(t => t.Namespace?.Split('.')[3])  // Get feature name
-        .ToDictionary(g => g.Key, g => g.ToList());
-    
-    // Act & Assert
-    foreach (var (featureName, featureTypes) in featureGroups)
-    {
-        foreach (var featureType in featureTypes)
-        {
-            var otherFeatureReferences = GetReferencedTypes(featureType)
-                .Where(rt => rt.Namespace?.Contains("Features") == true && 
-                             !rt.Namespace.Contains(featureName ?? ""))
-                .ToList();
-            
-            otherFeatureReferences.ShouldBeEmpty(
-                $"Feature '{featureName}' should not depend on other features");
-        }
-    }
+    source.ShouldContain("UseAuthentication()");
+    source.ShouldContain("UseAuthorization()");
+    source.ShouldContain("AddJwtBearer");
 }
 ```
 

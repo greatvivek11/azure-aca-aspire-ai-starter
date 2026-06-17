@@ -54,12 +54,12 @@ else
     
     # Check for the database
     DATABASE=$(az sql db list --resource-group "$RESOURCE_GROUP" --server-name "$SQL_SERVER" \
-        --query "[?name=='AiHubDb'].name" -o tsv 2>/dev/null || echo "")
+        --query "[?name=='acaaspireaistarter'].name" -o tsv 2>/dev/null || echo "")
     
     if [ -z "$DATABASE" ]; then
-        echo "⚠️  Database 'AiHubDb' not found. It will be created during provisioning"
+        echo "⚠️  Database 'acaaspireaistarter' not found. It will be created during provisioning"
     else
-        echo "✅ Database 'AiHubDb' exists on server '$SQL_SERVER'"
+        echo "✅ Database 'acaaspireaistarter' exists on server '$SQL_SERVER'"
     fi
 fi
 

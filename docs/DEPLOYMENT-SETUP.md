@@ -2,10 +2,18 @@
 
 This document summarizes all the changes made to enable automated GitHub Actions deployment, architecture testing, and pre-deployment validation.
 
+> Source-of-truth note:
+> Treat this file as an operational summary. The canonical implementation is the workflow YAML in `.github/workflows/` and the scripts under `scripts/ci/`.
+> If this summary differs from workflow or script behavior, follow code.
+
 ## 📋 Summary of Changes
 
 ### 1. **GitHub Actions Workflow** ✅
-**File**: `.github/workflows/deploy.yml`
+**Entry workflow**: `.github/workflows/deploy.yml`
+
+**Reusable workflows**:
+- `.github/workflows/reusable-validate-build.yml`
+- `.github/workflows/reusable-deploy-azure.yml`
 
 A complete CI/CD pipeline that:
 - ✅ Triggers on push to `main` or manual dispatch
@@ -105,10 +113,12 @@ git push origin main
    - Reports status
 3. **Deploy Job** runs (if validation passes):
    - Authenticates to Azure
+  - Ensures Entra API + SPA app registrations and delegated scope wiring
    - Validates environment
   - In external mode, builds and pushes public GHCR images, then runs `azd provision`
   - In managed mode, provisions ACR-backed infra and deploys each service with `azd deploy`
   - Bicep injects non-secret SQL runtime config (`SQL_SERVER`, `SQL_DATABASE`, `AZURE_CLIENT_ID`)
+  - Bicep configures frontend as public ingress and keeps backend/worker private in ACA
 4. ✅ Deployment complete!
 
 Monitor progress: **GitHub → Actions → Deploy to Azure Container Apps**
@@ -129,6 +139,7 @@ AZURE_OPENAI_MODEL_ID       (required only when AI_SERVICES_PROVISIONING_MODE=ex
 AZURE_OPENAI_ENDPOINT       (required only when AI_SERVICES_PROVISIONING_MODE=external)
 AZURE_SQL_ADMIN_LOGIN       (provision-time SQL admin login)
 AZURE_SQL_ADMIN_PASSWORD    (provision-time SQL admin password)
+ENTRA_AUTH_ENABLED          (optional: true|false, default: true)
 AZD_ENVIRONMENT_NAME        (optional, default: azure-aca-aspire-ai-starter)
 ```
 
@@ -145,6 +156,13 @@ ENABLE_ASPIRE_DASHBOARD     (optional: true|false, default: true)
 BACKEND_MIN_REPLICAS        (optional, default: 0)
 FRONTEND_MIN_REPLICAS       (optional, default: 0)
 WORKER_MIN_REPLICAS         (optional, default: 0)
+ENTRA_AUTHORITY             (optional authority override)
+ENTRA_API_CLIENT_ID         (optional existing API app client ID)
+ENTRA_AUDIENCE              (optional audience override)
+ENTRA_SPA_CLIENT_ID         (optional existing SPA app client ID)
+ENTRA_SCOPE                 (optional scope override)
+AZURE_ENTRA_API_APP_NAME    (optional API app display name)
+AZURE_ENTRA_SPA_APP_NAME    (optional SPA app display name)
 ```
 
 **Setup instructions**: See [GitHub-Secrets-Setup.md](./GitHub-Secrets-Setup.md)

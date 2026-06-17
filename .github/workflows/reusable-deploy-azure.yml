@@ -107,6 +107,22 @@ on:
         required: false
       WORKER_MIN_REPLICAS:
         required: false
+      ENTRA_AUTH_ENABLED:
+        required: false
+      ENTRA_AUTHORITY:
+        required: false
+      ENTRA_API_CLIENT_ID:
+        required: false
+      ENTRA_AUDIENCE:
+        required: false
+      ENTRA_SPA_CLIENT_ID:
+        required: false
+      ENTRA_SCOPE:
+        required: false
+      AZURE_ENTRA_API_APP_NAME:
+        required: false
+      AZURE_ENTRA_SPA_APP_NAME:
+        required: false
 
 permissions:
   id-token: write
@@ -167,6 +183,15 @@ jobs:
       BACKEND_MIN_REPLICAS: ${{ secrets.BACKEND_MIN_REPLICAS || '0' }}
       FRONTEND_MIN_REPLICAS: ${{ secrets.FRONTEND_MIN_REPLICAS || '0' }}
       WORKER_MIN_REPLICAS: ${{ secrets.WORKER_MIN_REPLICAS || '0' }}
+      ENTRA_AUTH_ENABLED: ${{ secrets.ENTRA_AUTH_ENABLED || 'true' }}
+      ENTRA_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ENTRA_AUTHORITY: ${{ secrets.ENTRA_AUTHORITY || '' }}
+      ENTRA_API_CLIENT_ID: ${{ secrets.ENTRA_API_CLIENT_ID || '' }}
+      ENTRA_AUDIENCE: ${{ secrets.ENTRA_AUDIENCE || '' }}
+      ENTRA_SPA_CLIENT_ID: ${{ secrets.ENTRA_SPA_CLIENT_ID || '' }}
+      ENTRA_SCOPE: ${{ secrets.ENTRA_SCOPE || '' }}
+      AZURE_ENTRA_API_APP_NAME: ${{ secrets.AZURE_ENTRA_API_APP_NAME || '' }}
+      AZURE_ENTRA_SPA_APP_NAME: ${{ secrets.AZURE_ENTRA_SPA_APP_NAME || '' }}
       BACKEND_IMAGE: mcr.microsoft.com/azuredocs/containerapps-helloworld:latest
       FRONTEND_IMAGE: mcr.microsoft.com/azuredocs/containerapps-helloworld:latest
       WORKER_IMAGE: mcr.microsoft.com/azuredocs/containerapps-helloworld:latest
@@ -304,6 +329,15 @@ jobs:
       - name: Validate Azure AI Search failover inputs
         run: bash scripts/ci/validate-deploy-inputs.sh search-failover
 
+      - name: Validate Entra auth inputs
+        run: bash scripts/ci/validate-deploy-inputs.sh entra-auth
+
+      - name: Ensure Entra app registrations and API scopes
+        run: bash scripts/ci/ensure-entra-auth.sh bootstrap
+
+      - name: Validate Entra runtime values
+        run: bash scripts/ci/validate-deploy-inputs.sh entra-runtime
+
       - name: Pre-enable Foundry account managed identity
         run: bash scripts/ci/preenable-foundry-identity.sh
 
@@ -312,6 +346,13 @@ jobs:
 
       - name: Ensure Foundry project exists (CLI mode)
         run: bash scripts/ci/ensure-foundry-project.sh
+
+      - name: Finalize Entra redirect URIs from deployed frontend URL
+        shell: bash
+        run: |
+          eval "$(azd env get-values)"
+          export FRONTEND_URL="${FRONTEND_URL:-}"
+          bash scripts/ci/ensure-entra-auth.sh finalize
 
       - name: Regional diagnostics after failed provision
         if: failure()

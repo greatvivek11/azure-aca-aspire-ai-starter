@@ -37,6 +37,8 @@ on:
         required: false
       AZURE_AI_SERVICES_ACCOUNT_NAME:
         required: false
+      AZURE_AI_SERVICES_RESTORE:
+        required: false
       AZURE_AI_FOUNDRY_PROJECT_NAME:
         required: false
       AZURE_AI_FOUNDRY_PROJECT_PROVISIONING_MODE:

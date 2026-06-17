@@ -76,7 +76,11 @@ run_azd_provision() {
       if [[ "${restore_already_enabled}" != "true" ]]; then
         local soft_deleted_account
         soft_deleted_account="$(extract_soft_deleted_ai_account_name "${log_file}")"
-        echo "Detected soft-deleted Azure AI Services account${soft_deleted_account:+ '${soft_deleted_account}'}; enabling AZURE_AI_SERVICES_RESTORE=true and retrying."
+          if [[ -n "${soft_deleted_account}" ]]; then
+            echo "Detected soft-deleted Azure AI Services account '${soft_deleted_account}'; enabling AZURE_AI_SERVICES_RESTORE=true and retrying."
+          else
+            echo "Detected soft-deleted Azure AI Services account; enabling AZURE_AI_SERVICES_RESTORE=true and retrying."
+          fi
         AZURE_AI_SERVICES_RESTORE="true"
         restore_already_enabled="true"
         azd env set AZURE_AI_SERVICES_RESTORE "true"

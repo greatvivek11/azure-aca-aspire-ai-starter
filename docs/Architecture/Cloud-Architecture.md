@@ -17,50 +17,50 @@ This document provides the holistic, end-to-end architecture for deploying, secu
 ## 📊 Overall Architecture Diagram
 
 ```mermaid
-graph TD
-    subgraph "User's Browser"
-        A[Vite React Client]
+flowchart TD
+    subgraph Users_Browser[Users Browser]
+        A["Vite React Client"]
     end
 
-    subgraph "CI/CD Pipeline"
-        B(GitHub Actions) --> C{GitHub Container Registry (GHCR)};
+    subgraph CI_CD_Pipeline[CI/CD Pipeline]
+        B["GitHub Actions"] --> C["GitHub Container Registry GHCR"]
     end
 
-    subgraph "Azure"
-        D[Microsoft Entra ID]
+    subgraph Azure
+        D["Microsoft Entra ID"]
         
-        subgraph "Azure Container App Environment (Internal Network)"
-            E[Frontend ACA (Hono + Vite SPA)] --> F(Dapr Sidecar);
-            F --> G[Backend ACA (.NET Aspire + Minimal APIs)];
-            G -- "Uses" --> H(User-Assigned Managed Identity);
+        subgraph Azure_Container_App_Environment_Internal_Network[Azure Container App Environment Internal Network]
+            E["Frontend ACA Hono and Vite SPA"] --> F["Dapr Sidecar"]
+            F --> G["Backend ACA .NET Aspire and Minimal APIs"]
+            G -- Uses --> H["User-Assigned Managed Identity"]
         end
 
-        subgraph "Azure Data & Secret Services"
-            I[Azure SQL DB]
-            J[Azure Blob Storage]
-            K[Azure AI Search (Vector)]
-            L(3rd Party Secrets <br/>in GitHub Actions)
+        subgraph Azure_Data_And_Secret_Services[Azure Data and Secret Services]
+            I["Azure SQL DB"]
+            J["Azure Blob Storage"]
+            K["Azure AI Search Vector"]
+            L["Third Party Secrets in GitHub Actions"]
         end
         
-        M[Log Analytics Workspace]
-        N[Application Insights]
+        M["Log Analytics Workspace"]
+        N["Application Insights"]
     end
 
-    A -- "1. Login (MSAL)" --> D;
-    D -- "2. ID & Access Tokens" --> A;
-    A -- "3. API Call w/ Token via Dapr" --> F;
+    A -- "1. Login (MSAL)" --> D
+    D -- "2. ID and Access Tokens" --> A
+    A -- "3. API Call with Token via Dapr" --> F
     
-    C --> G;
-    C --> E;
+    C --> G
+    C --> E
 
-    H -- "RBAC" --> I;
-    H -- "RBAC" --> J;
-    H -- "RBAC" --> K;
-    B -- "Injects" --> G;
+    H -- RBAC --> I
+    H -- RBAC --> J
+    H -- RBAC --> K
+    B -- Injects --> G
     
-    G -- "Logs & Metrics" --> N;
-    E -- "Logs & Metrics" --> N;
-    N -- "Sends Data To" --> M;
+    G -- "Logs and Metrics" --> N
+    E -- "Logs and Metrics" --> N
+    N -- "Sends Data To" --> M
 ```
 
 ---
@@ -91,9 +91,9 @@ graph TD
 * **CI/CD with GitHub Actions**:
 
     1. Build & test frontend (Vite + Hono) and backend (.NET Aspire).
-  2. Build container images and push to GHCR.
+  2. Build container images and push to GHCR (or a managed ACR).
   3. Deploy infra via Bicep.
-  4. Run EF Core migrations against Azure SQL.
+  4. Initialize the SQL schema from the seed script on startup.
   5. Deploy ACA revisions with rollout strategies.
 
 ### 4. Observability & Monitoring
@@ -131,7 +131,7 @@ In PoC:
 ## ✅ Success Criteria
 
 * ACA runs FE (Hono-hosted Vite SPA) and BE (.NET Aspire minimal APIs) with Dapr.
-* Azure SQL, Blob, Cosmos vector all integrated.
+* Azure SQL, Blob, and AI Search vector retrieval all integrated.
 * Aspire orchestrates local and cloud deployments consistently.
 * Observability wired with free App Insights/Log Analytics.
 * CI/CD fully automated with GHCR and GH Actions.

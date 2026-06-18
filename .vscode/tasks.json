@@ -7,9 +7,8 @@
 			"type": "process",
 			"args": [
 				"build",
-				"${workspaceFolder}/azure-aca-aspire-ai-starter.sln",
 				"/property:GenerateFullPaths=true",
-				"/consoleloggerparameters:NoSummary"
+				"/consoleloggerparameters:NoSummary;ForceNoAlign"
 			],
 			"problemMatcher": "$msCompile"
 		},
@@ -109,6 +108,27 @@
 			"label": "noop",
 			"type": "shell",
 			"command": "true"
+		},
+		{
+			"label": "publish",
+			"command": "dotnet",
+			"type": "process",
+			"args": [
+				"publish",
+				"/property:GenerateFullPaths=true",
+				"/consoleloggerparameters:NoSummary;ForceNoAlign"
+			],
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "watch",
+			"command": "dotnet",
+			"type": "process",
+			"args": [
+				"watch",
+				"run"
+			],
+			"problemMatcher": "$msCompile"
 		}
 	]
 }

@@ -30,12 +30,40 @@ permissions:
   packages: write
 
 jobs:
+  changes:
+    name: Detect deployment-relevant changes
+    runs-on: ubuntu-latest
+    outputs:
+      has-deploy-changes: ${{ steps.filter.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            deploy:
+              - 'src/**'
+              - 'infra/**'
+              - 'scripts/**'
+              - 'azure.yaml'
+              - 'nuget.config'
+              - '.github/workflows/deploy.yml'
+              - '.github/workflows/reusable-deploy-azure.yml'
+              - '.github/workflows/reusable-validate-build.yml'
+
   validate:
+    needs: [changes]
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.has-deploy-changes == 'true'
     uses: ./.github/workflows/reusable-validate-build.yml
 
   deploy:
-    needs: validate
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    needs: [changes, validate]
+    if: |
+      (github.event_name == 'workflow_dispatch' || needs.changes.outputs.has-deploy-changes == 'true') &&
+      (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
     uses: ./.github/workflows/reusable-deploy-azure.yml
     with:
       environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'dev' }}

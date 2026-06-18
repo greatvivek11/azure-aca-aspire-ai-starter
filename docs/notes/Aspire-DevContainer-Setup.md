@@ -41,6 +41,30 @@ The recommended development workflow involves:
 4. Press F5 to start debugging the Aspire AppHost
 5. Access the Aspire dashboard at the URL shown in the terminal (usually `https://localhost:[port]`)
 
+## Run Modes (Native vs Dev Container)
+
+This is a platform-agnostic starter. You can run the full stack three ways, and they coexist without interfering with each other:
+
+| Mode | How to run | `node_modules` used | Native binaries |
+| --- | --- | --- | --- |
+| **Native macOS** | `dotnet run` from `src/aspire` (or F5 on the host) | host `src/frontend/node_modules` | `darwin-arm64` |
+| **Native Windows** | `dotnet run` from `src/aspire` (or F5 on the host) | host `src/frontend/node_modules` | `win32-x64` |
+| **Dev Container** (any host OS) | Reopen in container, then F5 | isolated `frontend-node-modules` Docker volume | `linux-*` |
+
+### Why these don't conflict
+
+Vite/rolldown ship platform-specific native bindings (e.g. `@rolldown/binding-darwin-arm64` vs `@rolldown/binding-linux-arm64-gnu`). Sharing one `node_modules` across host and container would mix incompatible binaries.
+
+To prevent that, `.devcontainer/docker-compose.yml` mounts a dedicated Docker volume (`frontend-node-modules`) over `src/frontend/node_modules`. That volume **only exists inside the container**, so:
+
+- Native runs on your host use the host folder directly and never see the volume.
+- The Dev Container gets its own Linux `node_modules`, populated by `npm ci --include=optional` during `postCreate`.
+- You can freely alternate between native macOS and the Dev Container without reinstalling dependencies.
+
+`node_modules/` is gitignored, so no platform-specific binaries are ever committed.
+
+> The repo is bind-mounted at the fixed path `/workspaces/app` (not the host folder name), so the volume mapping keeps working even if you fork or rename the repository.
+
 ## Common Issues and Solutions
 
 ### SSL Certificate Issues

@@ -35,63 +35,74 @@ For this project, the backend remains a **single ASP.NET Core project** managed 
 
 ## Current Implementation Snapshot
 
-The current backend is an operational foundation rather than the final feature-complete AI service.
+The current backend is an operational foundation with chat, RAG, and ingestion slices in place.
 
 * The application is a single `.NET 10` ASP.NET Core Minimal API project.
-* `Program.cs` currently owns service registration, OpenTelemetry wiring, Dapr setup, SQL bootstrapping, and several HTTP endpoints.
-* Two feature endpoints are already extracted into `Features/Health/Endpoint.cs` and `Features/AiPing/Endpoint.cs`.
-* Customer CRUD endpoints are still mapped directly in `Program.cs` and use raw `SqlConnection` / `SqlCommand` access instead of EF Core.
-* SQL schema initialization is performed from `Infrastructure/Sql/seed.sql` during startup.
-* AI integration is abstracted behind `IAiService`, with `SemanticKernelService` using Semantic Kernel and Azure OpenAI-compatible configuration.
-* Dapr is enabled in the service host, but the current backend does not yet expose pub/sub handlers or a broader event-driven workflow.
+* `Program.cs` is a thin composition root: service registration, OpenTelemetry wiring, Dapr setup, auth, and startup tasks are delegated to `Infrastructure/` modules.
+* Feature endpoints are extracted into slices under `Features/`: `Health`, `AiPing`, `Chat`, `Customers`, and `DocumentIngestion`.
+* Data access uses raw `SqlConnection` / `SqlCommand` (no EF Core); schema is initialized from `Infrastructure/Sql/seed.sql` during startup.
+* AI integration is abstracted behind `IAiService`, implemented by `OllamaChatService` (local mode) and `FoundryChatService` (azure mode), selected via the `AI_MODE` environment variable.
+* Dapr is enabled for service invocation; the backend triggers the worker for ingestion and registers a subscribe handler for status updates.
 
 ## 🔍 Architectural Refinements
 
 While VSA provides the target organizational structure, the current backend uses a smaller set of refinements that can expand over time.
 
-1. **Shared Infrastructure Folder**: The `Infrastructure` folder houses cross-cutting implementation details such as AI integration and SQL seed scripts.
-2. **AI Service Abstraction**: `IAiService` and `SemanticKernelService` isolate prompt execution concerns from feature endpoints.
-3. **Dapr Integration**: The service is Dapr-enabled for local and cloud orchestration, even though only HTTP invocation support is exercised today.
-4. **SQL Access Simplicity**: The current implementation prefers direct ADO.NET usage for customer CRUD flows instead of introducing EF Core prematurely.
-5. **Event-Driven Extension Path**: Aspire + Dapr still provide a path toward worker coordination, pub/sub, and more distributed workflows in later phases.
+1. **Shared Infrastructure Folder**: The `Infrastructure` folder houses cross-cutting concerns: AI integration, Entra auth, logging, startup tasks, and SQL seed scripts.
+2. **AI Service Abstraction**: `IAiService` with `OllamaChatService` and `FoundryChatService` isolates the chat/embedding provider from feature endpoints.
+3. **Dapr Integration**: The service is Dapr-enabled; the backend invokes the worker via Dapr service invocation for ingestion.
+4. **SQL Access Simplicity**: The implementation uses direct ADO.NET via a DI-backed store abstraction rather than introducing EF Core.
+5. **Event-Driven Extension Path**: Aspire + Dapr provide a path toward broader pub/sub workflows in later phases.
 
 ## 📦 Evolved Project Structure
 
 ```
 /src/backend/
-|
 ├── Domain/
 │   └── Document.cs
-│
 ├── Features/
-│   ├── AiPing/
-│   │   └── Endpoint.cs
-│   └── Health/
-│       └── Endpoint.cs
-│
+│   ├── AiPing/Endpoint.cs
+│   ├── Chat/Endpoint.cs
+│   ├── Customers/Endpoint.cs
+│   ├── DocumentIngestion/
+│   │   ├── Endpoint.cs
+│   │   └── DocumentIngestionStore.cs
+│   └── Health/Endpoint.cs
 ├── Infrastructure/
 │   ├── Ai/
 │   │   ├── IAiService.cs
-│   │   ├── SemanticKernelService.cs
-│   │   └── AzureOpenAiOptions.cs
-│   └── Sql/
-│       └── seed.sql
-│
+│   │   ├── OllamaChatService.cs
+│   │   ├── FoundryChatService.cs
+│   │   ├── AzureOpenAiOptions.cs
+│   │   └── AzureOpenAiRuntimeSettings.cs
+│   ├── Auth/
+│   │   ├── EntraAuthSetup.cs
+│   │   └── EntraAuthOptions.cs
+│   ├── Logging/LogSanitizer.cs
+│   ├── Sql/seed.sql
+│   └── Startup/
+│       ├── BackendRuntimeOptions.cs
+│       ├── BackendStartupTasks.cs
+│       ├── BackendRequestLoggingExtensions.cs
+│       └── UploadProtectionExtensions.cs
 └── Program.cs
 ```
 
 ### Folder & Layer Responsibilities
 
-1. **`Domain/`**: Contains core domain models. The current repository only has an initial `Document` model here.
+1. **`Domain/`**: Core domain models (currently a `Document` model).
 
-2. **`Features/`**: Holds extracted endpoint slices. Today this includes health and AI ping endpoints; more domain slices can move here over time.
+2. **`Features/`**: Endpoint slices — `Health`, `AiPing`, `Chat` (general + RAG), `Customers` (CRUD), and `DocumentIngestion` (upload/ingest/status).
 
 3. **`Infrastructure/`**:
 
-   * **AI**: `SemanticKernelService` wraps Semantic Kernel and OpenAI-compatible configuration.
-   * **SQL**: `seed.sql` initializes the current relational schema used by the customer CRUD sample.
+   * **Ai**: `IAiService` with `OllamaChatService` (local) and `FoundryChatService` (azure).
+   * **Auth**: Entra ID JWT bearer setup and options.
+   * **Logging**: log sanitization helpers.
+   * **Sql**: `seed.sql` initializes the relational schema (`Customers`, `DocumentIngestionJobs`).
+   * **Startup**: runtime option binding, startup tasks, request logging, and upload protection.
 
-4. **`Program.cs`**: The current composition root registers services, configures telemetry and Dapr, validates Azure OpenAI configuration, initializes SQL schema, and still hosts the inline customer endpoints.
+4. **`Program.cs`**: A thin composition root that registers services, configures telemetry, Dapr, and auth, and delegates startup tasks to the `Infrastructure/Startup` modules.
 
 ## 🚀 Key Improvements with Aspire
 
@@ -103,12 +114,15 @@ While VSA provides the target organizational structure, the current backend uses
 
 ## Current Backend Responsibilities
 
-The backend currently covers a narrower but concrete set of responsibilities:
+The backend covers a concrete set of responsibilities:
 
-* `/v1/health` readiness endpoint
+* `/v1/health` readiness endpoint (anonymous)
 * `/v1/ping-ai` connectivity test for the configured AI provider
-* `/v1/customers` CRUD endpoints backed by SQL Server
-* OpenTelemetry logging, tracing, and Azure Monitor export when configured
+* `/v1/chat` general chat and document-grounded RAG (with citations)
+* `/v1/customers` CRUD endpoints backed by SQL
+* `/v1/uploads`, `/v1/uploads/signed-url`, `/v1/ingest`, `/v1/uploads/{id}/status` for document ingestion
+* Entra ID JWT authorization on feature endpoints (scope `access_as_user`)
+* OpenTelemetry logging/tracing with Azure Monitor export when configured
 * SQL schema seeding on startup
 
 ## Evolution Path

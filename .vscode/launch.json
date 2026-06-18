@@ -3,13 +3,11 @@
 	"configurations": [
 		{
 			"name": "Launch Aspire AppHost",
-			"type": "coreclr",
+			"type": "dotnet",
 			"request": "launch",
 			"preLaunchTask": "build",
-			"program": "${workspaceFolder}/src/aspire/bin/Debug/net10.0/aspire.dll",
-			"args": [],
+			"projectPath": "${workspaceFolder}/src/aspire/aspire.csproj",
 			"cwd": "${workspaceFolder}/src/aspire",
-			"stopAtEntry": false,
 			"serverReadyAction": {
 				"action": "openExternally",
 				"pattern": "\\bNow listening on:\\s+(https?://\\S+)"
@@ -28,7 +26,9 @@
 	"compounds": [
 		{
 			"name": "Aspire: Launch",
-			"configurations": ["Launch Aspire AppHost"]
+			"configurations": [
+				"Launch Aspire AppHost"
+			]
 		}
 	]
 }

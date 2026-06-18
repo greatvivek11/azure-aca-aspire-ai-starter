@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     build:
@@ -8,7 +6,12 @@ services:
     privileged: true
     
     volumes:
-      - ../..:/workspaces:cached
+      # Mount the repo at a fixed path so the setup is fork/rename-proof
+      # (independent of the host folder name).
+      - ..:/workspaces/app:cached
+      # Isolate the container's Linux node_modules from the host's (Mac/Windows)
+      # native binaries. This volume only exists inside the container.
+      - frontend-node-modules:/workspaces/app/src/frontend/node_modules
     
     # Overrides default command so things don't shut down after the process ends.
     command: sleep infinity
@@ -25,3 +28,6 @@ services:
 networks:
   aspire-network:
     driver: bridge
+
+volumes:
+  frontend-node-modules:

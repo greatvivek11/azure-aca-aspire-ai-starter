@@ -2,8 +2,7 @@
 	"name": ".NET Aspire Development Environment",
 	"dockerComposeFile": "docker-compose.yml",
 	"service": "app",
-	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
-
+	"workspaceFolder": "/workspaces/app",
 	"features": {
 		"ghcr.io/devcontainers/features/docker-in-docker:2": {
 			"enableNonRootDocker": true,
@@ -15,17 +14,14 @@
 		"ghcr.io/dapr/cli/dapr-cli:0": {},
 		"ghcr.io/devcontainers-extra/features/typescript:2": {}
 	},
-
 	"hostRequirements": {
 		"cpus": 8,
 		"memory": "11gb",
 		"storage": "64gb"
 	},
-
-	"onCreateCommand": "dotnet new install Aspire.ProjectTemplates --force",
-	"postCreateCommand": "bash .devcontainer/install-dev-tools.sh && (test -x \"$HOME/.dapr/bin/daprd\" || dapr init --slim) && dotnet dev-certs https --trust",
-	"postStartCommand": "dotnet dev-certs https --trust",
-
+	"onCreateCommand": "n=1; until dotnet new install Aspire.ProjectTemplates --force; do [ $n -ge 3 ] && { echo '[warn] Aspire templates not installed after retries; continuing.'; break; }; echo \"[warn] template install attempt $n failed; retrying in 5s...\"; n=$((n+1)); sleep 5; done",
+	"postCreateCommand": "bash .devcontainer/install-dev-tools.sh && export SSL_CERT_DIR=\"$HOME/.aspnet/dev-certs/trust:/usr/lib/ssl/certs\" && dotnet dev-certs https --trust",
+	"postStartCommand": "export SSL_CERT_DIR=\"$HOME/.aspnet/dev-certs/trust:/usr/lib/ssl/certs\" && dotnet dev-certs https --trust",
 	"customizations": {
 		"vscode": {
 			"settings": {
@@ -45,17 +41,52 @@
 			"extensions": [
 				"ms-dotnettools.csdevkit",
 				"ms-dotnettools.csharp",
+				"ms-dotnettools.vscode-dotnet-runtime",
 				"ms-mssql.mssql",
 				"ms-azuretools.vscode-docker",
-				"ms-vscode-remote.remote-containers",
-				"biomejs.biome"
+				"ms-azuretools.vscode-bicep",
+				"ms-azuretools.vscode-azureresourcegroups",
+				"github.vscode-github-actions",
+				"dbaeumer.vscode-eslint",
+				"biomejs.biome",
+				"github.copilot",
+				"github.copilot-chat"
 			]
 		}
 	},
-
-	"forwardPorts": [1433],
+	"forwardPorts": [
+		1433,
+		15237,
+		17251,
+		19047,
+		20059,
+		21070,
+		22055
+	],
 	"portsAttributes": {
-		"8443": { "label": "Frontend" },
-		"1433": { "label": "SQL Server" }
+		"17251": {
+			"label": "Aspire Dashboard (HTTPS)"
+		},
+		"22055": {
+			"label": "Aspire Resource Service (HTTPS)"
+		},
+		"21070": {
+			"label": "Aspire OTLP gRPC (HTTPS)"
+		},
+		"15237": {
+			"label": "Aspire Dashboard (HTTP)"
+		},
+		"20059": {
+			"label": "Aspire Resource Service (HTTP)"
+		},
+		"19047": {
+			"label": "Aspire OTLP gRPC (HTTP)"
+		},
+		"8443": {
+			"label": "Frontend"
+		},
+		"1433": {
+			"label": "SQL Server"
+		}
 	}
 }

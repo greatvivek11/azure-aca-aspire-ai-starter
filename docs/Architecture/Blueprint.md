@@ -1,99 +1,76 @@
-# 🛠️ Technical Blueprint: Cloud-Native ACA Aspire AI Starter
+# Technical Blueprint
 
-**A detailed guide for building the Azure ACA Aspire AI Starter Template on Azure, using Dapr, Azure AI Search, and Azure AI Foundry.**
+The intended system design for the Azure ACA Aspire AI Starter: a minimal, reusable, cloud-native template for enterprise AI apps built with .NET, React, and Azure.
 
----
+> Source of truth: live code and manifests (`azure.yaml`, `infra/`, `src/*`). Where this document and code diverge, follow the code.
 
-### 📚 Key Facts & References
+## Vision
 
-* **Semantic Kernel**: Microsoft’s open-source SDK for AI orchestration. [GitHub](https://github.com/microsoft/semantic-kernel) | [Docs](https://learn.microsoft.com/en-us/semantic-kernel/overview/)
-* **Azure Container Apps**: Managed environment for running microservices and containerized applications. [Docs](https://learn.microsoft.com/en-us/azure/container-apps/)
-* **Dapr**: APIs for building resilient, stateful, and event-driven distributed applications. [Docs](https://docs.dapr.io/)
-* **Azure AI Search**: Managed retrieval and vector indexing for grounded responses. [Docs](https://learn.microsoft.com/en-us/azure/search/)
-* **Azure AI Foundry / Azure OpenAI**: Managed model hosting and inference for chat and embeddings. [Docs](https://learn.microsoft.com/en-us/azure/ai-foundry/)
+Provide a production-aligned starter that combines conversational AI and document retrieval (RAG) with fast local setup and low operational complexity. The template is scoped to free-tier-friendly deployments rather than full enterprise hardening, but uses enterprise-shaped patterns (Entra auth, managed identity, private backend, IaC, CI/CD).
 
-## 📋 A. Architecture & Technology Stack
+## What It Does
 
-* **Frontend**: React SPA + **Vite** + **Hono** Node host, managed with **npm**.
-* **Backend**: .NET 10 Minimal APIs, **.NET Aspire** (AppHost & service discovery), Vertical Slice Architecture, Mediator (source-gen)
-* **Infra**: Azure Container Apps (FE public, BE internal), Dapr sidecars for service invocation (and later pub/sub for ingestion).
-* **Service Communication**: Dapr service invocation (FE → Dapr → BE); optional Dapr pub/sub for long-running ingestion/OCR in Phase 2+.
-* **Data**:
+- Chat with an AI assistant grounded in uploaded documents (RAG with citations).
+- Upload and ingest documents (`.txt`, `.pdf`, `.docx`) to blob storage.
+- Manage relational records (a Customers CRUD slice demonstrates SQL access).
 
-  * Azure SQL Database (relational data)
-  * Azure Blob Storage (file storage)
-  * Azure AI Search (vector embeddings & retrieval)
-* **AI Orchestration**:
+> Vision/OCR, sentiment analysis, and long-term memory are aspirational, not implemented in the current template.
 
-  * Semantic Kernel
-  * Azure AI Foundry / Azure OpenAI for chat + embeddings
-* **IaC**: Bicep/Terraform scripts to provision ACA, SQL, Blob, Cosmos, network.
-* **Deployment**: GitHub Actions → Azure Container Apps via `azd`, with service definitions in `azure.yaml`.
-* **Observability**: ACA logs, optional App Insights + Log Analytics (free-tier friendly via sampling).
+## Architecture & Stack
 
-## B. Implementation Plan
+| Layer | Technology |
+| --- | --- |
+| Frontend | React SPA (Vite) served by a lightweight Hono Node host; MSAL/Entra auth; npm |
+| Backend | .NET 10 Minimal APIs, Vertical Slice Architecture, Dapr-enabled |
+| Worker | .NET background worker for document ingestion/embeddings |
+| Orchestration | .NET Aspire (`src/aspire/AppHost.cs`) for local composition, service discovery, telemetry |
+| Service comms | Dapr service invocation (FE → Dapr → BE); worker triggered via Dapr |
+| AI (azure mode) | Azure AI Foundry / Azure OpenAI for chat + embeddings; Azure AI Search for vectors |
+| AI (local mode) | Ollama for chat + embeddings; Qdrant for vectors; Azurite for blob |
+| Data | Azure SQL (relational), Azure Blob Storage (files), vector store (AI Search or Qdrant) |
+| Identity | Microsoft Entra ID auth; passwordless User-Assigned Managed Identity for Azure services |
+| IaC / CI-CD | Bicep (`infra/`) deployed via GitHub Actions + `azd provision`/`azd deploy` |
+| Observability | OpenTelemetry from Aspire; optional Log Analytics + Application Insights |
 
-See: [Enterprise_Ready_Execution_Plan.md](/docs/plans/Enterprise_Ready_Execution_Plan.md).
+The AI provider is abstracted behind `IAiService` (`OllamaChatService` for local, `FoundryChatService` for azure), selected by the `AI_MODE` environment variable.
 
-## C. Architecture Principles
+## Principles
 
-* **Vertical Slice**: Features implemented end-to-end (API → Domain → Infra).
-* **Mediator**: Source-generated mediator pattern for clean command/query separation.
-* **Dapr-first**: FE invokes BE via Dapr sidecar app-id.
-* **Cloud-native**: Stateless services, externalized state in SQL/Blob/Cosmos.
-* **Cost-aware**: Free-tier defaults, enterprise add-ons only documented.
-* **Extensible**: AI provider abstracted (SK service layer) to swap providers easily.
-* **Thin frontend host**: The frontend stays as a Vite-built SPA served by a minimal Hono Node host, while backend integration remains explicit through Dapr and backend HTTP endpoints.
-* **Aspire Orchestration**: Local composition of services with health/telemetry baked in.
+- **Vertical slices**: features implemented end-to-end and kept independent (no cross-feature coupling).
+- **Single backend project**: orchestrated by Aspire; extract slices as the surface grows rather than adding layers prematurely.
+- **Dapr-first communication**: frontend invokes backend via the Dapr sidecar.
+- **Cloud-native**: stateless services with externalized state in SQL, Blob, and the vector store.
+- **Cost-aware defaults**: consumption plan, scale-to-zero where possible, free/low SKUs, opt-in telemetry.
+- **Provider-swappable AI**: the `IAiService` abstraction isolates chat/embedding providers.
 
-## D. Repository Structure
+## Repository Structure
 
 ```
 /
- ├── src/
- │   ├── frontend/     # Vite React SPA served by a Hono Node host
- │   ├── backend/      # .NET Minimal API (VSA), SK orchestration
- │   ├── worker/       # .NET background worker (ingest/embeddings/OCR)
- │   └── aspire/       # AppHost & Aspire configuration for local orchestration
- ├── infra/            # Bicep/Terraform IaC for ACA, SQL, Blob, Cosmos, Dapr
- ├── docs/             # Background, Phased-Plan, Blueprint, Architecture, Decisions
- └── .github/          # Workflows for CI/CD (build → GHCR → ACA deploy)
+├── src/
+│   ├── frontend/   # Vite React SPA served by a Hono Node host
+│   ├── backend/    # .NET Minimal API (Vertical Slice Architecture)
+│   ├── worker/     # .NET background worker (ingestion/embeddings)
+│   └── aspire/     # AppHost for local orchestration
+├── infra/          # Bicep IaC for ACA, SQL, Storage, AI Search, AI Foundry
+├── docs/           # Architecture and operational docs
+└── .github/        # CI/CD workflows (validate → provision → deploy)
 ```
 
-## E. Success Criteria
+## AI Modes
 
-* **Phase 0**: Repo, Aspire AppHost runs FE/API/Worker + Dapr locally; CI/CD builds containers, pushes to GHCR; ACA deploy; FE→Dapr→BE `/v1/health` works.
-* **Phase 1**: End-to-end chat via the frontend Hono host and SPA → Dapr → API; sessions persisted in SQL; correlation IDs flow FE→BE (OTel visible).
-* **Phase 2**: RAG with documents, citations visible; optional background ingestion via worker (can start synchronous, later Dapr pub/sub).
-* **Phase 3–7**: Vision, insights, memory, agents, polish.
-* Documentation and diagrams capture all design trade-offs.
+- **`AI_MODE=local`** (default for local dev): Ollama + Qdrant + Azurite run as containers via Aspire. No Azure resources required.
+- **`AI_MODE=azure`** (default for cloud deploy): Azure OpenAI/Foundry + Azure AI Search + Azure Blob Storage. Local mode is not deployable to cloud as-is.
 
-## F. Frontend Host Details
+## Constraints
 
-* **Reasons**: Keep the frontend operationally simple, preserve a standard SPA build pipeline, and use a small Node host only for serving the app and environment-specific integration.
-* **Implementation**: Build the frontend with Vite, manage dependencies with npm, and serve the app through the Hono-based Node host. Use backend or Dapr endpoints for server-side integration concerns rather than adopting a heavier server-rendered web framework.
-* **Performance**: `minReplicas=1` for FE/API in ACA; compression and HTTP/2 enabled by default; keep client bundles lean and let the backend handle long-running AI and document workloads.
+- Free tiers, consumption plans, and minimal SKUs by default.
+- Secrets via GitHub Actions (no Key Vault in the default profile).
+- No Private Endpoints or Defender for Cloud in the baseline — see [Network Hardening Extension](./Network-Hardening-Extension.md) for the optional path.
 
-## G. Aspire & Dapr Composition
+## Related Docs
 
-* **Aspire** runs API + Worker with Dapr sidecars locally; single `AppHost` provides service discovery, health, and OpenTelemetry; local Cosmos/SQL emulation optional.
-* Use **environment parity**: config via appsettings + env vars; Aspire `AppHost` mirrors ACA env variables.
-* **Observability**: OTel spans emitted from the frontend host and backend; App Insights with sampling to stay in free tier.
-
-## H. Event-Driven Approach (Selective)
-
-* **Use cases**: Document ingestion, OCR, embeddings, batch sentiment.
-* **Approach**: Start synchronous for simplicity; enable **Dapr pub/sub** later with a toggle. Keep chat path synchronous for latency and debuggability.
-
-## I. Performance & Cost Controls
-
-* Streaming everywhere; small chunk sizes in RAG; cache static assets aggressively.
-* SQL connection pooling; reuse Blob/Cosmos clients.
-* Telemetry sampling (App Insights) and log level caps to stay within free tier.
-
-## J. Security & Networking Snapshot
-
-* Frontend public with custom domain; backend internal to ACA environment.
-* Dapr mTLS for sidecar-to-sidecar; ACA Envoy controls ingress.
-* Secrets stored in GitHub Actions (PoC); plan for Managed Identity in later phase.
-* Rate limiting/backoff on external AI calls; input validation on all tool endpoints.
+- [Cloud Architecture](./Cloud-Architecture.md) — end-to-end deployment and security.
+- [Backend Architecture](./Backend-Architecture.md) — backend structure and patterns.
+- [Frontend Architecture](./Frontend-Architecture.md) — frontend stack and patterns.
+- [Network Hardening Extension](./Network-Hardening-Extension.md) — optional VNET/private-endpoint hardening.

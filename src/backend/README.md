@@ -1,74 +1,62 @@
-# ACA Aspire AI Starter Backend
+# Backend
 
-This is the backend service for the ACA Aspire AI Starter, built with .NET 10 Minimal API following Vertical Slice Architecture (VSA).
+The backend service for the ACA Aspire AI Starter — a .NET 10 Minimal API using Vertical Slice Architecture.
 
-## Project Structure
+> See [docs/Architecture/Backend-Architecture.md](../../docs/Architecture/Backend-Architecture.md) for the full design.
+
+## Structure
 
 ```
 /src/backend/
-├── Domain/                 # Core POCO entities
-├── Features/               # Feature slices (organized by functionality)
-│   ├── Health/             # Health check endpoint
-│   └── AiPing/             # AI connectivity test endpoint
-├── Infrastructure/         # External service implementations
-│   ├── Ai/                 # AI service abstractions and implementations
-│   └── Sql/                # Seed script and SQL-related assets
-├── Program.cs              # Application entry point
-├── Backend.csproj          # Project file
-└── Dockerfile              # Container definition
+├── Domain/                 # Core domain models (Document)
+├── Features/               # Endpoint slices
+│   ├── Health/             # GET /v1/health (anonymous)
+│   ├── AiPing/             # GET /v1/ping-ai
+│   ├── Chat/               # POST /v1/chat (general + RAG)
+│   ├── Customers/          # /v1/customers CRUD
+│   └── DocumentIngestion/  # /v1/uploads, /v1/ingest, status
+├── Infrastructure/         # AI, Auth (Entra), Logging, Sql, Startup
+├── Program.cs              # Composition root
+└── Backend.csproj
 ```
 
-## Features
+## Endpoints
 
-1. **Health Check** - GET `/v1/health`
-2. **AI Ping** - GET `/v1/ping-ai`
+| Method | Route | Notes |
+| --- | --- | --- |
+| GET | `/v1/health` | Anonymous readiness check |
+| GET | `/v1/ping-ai` | AI provider connectivity test |
+| POST | `/v1/chat` | General chat or document-grounded RAG (`mode: "rag"`) |
+| GET/POST/PUT/DELETE | `/v1/customers` | SQL-backed CRUD |
+| POST | `/v1/uploads`, `/v1/uploads/signed-url` | Document upload to blob storage |
+| POST | `/v1/ingest` | Queue a document for ingestion (via Dapr → worker) |
+| GET | `/v1/uploads/{documentId}/status` | Ingestion status |
 
-## Running the Application
+All feature endpoints except `/v1/health` require an Entra access token with the `access_as_user` scope.
 
-### Local Development
+## AI Provider
+
+AI is abstracted behind `IAiService`, selected by `AI_MODE`:
+
+- `AI_MODE=local` → `OllamaChatService` (Ollama chat/embeddings + Qdrant vectors).
+- `AI_MODE=azure` → `FoundryChatService` (Azure OpenAI chat/embeddings + Azure AI Search).
+
+## Running
 
 ```bash
-dotnet run
+dotnet run                 # standalone
+docker build -t api . && docker run -p 8080:8080 api
 ```
 
-### With Aspire
-
-Run the Aspire AppHost project to orchestrate all services.
-
-### Docker
-
-```bash
-docker build -t api .
-docker run -p 8080:8080 api
-```
+For local full-stack runs, prefer the Aspire host in `src/aspire` (it wires SQL, Redis, Azurite, Ollama, Qdrant, and Dapr).
 
 ## Configuration
 
-The application can be configured using appsettings.json files or environment variables:
+Configuration follows the standard .NET hierarchy (environment variables override `appsettings.json`). Key variables:
 
-- `AZURE_OPENAI_API_KEY` - API key for Azure AI Foundry/Azure OpenAI (recommended to use environment variable for security)
-- `AZURE_OPENAI_MODEL_ID` - Deployed model name (default: gpt-5-mini)
-- `AZURE_OPENAI_ENDPOINT` - Azure OpenAI endpoint (default: https://your-foundry-resource.openai.azure.com/)
+- **Azure mode**: `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_MODEL_ID`, `AZURE_OPENAI_AUTH_MODE` (`managed-identity` or `api-key`), `AZURE_OPENAI_API_KEY` (key mode only), `AZURE_SEARCH_ENDPOINT`, `AZURE_SEARCH_INDEX_NAME`.
+- **Local mode**: `OLLAMA_BASE_URL`, `OLLAMA_CHAT_MODEL`, `OLLAMA_EMBED_MODEL`, `QDRANT_URL`, `QDRANT_COLLECTION`.
+- **Storage**: `AZURE_STORAGE_ACCOUNT_NAME`, `AZURE_STORAGE_CONNECTION_STRING`, `AZURE_STORAGE_CONTAINER_NAME`, `AZURE_STORAGE_AUTH_MODE`.
+- **Auth**: `ENTRA_AUTH_ENABLED`, `ENTRA_TENANT_ID`, `ENTRA_API_CLIENT_ID`.
 
-### Setting Credentials
-
-For development, you can set the environment variable in several ways:
-
-1. **Terminal/Command Line (Temporary)**:
-   ```bash
-   export AZURE_OPENAI_API_KEY=your_api_key_here
-   dotnet run
-   ```
-
-2. **Edit Properties/launchSettings.json**:
-   Update the `AZURE_OPENAI_API_KEY` value in the launchSettings.json file (but don't commit it to source control).
-
-3. **System Environment Variables (Permanent)**:
-   Set the environment variable in your operating system's environment settings.
-
-The configuration follows the standard .NET hierarchy:
-1. Environment variables (highest priority)
-2. appsettings.{Environment}.json (e.g., appsettings.Development.json)
-3. appsettings.json (lowest priority)
-
-**Important**: Never commit real API keys to source control. The `appsettings.Development.json` file is included in `.gitignore` to prevent accidental commits.
+See the repo root [README](../../README.md) for the full environment-variable reference.

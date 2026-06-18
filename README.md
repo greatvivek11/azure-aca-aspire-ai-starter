@@ -1,364 +1,101 @@
-# 🤖 Azure ACA Aspire AI Starter Template
+# Azure ACA Aspire AI Starter
 
-This repository contains the source code for a modern, cloud-native AI assistant designed to serve as an internal "Copilot" for enterprise knowledge. It allows users to chat with, upload, and analyze company documents using a sophisticated, scalable, and secure architecture.
+A cloud-native AI assistant template: chat with and run RAG over your documents, built on .NET 10, React, and Azure Container Apps. **One-click setup, debug, and deploy** — clone, launch the dev container, press F5 to debug, and GitHub Actions handles the rest.
 
-This project is built to showcase advanced skills in full-stack development, AI integration, and cloud-native architecture on Microsoft Azure.
+## One-Click Experience
 
----
+> ⚠️ **Prerequisite:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) must be installed and running.
 
-## ✨ Core Features
+### Setup & Debug
+1. **Clone** the repo.
+2. **Open in Dev Container** — VS Code prompts to reopen in a container; `.devcontainer/` downloads .NET, Node.js, CLI tools, and all extensions.
+3. **Press F5** — Aspire orchestrates the full local stack (frontend, backend, worker, SQL, Redis, Ollama, Qdrant, Dapr).
 
--   **Conversational AI**: Chat with an AI assistant that can reason over and answer questions about your documents.
--   **Document Ingestion**: Upload PDF, DOCX, TXT, and image files for the AI to process and index.
--   **Retrieval-Augmented Generation (RAG)**: Get answers grounded in your documents, complete with citations.
--   **Vision & OCR**: Analyze images and extract text from scanned documents.
--   **Sentiment Analysis**: Understand the sentiment of customer feedback or other text data.
--   **Secure & Scalable**: Built on a secure, cloud-native foundation using modern best practices.
+### Deploy to Azure
+1. **One-time bootstrap** — Run `bash scripts/ci/bootstrap-ci-tenant-setup.sh` in an authenticated Azure shell to set up OIDC and a service principal.
+2. **Add GitHub secrets** — [5-min checklist](./docs/GitHub-Secrets-Setup.md#quick-bootstrap-checklist-5-10-min).
+3. **Push to main** — GitHub Actions validates, builds, provisions infrastructure, and deploys automatically. (PRs validate only; merge to `main` to deploy.)
 
----
+> Changes to docs or README skip the expensive deploy job — only code changes trigger redeployment.
 
-## 🏛️ Architecture Overview
+## Features
 
-This project is built using a modern, distributed architecture designed for scalability, maintainability, and security.
+- **Conversational AI + RAG** — chat grounded in your documents, with citations.
+- **Document ingestion** — upload `.pdf`, `.docx`, and `.txt` files for indexing.
+- **Local or Azure AI** — run fully local (Ollama + Qdrant) or on Azure (Azure OpenAI + AI Search) via a single `AI_MODE` switch.
+- **Secure by default** — Microsoft Entra ID auth, passwordless managed identity, private backend, rate limiting, and upload guardrails.
 
--   **Backend**: A **.NET 10** application built with **ASP.NET Core Minimal APIs** following a **Vertical Slice Architecture (VSA)** with clean, feature-focused code.
--   **Frontend**: A **React** Single Page Application (SPA) built with **Vite**, served by a lightweight **Hono** Node application, and managed with **npm**.
--   **Cloud Platform**: Hosted entirely on **Azure Container Apps**, with a containerized frontend and backend.
--   **Service Communication**: **Dapr (Distributed Application Runtime)** is used for secure, internal service-to-service communication.
--   **AI Orchestration**: **Azure AI Foundry / Azure OpenAI** powers chat and embeddings for the template's minimal AI workflow.
--   **Data Storage**:
-    -   **Azure SQL Database**: For structured, relational data.
-    -   **Azure Blob Storage**: For all uploaded documents and files.
-    -   **Azure AI Search**: For vector indexing and retrieval in the RAG pipeline.
--   **Security**: Authentication is handled by **Microsoft Entra ID** using the **MSAL** library. All communication between the backend and Azure services uses passwordless **Managed Identities**. Backend APIs enforce request rate limiting and upload payload-size guardrails by default.
--   **DevOps**: Infrastructure is defined with **Bicep (IaC)** and deployed automatically via a **GitHub Actions** CI/CD pipeline.
+## Architecture
 
-For a deeper dive, please see the detailed architectural documents:
+- **Frontend** — React SPA (Vite) served by a lightweight Hono Node host; MSAL/Entra auth.
+- **Backend** — .NET 10 Minimal APIs, Vertical Slice Architecture, Dapr-enabled.
+- **Worker** — .NET background worker for document ingestion.
+- **Orchestration** — .NET Aspire composes services locally; Dapr handles service-to-service calls.
+- **Data** — Azure SQL, Azure Blob Storage, and a vector store (Azure AI Search or Qdrant).
+- **Platform** — Azure Container Apps, provisioned with Bicep and deployed via GitHub Actions.
 
--   **[Cloud Architecture](./docs/Architecture/Cloud-Architecture.md)**: The holistic, end-to-end deployment and security plan.
--   **[Backend Architecture](./docs/Architecture/Backend-Architecture.md)**: The internal structure of the .NET backend.
--   **[Frontend Architecture](./docs/Architecture/Frontend-Architecture.md)**: The technology stack and patterns for the React frontend.
--   **[Network Hardening Extension](./docs/Architecture/Network-Hardening-Extension.md)**: Optional VNET/subnet/private-endpoint extension guidance.
+See [docs/Architecture/Blueprint.md](./docs/Architecture/Blueprint.md) for the full design.
 
----
+## Prerequisites
 
-## 🚀 Getting Started
+[.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) · [Node.js 20 + npm](https://nodejs.org/) · [Docker Desktop](https://www.docker.com/products/docker-desktop/) · [Dapr CLI](https://docs.dapr.io/getting-started/install-dapr-cli/) · [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)
 
-To run this project locally, you will need the following prerequisites installed:
+## Quick Start (Local)
 
--   [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
--   [Node.js](https://nodejs.org/)
--   [npm](https://www.npmjs.com/)
--   [Docker Desktop](https://www.docker.com/products/docker-desktop/)
--   [Dapr CLI](https://docs.dapr.io/getting-started/install-dapr-cli/)
--   [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
-
-## 🛠️ Local Development Setup
-
-### 1. Clone the Repository
 ```bash
-git clone <repository-url>
-cd <repository-name>
-```
+# 1. Clone and open in Dev Container
+git clone <repo-url> && cd azure-aca-aspire-ai-starter
+# In VS Code: when prompted, reopen in container (downloads all deps)
 
-### 2. Bootstrap Local Tools (One-Time)
-Run the bootstrap script once after cloning to install/verify local tooling and dependencies:
-```bash
-bash scripts/setup-dev-tools.sh
-```
-
-What it prepares:
-- shellcheck (if available via your OS package manager)
-- actionlint (downloaded locally by `scripts/lint-workflows.sh`)
-- .NET restore
-- frontend npm install + lint
-- backend architecture tests
-
-Notes:
-- The actionlint binary is cached under `.tools/actionlint` and is intentionally gitignored (not committed).
-- shellcheck is expected to be machine-installed (brew/apt/dnf/yum), not checked into the repo.
-
-### 3. Set Up Environment Variables
-Copy the example environment file and fill in your actual values:
-```bash
+# 2. Create your local env (defaults to AI_MODE=local; no Azure needed)
 cp src/aspire/.env.example src/aspire/.env
+
+# 3. Debug (F5 in VS Code, or from terminal:)
+cd src/aspire && dotnet run
 ```
 
-Edit `src/aspire/.env` and choose one AI mode:
+Dev Container setup handles .NET 10 SDK, Node.js 20, Docker, Dapr, and Azure CLI. The `.env` file is gitignored; for the full list of variables, see [src/aspire/.env.example](./src/aspire/.env.example).
 
-- **Local mode (default)**: `AI_MODE=local` (uses local Ollama + Qdrant containers)
-  - `OLLAMA_CHAT_MODEL` (default `gemma3:4b-it-qat`)
-  - `OLLAMA_EMBED_MODEL` (default `nomic-embed-text`)
-  - `OLLAMA_EMBED_DIMENSIONS` (default `768`)
-  - `QDRANT_COLLECTION` (default `documents`)
-  - Storage defaults point to local Azurite via `AZURE_STORAGE_CONNECTION_STRING` and `AZURE_STORAGE_PUBLIC_BLOB_ENDPOINT`
-  - Uploads are proxied through the backend (no browser-to-Azurite CORS setup required)
-  - Backend/worker preload the configured Ollama models at startup; the downloaded models persist in the `ollama-data` Docker volume for later restarts
-- **Azure mode**: `AI_MODE=azure` (uses Azure OpenAI/Foundry + Azure AI Search)
-  - `AZURE_OPENAI_API_KEY`
-  - `AZURE_OPENAI_MODEL_ID`
-  - `AZURE_OPENAI_ENDPOINT`
-  - `AZURE_OPENAI_AUTH_MODE` (`api-key` or `managed-identity`, MI-first with key fallback)
-  - `AZURE_OPENAI_EMBEDDING_MODEL_ID`
-  - `AZURE_OPENAI_EMBEDDING_DIMENSIONS`
-  - `AZURE_SEARCH_ENDPOINT`
-  - `AZURE_SEARCH_INDEX_NAME`
+**Local mode** runs Ollama, Qdrant, and Azurite as containers — no Azure resources required. Models are pulled on first run and cached in Docker volumes. Auth is disabled by default for first-run; to enable Entra auth locally, run `az login && bash scripts/setup-local-entra-auth.sh`.
 
-For both modes, uploads/ingestion use blob storage settings:
-- `AZURE_STORAGE_ACCOUNT_NAME` (required for MI-first blob auth)
-- `AZURE_STORAGE_CONNECTION_STRING`
-- `AZURE_STORAGE_CONTAINER_NAME`
-- `AZURE_STORAGE_PUBLIC_BLOB_ENDPOINT` (optional; local default is `http://localhost:10000/devstoreaccount1`)
-- `AZURE_STORAGE_AUTH_MODE` (`api-key` or `managed-identity`, MI-first with connection-string fallback)
-- `BLOB_CORS_ALLOWED_ORIGINS_JSON` (JSON array string for direct browser blob uploads in Azure/signed-URL flows)
+### Run modes
 
-Optional tuning:
-- `UPLOAD_URL_EXPIRY_MINUTES` (default 15, min 5, max 120)
-- `UPLOAD_MAX_REQUEST_BYTES` (default 26214400 / 25 MiB, min 1048576 / 1 MiB, max 104857600 / 100 MiB)
-- `AZURE_SEARCH_AUTH_MODE` (`api-key` default, or `managed-identity` for ACA MI-first search auth)
+| Mode | Command | Communication | Best for |
+| --- | --- | --- | --- |
+| **vite-dev** | `ASPIRE_FRONTEND_MODE=vite-dev dotnet run` | Direct HTTP (HMR) | Fast frontend iteration |
+| **container** (default) | `dotnet run` | Dapr service invocation | Production-like validation |
 
-### Local Entra Auth (Optional, One Command)
+Details and troubleshooting: [docs/LOCAL-DEVELOPMENT-DAPR.md](./docs/LOCAL-DEVELOPMENT-DAPR.md).
 
-By default local runs keep auth disabled for first-run F5. To enable real Entra auth locally without manually creating app registrations:
+## Testing
 
 ```bash
-az login
-bash scripts/setup-local-entra-auth.sh
+dotnet test src/Backend.Tests/Backend.Tests.csproj   # backend architecture + integration tests
+npm run lint --prefix src/frontend                    # frontend lint
+bash scripts/lint-workflows.sh                        # GitHub Actions workflow lint
 ```
 
-What this does:
-- Creates or reuses tenant-scoped API and SPA app registrations.
-- Configures API scope `access_as_user` and SPA delegated permission.
-- Writes `ENTRA_*` values into `src/aspire/.env`.
+See [docs/Architecture-Tests.md](./docs/Architecture-Tests.md) for what the test suite enforces.
 
-After script completion, restart Aspire (`dotnet run` from `src/aspire`) and use **Sign in** in the frontend.
+## Cloud Deployment
 
-If you prefer manual setup, set these in `src/aspire/.env`:
-- `ENTRA_AUTH_ENABLED=true`
-- `ENTRA_TENANT_ID`
-- `ENTRA_API_CLIENT_ID`
-- `ENTRA_SPA_CLIENT_ID`
+1. **Bootstrap (one-time):** Run `bash scripts/ci/bootstrap-ci-tenant-setup.sh` to create a service principal and OIDC federated credential.
+2. **Configure secrets:** Follow the [5-minute checklist](./docs/GitHub-Secrets-Setup.md#quick-bootstrap-checklist-5-10-min) to add `AZURE_SUBSCRIPTION_ID`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, SQL credentials, etc.
+3. **Push to main:** GitHub Actions runs validation, then provisions infrastructure (SQL, Blob, AI Search, AI Foundry) via Bicep, and deploys to Azure Container Apps using `azd`. Entra app registrations and Managed Identity RBAC are wired automatically.
 
-### 4. Run the Application
-Navigate to the Aspire project directory and run the application:
-```bash
-cd src/aspire
-npm install --prefix ../frontend
-dotnet run
-```
+**Doc-only changes skip deployment** — if you only modify files under `/docs` or `README.md`, the workflow validates code but skips the expensive provision/deploy steps.
 
-The application will automatically load configuration from the `.env` file.
+Full reference: [CI/CD Pipeline](./docs/CI-CD-GitHub-Actions.md) and [GitHub Secrets Setup](./docs/GitHub-Secrets-Setup.md).
 
-Note: The `.env` file is gitignored and will not be committed to the repository.
+## Documentation
 
-## 🚀 Running the Application
-
-### Default Mode (Container-Based, Production-Like)
-After completing the setup steps above, you can run the application with:
-```bash
-cd src/aspire
-npm install --prefix ../frontend
-dotnet run
-```
-
-This will start all services (frontend, backend, and worker) with Dapr sidecars and the frontend as a Docker container.
-
-### Vite Dev Mode (Recommended for Frontend Development)
-For rapid frontend iteration with **Hot Module Reload (HMR)**:
-```bash
-cd src/aspire
-npm install --prefix ../frontend
-ASPIRE_FRONTEND_MODE=vite-dev dotnet run
-```
-
-**Benefits:**
-- ⚡ Instant hot reload when you edit React components
-- 🔍 Direct HTTP to backend (easier debugging)
-- 🚀 Much faster than container rebuilds
-- 📱 Great for UI/UX iteration
-
-**Trade-off:**
-- Frontend uses direct HTTP instead of Dapr service invocation
-- This is intentional for developer velocity (see [Local Development Documentation](./docs/LOCAL-DEVELOPMENT-DAPR.md))
-
-### Understanding Service Communication
-
-| Mode | Frontend | Backend | Communication | Best For |
-|------|----------|---------|---|---|
-| **vite-dev** (Recommended) | Vite HMR (port 3000) | Docker | Direct HTTP | Frontend development, fast iteration |
-| **container** (Default) | Docker | Docker | Dapr Service Invocation | Production validation, integration testing |
-
-**👉 For detailed explanation of these modes, architecture decisions, and troubleshooting, see:** [`docs/LOCAL-DEVELOPMENT-DAPR.md`](./docs/LOCAL-DEVELOPMENT-DAPR.md)
----
-
-## ✅ Testing
-
-### Workflow Linting
-
-Validate GitHub Actions workflow syntax and expressions:
-
-```bash
-bash scripts/lint-workflows.sh
-```
-
-If shellcheck is installed locally, the script also lint-checks `scripts/ci/*.sh`.
-For first-time setup, use:
-
-```bash
-bash scripts/setup-dev-tools.sh
-```
-
-### Architecture Tests
-
-We enforce architectural boundaries and best practices using xUnit tests. These tests validate:
-- ✅ Backend does NOT depend on Frontend
-- ✅ Feature slice files exist and remain organized
-- ✅ Features are independent (no cross-feature coupling)
-- ✅ Backend auth middleware is present (`UseAuthentication`, `UseAuthorization`, `AddJwtBearer`)
-
-Run architecture tests locally:
-```bash
-dotnet test src/Backend.Tests/Backend.Tests.csproj
-```
-
-For detailed information, see [Architecture-Tests.md](./docs/Architecture-Tests.md)
-
----
-
-## 🚀 Cloud Deployment
-
-### Prerequisites for Azure Deployment
-
-1. **Azure Subscription**: [Create a free account](https://azure.microsoft.com/en-us/free/)
-2. **GitHub Account**: For CI/CD automation
-3. **Azure CLI**: [Install instructions](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
-4. **Azure Developer CLI (azd)**: [Install instructions](https://github.com/Azure/azure-dev)
-
-### Quick Bootstrap Checklist (5-10 min)
-
-1. Create CI service principal and capture `AZURE_CLIENT_ID` + `AZURE_TENANT_ID`.
-2. Grant CI principal RBAC on `azure-aca-aspire-ai-starter-rg`:
-   - `Contributor`
-   - `User Access Administrator`
-3. Create GitHub Environment `dev`.
-4. Add Entra federated credential subject:
-   - `repo:<owner>/<repo>:environment:dev`
-5. Add required repository secrets:
-   - `AZURE_SUBSCRIPTION_ID`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`
-   - `AZURE_SQL_ADMIN_LOGIN`, `AZURE_SQL_ADMIN_PASSWORD`
-   - `ENTRA_AUTH_ENABLED` (recommended `true`)
-   - `AI_MODE` (optional, defaults to `azure` in deploy workflow)
-   - `AI_SERVICES_PROVISIONING_MODE` (optional, defaults to `provision`)
-   - `AZURE_OPENAI_AUTH_MODE`, `AZURE_STORAGE_AUTH_MODE`, `AZURE_AI_FOUNDRY_PROJECT_NAME` (recommended overrides)
-   - `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_MODEL_ID`, `AZURE_OPENAI_ENDPOINT` (**only** if `AI_SERVICES_PROVISIONING_MODE=external`)
-6. Trigger workflow from GitHub Actions with `environment=dev`.
-
-For full commands and troubleshooting, see:
-- [GitHub-Secrets-Setup.md](./docs/GitHub-Secrets-Setup.md#quick-bootstrap-checklist-5-10-min)
-- [CI-CD-GitHub-Actions.md](./docs/CI-CD-GitHub-Actions.md)
-
-### Step 1: Configure GitHub Secrets
-
-To enable automatic deployment via GitHub Actions, configure these secrets:
-
-**Azure Authentication:**
-- `AZURE_SUBSCRIPTION_ID`
-- `AZURE_CLIENT_ID`
-- `AZURE_TENANT_ID`
-
-**AI Services:**
-- `AI_SERVICES_PROVISIONING_MODE` (optional, defaults to `provision`)
-- `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_MODEL_ID`, `AZURE_OPENAI_ENDPOINT` (required only in `external` mode)
-
-**Entra Authentication:**
-- `ENTRA_AUTH_ENABLED` (optional, defaults to `true`)
-- Optional overrides: `ENTRA_AUTHORITY`, `ENTRA_API_CLIENT_ID`, `ENTRA_AUDIENCE`, `ENTRA_SPA_CLIENT_ID`, `ENTRA_SCOPE`
-
-Notes:
-- If Entra override secrets are not provided, the deployment workflow creates/updates API and SPA app registrations and wires these values automatically.
-- Tenant policies may still require manual admin consent for delegated permissions.
-
-**SQL Provisioning + Entra Setup:**
-- `AZURE_SQL_ADMIN_LOGIN`
-- `AZURE_SQL_ADMIN_PASSWORD`
-
-**Optional Entra Override (advanced):**
-- `AZURE_SQL_ENTRA_ADMIN_LOGIN`
-- `AZURE_SQL_ENTRA_ADMIN_OBJECT_ID`
-
-For detailed setup instructions, see [GitHub-Secrets-Setup.md](./docs/GitHub-Secrets-Setup.md)
-
-### Step 2: Commit and Push
-
-```bash
-git add .
-git commit -m "Initial commit: ACA Aspire AI Starter with GitHub Actions CI/CD"
-git push origin main
-```
-
-### Step 3: Monitor Deployment
-
-GitHub Actions will automatically:
-1. ✅ Build backend and frontend
-2. ✅ Run architecture tests
-3. ✅ Validate Azure environment prerequisites
-4. ✅ Deploy to Azure Container Apps using `azd provision` + service-level `azd deploy`
-5. ✅ Inject secrets into Container Apps environment
-
-Monitor progress in: **GitHub Actions → Deploy to Azure Container Apps**
-
----
-
-## 🔄 CI/CD Pipeline
-
-The project includes a fully automated GitHub Actions workflow:
-
-**Workflow files**: `.github/workflows/deploy.yml` (entry) + reusable workflows under `.github/workflows/reusable-*.yml`
-
-### What the Pipeline Does
-
-1. **Validation Job** (runs on every push to main):
-   - Builds .NET solution
-   - Runs architecture tests
-   - Builds React frontend
-   - Validates all code quality checks
-
-2. **Deployment Job** (runs after validation succeeds):
-   - Authenticates to Azure using OIDC
-   - Ensures Microsoft Entra API + SPA app registrations and API scope wiring
-   - Validates Azure infrastructure prerequisites
-   - Runs `azd provision` and deploys services with `azd deploy`
-   - Injects runtime auth and AI settings into ACA workloads
-   - Reports deployment status
-
-### Triggering Deployment
-
-**Automatic**: Push code to `main` branch
-```bash
-git push origin main
-```
-
-**Manual**: Trigger via GitHub Actions UI
-- Go to **Actions → Deploy to Azure Container Apps → Run workflow → main**
-
-For comprehensive CI/CD documentation, see [CI-CD-GitHub-Actions.md](./docs/CI-CD-GitHub-Actions.md)
-
----
-
-## 📋 Pre-deployment Environment Validation
-
-Before deploying to Azure, validate that required resources exist:
-
-```bash
-# Bash
-bash scripts/validate-azure-env.sh <SUBSCRIPTION_ID> azure-aca-aspire-ai-starter-rg
-
-# PowerShell
-pwsh scripts/validate-azure-env.ps1 -SubscriptionId <SUBSCRIPTION_ID> -ResourceGroup azure-aca-aspire-ai-starter-rg
-```
-
-This script checks for:
-- ✅ Resource group
-- ✅ SQL Server and database
-- ✅ Container Registry
-- ✅ Container Apps Environment
+| Doc | Purpose |
+| --- | --- |
+| [Blueprint](./docs/Architecture/Blueprint.md) | Intended system design, stack, and AI modes |
+| [Cloud Architecture](./docs/Architecture/Cloud-Architecture.md) | End-to-end deployment and security |
+| [Backend Architecture](./docs/Architecture/Backend-Architecture.md) | Backend structure and patterns |
+| [Frontend Architecture](./docs/Architecture/Frontend-Architecture.md) | Frontend stack and patterns |
+| [Network Hardening Extension](./docs/Architecture/Network-Hardening-Extension.md) | Optional VNET/private-endpoint path |
+| [Local Development with Dapr](./docs/LOCAL-DEVELOPMENT-DAPR.md) | Run modes and service communication |
+| [Architecture Tests](./docs/Architecture-Tests.md) | Enforced backend boundaries |
+| [CI/CD](./docs/CI-CD-GitHub-Actions.md) · [GitHub Secrets](./docs/GitHub-Secrets-Setup.md) | Deployment pipeline and configuration |

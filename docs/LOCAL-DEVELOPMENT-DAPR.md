@@ -8,7 +8,7 @@ This document explains the service communication strategy for local development 
 
 ### 1. **Local Vite Dev Mode** (Recommended for Frontend Development)
 ```bash
-ASPIRE_FRONTEND_MODE=vite-dev dotnet run --project src/aspire/AppHost.csproj
+ASPIRE_FRONTEND_MODE=vite-dev dotnet run --project src/aspire/aspire.csproj
 ```
 
 **Communication Pattern:**
@@ -33,7 +33,7 @@ Frontend (Vite HMR)  →  Direct HTTP  →  Backend (Docker)
 ### 2. **Docker Container Mode** (Default, Production-Like)
 ```bash
 # Default if ASPIRE_FRONTEND_MODE is not set
-dotnet run --project src/aspire/AppHost.csproj
+dotnet run --project src/aspire/aspire.csproj
 ```
 
 **Communication Pattern:**
@@ -97,7 +97,7 @@ export ASPIRE_FRONTEND_MODE=vite-dev
 
 # Frontend runs on port 3000 with HMR
 # Proxy: /api/* → http://localhost:8080
-dotnet run --project src/aspire/AppHost.csproj
+dotnet run --project src/aspire/aspire.csproj
 ```
 
 ### Enable Dapr Service Invocation (Container Mode)
@@ -112,7 +112,7 @@ unset ASPIRE_FRONTEND_MODE
 dapr run --dapr-placement-service-port 50005
 
 # Then start Aspire (frontend rebuilds in container)
-dotnet run --project src/aspire/AppHost.csproj
+dotnet run --project src/aspire/aspire.csproj
 ```
 
 ## Configuration

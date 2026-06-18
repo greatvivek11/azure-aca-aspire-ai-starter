@@ -17,45 +17,54 @@ The CI/CD pipeline automates:
 - ✅ Bootstrapping and finalizing Entra app registration wiring for SPA + API auth during deployment
 
 **Deployment triggers:**
-- Push to `main` branch (automatic)
-- Pull requests targeting `main` (validation and deploy job checks)
+- Push to `main` branch (automatic; deploys only if code/config changed, not for doc-only changes)
+- Pull requests targeting `main` (validates all changes; deploy job skipped)
 - Manual trigger via GitHub Actions UI with environment selection (`dev`, `staging`, `prod`)
+
+**Smart doc-only handling:** Changes to files under `/docs/` or `README.md` only skip the expensive deploy job. Validation (build, test, lint) still runs, so you catch code issues early even on doc updates.
 
 ---
 
 ## Workflow Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ GitHub Actions Workflow: deploy.yml                         │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Job 1: VALIDATE & BUILD (runs on ubuntu-latest)           │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ 1. Checkout code                                    │   │
-│  │ 2. Setup .NET 10 SDK                                │   │
-│  │ 3. Setup Node.js 20                                 │   │
-│  │ 4. Restore .NET dependencies                        │   │
-│  │ 5. Build Backend (dotnet build)                     │   │
-│  │ 6. Run Architecture Tests (xUnit)                   │   │
-│  │ 7. Build Frontend (npm install + npm run build)     │   │
-│  │ 8. Upload build artifacts                           │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                         ↓ (depends on)                      │
-│  Job 2: DEPLOY (runs on ubuntu-latest)                     │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ 1. Checkout code                                    │   │
-│  │ 2. Setup Azure Developer CLI (azd)                  │   │
-│  │ 3. Setup .NET 10 SDK                                │   │
-│  │ 4. Setup Node.js 20                                 │   │
-│  │ 5. Authenticate to Azure via OIDC                   │   │
-│  │ 6. Configure azd to use Azure CLI auth              │   │
-│  │ 7. Validate Azure environment                        │   │
-│  │ 8. Run: azd provision --no-prompt                    │   │
-│  │ 9. Run: azd deploy <service> --no-prompt             │   │
-│  │ 10. Display deployment summary                       │   │
-│  └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ GitHub Actions Workflow: deploy.yml                          │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Job 1: CHECK-CHANGES (detect non-docs files changed)       │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ Compares base/head commits to identify if any files    │ │
+│  │ outside /docs/ or README.md were modified.             │ │
+│  │ Outputs: has-non-docs-changes (true|false)             │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                       ↓ (parallel with validate)            │
+│  Job 2: VALIDATE & BUILD (runs on ubuntu-latest)           │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ 1. Checkout code                                       │ │
+│  │ 2. Setup .NET 10 SDK                                   │ │
+│  │ 3. Setup Node.js 20                                    │ │
+│  │ 4. Restore .NET dependencies                           │ │
+│  │ 5. Build Backend (dotnet build)                        │ │
+│  │ 6. Run Architecture Tests (xUnit)                      │ │
+│  │ 7. Build Frontend (npm install + npm run build)        │ │
+│  │ 8. Upload build artifacts                              │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                 ↓ (depends on: validate + check-changes)    │
+│  Job 3: DEPLOY (runs ONLY if non-docs files changed)       │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ 1. Checkout code                                       │ │
+│  │ 2. Setup Azure Developer CLI (azd)                     │ │
+│  │ 3. Setup .NET 10 SDK                                   │ │
+│  │ 4. Setup Node.js 20                                    │ │
+│  │ 5. Authenticate to Azure via OIDC                      │ │
+│  │ 6. Configure azd to use Azure CLI auth                 │ │
+│  │ 7. Validate Azure environment                          │ │
+│  │ 8. Run: azd provision --no-prompt                      │ │
+│  │ 9. Run: azd deploy <service> --no-prompt               │ │
+│  │ 10. Display deployment summary                         │ │
+│  └────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -254,12 +263,10 @@ dotnet test src/Backend.Tests/Backend.Tests.csproj --configuration Release
 ```
 
 **What tests check:**
-- Backend does NOT depend on Frontend
-- Backend does NOT depend on Worker
-- Backend does NOT depend on Aspire orchestrator
-- Backend HAS required infrastructure dependencies (Dapr, SQL, Semantic Kernel)
-- Features follow vertical slice architecture
+- Expected feature slices exist (`Health`, `AiPing`, `Customers`, `DocumentIngestion`, `Chat`)
 - Features are independent (no cross-feature coupling)
+- Auth middleware is wired (`UseAuthentication`, `UseAuthorization`, `UseRateLimiter`, `AddJwtBearer`)
+- Auth behavior and endpoint contracts hold (integration tests)
 
 **Test implementation**: See [Architecture-Tests.md](./Architecture-Tests.md)
 

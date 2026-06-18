@@ -35,4 +35,4 @@ This repository is a cloud-native AI application with four main code areas under
 - `README.md` for setup and deployment overview
 - `docs/Architecture/Blueprint.md` for the intended system design
 - `docs/Architecture-Tests.md` for enforced backend boundaries
-- `docs/CI-CD-GitHub-Actions.md` and `docs/DEPLOYMENT-SETUP.md` for delivery and environment setup
+- `docs/CI-CD-GitHub-Actions.md` and `docs/GitHub-Secrets-Setup.md` for delivery and environment setup

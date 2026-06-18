@@ -18,33 +18,34 @@ This section reflects the current frontend stack checked into the repository.
 | ------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Runtime/Toolkit** | **Node.js 20 + npm**            | The Docker build and runtime both use Node 20 and npm, matching the checked-in `package-lock.json` and deployment flow.                                               |
 | **UI Framework**    | **React 18.3**                  | The current UI is built as a small React application with hooks and `StrictMode`.                                                                                      |
-| **Build Tool**      | **Vite 5.4**                    | Vite keeps the SPA development loop fast and aligns with the current frontend build and packaging model.                                                               |
-| **Host Layer**      | **Hono 4.x**                    | Hono provides a lightweight Node host for static asset serving, health endpoints, and backend proxy routes without adopting a full SSR framework.                     |
+| **Build Tool**      | **Vite 8.x**                    | Vite keeps the SPA development loop fast and aligns with the current frontend build and packaging model.                                                               |
+| **Host Layer**      | **Hono 4.x**                    | Hono provides a lightweight Node host for static asset serving, health endpoints, auth config, and backend proxy routes without adopting a full SSR framework.        |
 | **Rendering**       | **Client-rendered SPA**         | The browser renders the application, while the Hono host handles operational endpoints and same-origin integration points.                                             |
 | **Styling**         | **Plain CSS**                   | The current frontend uses `App.css` and does not yet use Tailwind, shadcn/ui, or a broader design-system layer.                                                       |
-| **State**           | **React state/hooks**           | Customer data, form state, saving state, and error state are managed locally inside the app component.                                                                 |
-| **Language**        | **JavaScript (ES Modules)**     | The frontend currently runs as an ESM JavaScript application in both the Vite bundle and the Hono host.                                                               |
+| **State**           | **React state/hooks**           | Auth, customer data, chat, and ingestion state are managed locally with hooks (`useState`, `useEffect`, `useCallback`, `useMemo`).                                    |
+| **Auth**            | **@azure/msal-browser 5.x**     | The SPA authenticates against Microsoft Entra ID via MSAL; config is served by the Hono host at `/api/auth/config`.                                                   |
+| **Language**        | **JavaScript (ES Modules)**     | The frontend runs as an ESM JavaScript application in both the Vite bundle and the Hono host.                                                                          |
 
 ## Current Implementation Snapshot
 
-The current frontend is an operational foundation rather than the final AI product UI.
+The current frontend is an operational foundation that demonstrates both data CRUD and an AI chat workflow.
 
-* The Hono host in `server.js` serves the built Vite assets, exposes `/health`, and proxies CRUD requests under `/api/customers` to the backend.
-* The React app in `src/App.jsx` renders a simple customer records screen with list, create, and delete flows.
-* Data loading uses direct `fetch` calls to same-origin routes exposed by the Hono host.
-* There is no client-side router, auth flow, design-system layer, or dedicated data-fetching library in the current implementation.
+* The Hono host in `server.js` serves the built Vite assets, exposes `/health`, serves MSAL config at `/api/auth/config`, and proxies `/api/*` routes (customers, uploads, ingest, chat) to the backend.
+* The React app in `src/App.jsx` is a two-tab UI: a **Database View** (customer CRUD) and an **AI Chat** tab (document upload, ingestion-status polling, and RAG chat with citations).
+* Authentication uses **MSAL** against Microsoft Entra ID; access tokens are attached to API calls. Auth can be disabled for first-run local development.
+* Data loading uses direct `fetch` calls to same-origin routes exposed by the Hono host; there is no client-side router or dedicated data-fetching library.
 * Application Insights is wired in the host process, not in the browser bundle.
 
 ## 🎨 UI Direction
 
-The current UI is intentionally simple so the repository can validate frontend-to-backend connectivity. Later phases can evolve toward a more task-oriented workspace once chat, documents, and insights are implemented.
+The current UI is intentionally simple so the repository can validate frontend-to-backend connectivity and a baseline RAG workflow. Later phases can evolve toward a more task-oriented workspace once richer documents and insights are implemented.
 
 ### Current UI
 
-The current screen is a two-card operational dashboard:
+The app presents two tabs:
 
-* A customer table that loads records from `/api/customers`
-* A create-record form that posts new entries back through the Hono host to the backend
+* **Database View** — a customer table plus a create-record form, backed by `/api/customers`.
+* **AI Chat** — file upload to blob storage, ingestion-status pills, and a chat composer that posts document-grounded queries (`mode: "rag"`) returning answers with citations.
 
 ### Future Direction
 
@@ -90,12 +91,16 @@ The current frontend structure is intentionally small.
 ├── index.html                  // Vite entry HTML
 ├── package.json                // npm scripts and dependencies
 ├── package-lock.json           // Locked npm dependency graph
-├── server.js                   // Hono host and backend proxy routes
+├── eslint.config.js            // ESLint configuration
+├── server.js                   // Hono host: static serving, auth config, backend proxy
 ├── vite.config.js              // Vite build configuration
+├── Dockerfile                  // Node 20 multi-stage build
+├── public/
+│   └── auth-callback.html       // MSAL redirect callback
 └── src/
-   ├── App.jsx                 // Main React application shell
-   ├── App.css                 // Frontend styles
-   └── main.jsx                // Browser entry point
+   ├── App.jsx                  // Two-tab app shell (Database View + AI Chat)
+   ├── App.css                  // Frontend styles
+   └── main.jsx                 // Browser entry point
 ```
 
 ### Key Architectural Decisions

@@ -1,341 +1,46 @@
 # Architecture Tests
 
-This document explains the architecture tests used to maintain code quality and enforce dependency boundaries in the ACA Aspire AI Starter backend.
+The backend test suite (`src/Backend.Tests/`) enforces architectural boundaries, auth posture, and endpoint contracts as a regression guard in CI/CD.
 
-## Overview
+> Source of truth: the test files themselves. If this document and the tests differ, follow the tests.
 
-**Architecture tests** validate that the codebase follows intended boundaries and security middleware requirements. They currently use source-level checks for feature isolation, expected slice presence, and auth middleware enforcement.
+## Framework
 
-**Why are they important?**
-- Prevent accidental dependencies between layers
-- Catch architectural violations early in CI/CD
-- Document intended architecture through executable tests
-- Support DDD and Vertical Slice Architecture patterns
+- **Test framework**: [xUnit](https://xunit.net/)
+- **Assertions**: [Shouldly](https://shouldly.io/)
+- **Approach**: source-level checks for structure/middleware, plus in-memory integration tests (`WebApplicationFactory`) for endpoint behavior.
 
----
-
-## Test Framework
-
-- **Test Framework**: [xUnit](https://xunit.net/) (C# testing framework)
-- **Assertion Library**: [Shouldly](https://shouldly.io/) (fluent assertions)
-- **Test Approach**: Source-level checks for boundaries and middleware requirements
-
-**Project location**: `src/Backend.Tests/`
-
----
-
-## Test Categories
-
-### 1. Feature Structure Tests
-
-Ensure expected feature slices remain present and discoverable.
-
-#### Test: Backend_Should_Contain_Expected_Feature_Slices
-
-```csharp
-[Fact]
-public void BackendProject_ShouldNotHaveDependencyOnFrontend()
-{
-    // Arrange
-    var expectedFeaturePaths = new[]
-    {
-        "src/backend/Features/Health/Endpoint.cs",
-        "src/backend/Features/AiPing/Endpoint.cs",
-        "src/backend/Features/Customers/Endpoint.cs",
-        "src/backend/Features/DocumentIngestion/Endpoint.cs",
-        "src/backend/Features/Chat/Endpoint.cs"
-    };
-}
-```
-
-**Purpose**: Prevent backend code from importing frontend code (bidirectional dependency)
-
-**Why it matters**: Frontend depends on Backend, not vice versa. If Backend imports Frontend, you have a circular dependency.
-
-#### Test: BackendProject_ShouldHaveRequiredInfrastructureDependencies
-
-```csharp
-[Fact]
-public void BackendProject_ShouldHaveRequiredInfrastructureDependencies()
-{
-    // Arrange
-    var backendReferences = GetProjectReferences(BackendAssembly);
-    var referencedNames = backendReferences.Select(r => r.Name).ToList();
-    
-    // Act & Assert
-    referencedNames.Should().Contain("Dapr.AspNetCore");
-    referencedNames.Should().Contain("Microsoft.Data.SqlClient");
-    referencedNames.Should().Contain("SemanticKernel");
-}
-```
-
-**Purpose**: Ensure required infrastructure libraries are present
-
-**Why it matters**: Documents required runtime dependencies and catches accidental package removal
-
----
-
-### 2. Feature Independence Tests
-
-Ensure features don't depend on each other (preventing tangled dependencies).
-
-#### Test: Features_Should_Not_Depends_On_Other_Features
-
-```csharp
-[Fact]
-public void BackendNamespaces_ShouldFollowVerticalSliceStructure()
-{
-    // Arrange
-    // Detect cross-feature using statements.
-    // Example disallowed dependency:
-    // using AcaAspireAiTemplate.Backend.Features.Chat;
-    // inside Features/Customers/*
-}
-```
-
-**Expected namespace structure:**
-```
-AcaAspireAiTemplate.Backend
-├── Features
-│   ├── Health
-│   └── AiPing
-├── Infrastructure
-│   ├── Ai
-│   └── Sql
-└── Domain
-    └── Customer.cs
-```
-
-**Why it matters**: 
-- Enforces consistent project structure
-- Supports code organization and discoverability
-- Enables proper feature isolation
-
----
-
-### 3. Auth Middleware Tests
-
-Ensure backend auth middleware remains enabled as a regression guard.
-
-#### Test: Program_Should_Enforce_Auth_Middleware
-
-```csharp
-[Fact]
-public void BackendFeatures_ShouldBeIndependent()
-{
-    // Arrange
-    source.ShouldContain("UseAuthentication()");
-    source.ShouldContain("UseAuthorization()");
-    source.ShouldContain("AddJwtBearer");
-}
-```
-
-**Enforces**:
-```
-✅ Health feature can use Infrastructure
-❌ Health feature cannot use AiPing feature
-✅ AiPing feature can use Infrastructure
-❌ AiPing feature cannot use Health feature
-```
-
-**Why it matters**:
-- Prevents tangled, hard-to-understand dependencies
-- Supports adding/removing/modifying features independently
-- Enables parallel development on different features
-
----
-
-## Running Tests
-
-### From Command Line
+Run the suite:
 
 ```bash
-# Run all tests
-dotnet test azure-aca-aspire-ai-starter.sln
-
-# Run architecture tests only
 dotnet test src/Backend.Tests/Backend.Tests.csproj
-
-# Run with verbose output
-dotnet test src/Backend.Tests/Backend.Tests.csproj --logger "console;verbosity=detailed"
 ```
 
-### From Visual Studio / VS Code
+## What Is Covered
 
-1. Open Test Explorer: **View → Test Explorer** (or `Ctrl+E, T`)
-2. Run tests:
-   - **Run All**: Click the play icon
-   - **Run Category**: Right-click `DependencyArchitectureTests`
-   - **Run Single Test**: Right-click individual test
+### Dependency & structure (`DependencyArchitectureTests`)
 
-### In GitHub Actions
+- `Backend_Should_Contain_Expected_Feature_Slices` — verifies the `Health`, `AiPing`, `Customers`, `DocumentIngestion`, and `Chat` slice files exist.
+- `Features_Should_Not_Depends_On_Other_Features` — scans feature sources for cross-feature `using` statements and fails on any coupling between slices.
+- `Program_Should_Enforce_Auth_Middleware` — asserts `Program.cs` wires `UseAuthentication()`, `UseAuthorization()`, `UseRateLimiter()`, and `AddEntraAuth`, and that `EntraAuthSetup` calls `AddJwtBearer`.
 
-Tests run automatically in the `validate` job:
+### Auth behavior (`AuthIntegrationTests`)
 
-```yaml
-- name: Run Architecture Tests
-  run: dotnet test src/Backend.Tests/Backend.Tests.csproj --configuration Release --no-build
-```
+- Health endpoint is anonymous.
+- Protected endpoints return `401` without a token, `200` with a valid token.
+- Scope-protected endpoints return `403` without the required scope, `200` with it.
 
----
+### Endpoint contracts (`ApiEndpointIntegrationTests`)
 
-## Test Failure Examples
+- Chat validation (`400` when message missing or docs-mode search unconfigured), general-mode `200` envelope, and docs-mode `200` with citations using a controlled local-retrieval fake.
+- Upload/signed-URL validation (`400` for unconfigured pipeline, non-multipart content, or unsupported file extensions).
+- Ingestion trigger/status auth enforcement (`401` unauthenticated) and authenticated happy-path (`202` Accepted + current state).
 
-### Example 1: Accidentally Importing Frontend
+### Pipeline & config guards
 
-**Test**: `BackendProject_ShouldNotHaveDependencyOnFrontend`  
-**Failure**: If someone adds `using AcaAspireAiTemplate.Frontend;` to backend code
+- `ProgramPipelineIntegrationTests` — runs the real program pipeline to confirm anonymous health, `401` on protected customers without a token, and reachable endpoints when Entra auth is disabled.
+- `ValidationAndConfigGuardTests` — Entra option resolution guards (disabled vs. enabled, dev vs. production) and file-name validation rules (allow-list, path-traversal, invalid characters).
 
-```
-❌ Backend should never depend on Frontend
-```
+## Extending
 
-**Fix**: Remove the import
-
----
-
-### Example 2: Missing Infrastructure Dependency
-
-**Test**: `BackendProject_ShouldHaveRequiredInfrastructureDependencies`  
-**Failure**: If `Microsoft.Data.SqlClient` NuGet package is accidentally removed
-
-```
-❌ Collection should contain "Microsoft.Data.SqlClient"
-```
-
-**Fix**: Restore the NuGet package
-
----
-
-### Example 3: Feature Coupling
-
-**Test**: `BackendFeatures_ShouldBeIndependent`  
-**Failure**: If `Health` feature imports `AiPing` feature class
-
-```
-❌ Feature 'Health' should not depend on other features. 
-   Found references: AiPing.Endpoint
-```
-
-**Fix**: Extract shared logic to Infrastructure layer instead
-
----
-
-## Extending Architecture Tests
-
-### Add a New Test
-
-When adding architectural rules, create a new `[Fact]` method:
-
-```csharp
-[Fact]
-public void SomeNewArchitecturalRule()
-{
-    // Arrange: Prepare data
-    var types = GetRelevantTypes();
-    
-    // Act: Perform check
-    var violations = PerformCheck(types);
-    
-    // Assert: Verify expectation
-    violations.ShouldBeEmpty("Description of the rule");
-}
-```
-
-### Example: Ensure All Endpoints Have Descriptive Names
-
-```csharp
-[Fact]
-public void AllEndpointClasses_ShouldFollowNamingConvention()
-{
-    var endpointTypes = BackendAssembly.GetTypes()
-        .Where(t => t.Name.EndsWith("Endpoint"))
-        .ToList();
-    
-    var invalidNames = endpointTypes
-        .Where(t => !t.Name.StartsWith("Get") && 
-                    !t.Name.StartsWith("Post") && 
-                    !t.Name.StartsWith("Put") && 
-                    !t.Name.StartsWith("Delete"))
-        .ToList();
-    
-    invalidNames.ShouldBeEmpty("Endpoints should follow verb-based naming");
-}
-```
-
----
-
-## Best Practices
-
-### ✅ Do
-
-- Write tests for critical architectural rules
-- Keep tests focused on one concern
-- Use clear, descriptive test names
-- Include comments explaining the "why"
-
-### ❌ Don't
-
-- Over-test implementation details
-- Create tests that are brittle or hard to maintain
-- Test framework behavior (test your code, not .NET)
-- Create tests that fail due to naming conventions only
-
----
-
-## Integration with DDD
-
-For projects using Domain-Driven Design (DDD), consider adding tests for:
-
-1. **Aggregate Root Consistency**
-   ```csharp
-   [Fact]
-   public void AggregateRoots_ShouldNotReferenceDomainEvents()
-   {
-       // Ensure proper event handling pattern
-   }
-   ```
-
-2. **Value Object Immutability**
-   ```csharp
-   [Fact]
-   public void ValueObjects_ShouldHaveNoSetterProperties()
-   {
-       // All properties should be init-only
-   }
-   ```
-
-3. **Bounded Context Isolation**
-   ```csharp
-   [Fact]
-   public void OrderContext_ShouldNotDependOnCustomerContext()
-   {
-       // Enforce bounded context boundaries
-   }
-   ```
-
----
-
-## References
-
-- [xUnit Documentation](https://xunit.net/)
-- [Shouldly GitHub](https://github.com/shouldly/shouldly)
-- [Vertical Slice Architecture](https://jimmybogard.com/vertical-slice-architecture/)
-- [Domain-Driven Design (Evans)](https://www.domainlanguage.com/ddd/)
-- [Clean Architecture (Martin)](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
-
----
-
-## Troubleshooting
-
-### ❌ Tests fail after architectural changes
-
-**Solution**: Update the test to match the new architecture, then verify the design is intentional
-
-### ❌ "System.Reflection" errors in tests
-
-**Solution**: Ensure test is only checking public/internal members using appropriate `BindingFlags`
-
-### ❌ Performance issues when running large test suites
-
-**Solution**: Cache reflection results or consider splitting tests into focused categories
+Add a test class under `src/Backend.Tests/` — it is picked up automatically by the build and CI/CD. Keep new architecture assertions source-level (path/string checks) and behavioral assertions integration-style via `WebApplicationFactory`.

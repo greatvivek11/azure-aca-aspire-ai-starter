@@ -2,112 +2,162 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			"label": "setup: install all extensions",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				".vscode/install-extensions.sh"
+			],
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			},
+			"runOptions": {
+				"runOn": "folderOpen"
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "tools: install Azure CLI",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-c",
+				"command -v az >/dev/null && echo \"[info] Azure CLI already installed\" || (echo \"Installing Azure CLI via Homebrew...\" && brew install azure-cli)"
+			],
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			},
+			"runOptions": {
+				"runOn": "folderOpen"
+			},
+			"problemMatcher": [],
+			"linux": {
+				"args": [
+					"-c",
+					"command -v az >/dev/null || (echo 'Installing Azure CLI...' && curl -sL https://aka.ms/InstallAzureCLIDeb | bash) || echo '[info] Azure CLI install skipped'"
+				]
+			}
+		},
+		{
+			"label": "tools: install Azure Developer CLI (azd)",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-c",
+				"command -v azd >/dev/null && echo \"[info] azd already installed\" || (echo \"Installing Azure Developer CLI...\" && curl -fsSL https://aka.ms/install-azd.sh | bash)"
+			],
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			},
+			"runOptions": {
+				"runOn": "folderOpen"
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "setup: install all tools",
+			"type": "shell",
+			"command": "echo",
+			"args": [
+				"Setting up Azure CLI and azd (devcontainer parity)..."
+			],
+			"dependsOn": [
+				"tools: install Azure CLI",
+				"tools: install Azure Developer CLI (azd)"
+			],
+			"presentation": {
+				"reveal": "silent"
+			},
+			"runOptions": {
+				"runOn": "folderOpen"
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "npm: install frontend",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"ci"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/src/frontend"
+			},
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			},
+			"runOptions": {
+				"runOn": "folderOpen"
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "dotnet: restore backend",
+			"type": "shell",
+			"command": "dotnet",
+			"args": [
+				"restore",
+				"${workspaceFolder}/src/backend/Backend.csproj"
+			],
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			},
+			"runOptions": {
+				"runOn": "folderOpen"
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "dotnet: restore worker",
+			"type": "shell",
+			"command": "dotnet",
+			"args": [
+				"restore",
+				"${workspaceFolder}/src/worker/Worker.csproj"
+			],
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			},
+			"runOptions": {
+				"runOn": "folderOpen"
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "setup: install all dependencies",
+			"type": "shell",
+			"command": "echo",
+			"args": [
+				"Installing frontend and backend dependencies..."
+			],
+			"dependsOn": [
+				"npm: install frontend",
+				"dotnet: restore backend",
+				"dotnet: restore worker"
+			],
+			"presentation": {
+				"reveal": "silent"
+			},
+			"problemMatcher": []
+		},
+		{
 			"label": "build",
 			"command": "dotnet",
 			"type": "process",
 			"args": [
 				"build",
+				"${workspaceFolder}/azure-aca-aspire-ai-starter.sln",
 				"/property:GenerateFullPaths=true",
 				"/consoleloggerparameters:NoSummary;ForceNoAlign"
 			],
-			"problemMatcher": "$msCompile"
-		},
-		{
-			"type": "docker-build",
-			"label": "docker-build: debug",
-			"dependsOn": [
-				"build"
-			],
-			"dockerBuild": {
-				"tag": "acaaspireaistarter:dev",
-				"target": "base",
-				"dockerfile": "${workspaceFolder}/src/aspire/Dockerfile",
-				"context": "${workspaceFolder}",
-				"pull": true
-			},
-			"netCore": {
-				"appProject": "${workspaceFolder}/src/aspire/aspire.csproj"
-			}
-		},
-		{
-			"type": "docker-build",
-			"label": "docker-build: release",
-			"dependsOn": [
-				"build"
-			],
-			"dockerBuild": {
-				"tag": "acaaspireaistarter:latest",
-				"dockerfile": "${workspaceFolder}/src/aspire/Dockerfile",
-				"context": "${workspaceFolder}",
-				"platform": {
-					"os": "linux",
-					"architecture": "amd64"
-				},
-				"pull": true
-			},
-			"netCore": {
-				"appProject": "${workspaceFolder}/src/aspire/aspire.csproj"
-			}
-		},
-		{
-			"type": "docker-run",
-			"label": "docker-run: debug",
-			"dependsOn": [
-				"docker-build: debug"
-			],
-			"dockerRun": {},
-			"netCore": {
-				"appProject": "${workspaceFolder}/src/aspire/aspire.csproj",
-				"enableDebugging": true
-			}
-		},
-		{
-			"type": "docker-run",
-			"label": "docker-run: release",
-			"dependsOn": [
-				"docker-build: release"
-			],
-			"dockerRun": {},
-			"netCore": {
-				"appProject": "${workspaceFolder}/src/aspire/aspire.csproj"
-			}
-		},
-		{
-			"label": "setup-dev-tools",
-			"type": "shell",
-			"command": "bash",
-			"args": [
-				"${workspaceFolder}/scripts/setup-dev-tools.sh"
-			],
-			"problemMatcher": []
-		},
-		{
-			"label": "frontend-lint",
-			"type": "shell",
-			"command": "npm",
-			"args": [
-				"run",
-				"lint"
-			],
-			"options": {
-				"cwd": "${workspaceFolder}/src/frontend"
-			},
-			"problemMatcher": []
-		},
-		{
-			"label": "backend-tests",
-			"type": "shell",
-			"command": "dotnet",
-			"args": [
-				"test",
-				"${workspaceFolder}/src/Backend.Tests/Backend.Tests.csproj"
-			],
-			"problemMatcher": "$msCompile"
-		},
-		{
-			"label": "noop",
-			"type": "shell",
-			"command": "true"
+			"problemMatcher": "$msCompile",
+			"dependsOn": "setup: install all dependencies"
 		},
 		{
 			"label": "publish",
@@ -115,6 +165,7 @@
 			"type": "process",
 			"args": [
 				"publish",
+				"${workspaceFolder}/azure-aca-aspire-ai-starter.sln",
 				"/property:GenerateFullPaths=true",
 				"/consoleloggerparameters:NoSummary;ForceNoAlign"
 			],
@@ -126,9 +177,28 @@
 			"type": "process",
 			"args": [
 				"watch",
-				"run"
+				"run",
+				"--project",
+				"${workspaceFolder}/src/aspire/aspire.csproj"
 			],
+			"isBackground": true,
 			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "validate: extensions in sync",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				".vscode/validate-extensions-sync.sh"
+			],
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			},
+			"runOptions": {
+				"runOn": "folderOpen"
+			},
+			"problemMatcher": []
 		}
 	]
 }

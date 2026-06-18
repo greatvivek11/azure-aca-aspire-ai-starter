@@ -68,19 +68,16 @@ var frontendMode = (Environment.GetEnvironmentVariable("ASPIRE_FRONTEND_MODE") ?
     .Trim()
     .ToLowerInvariant();
 var sqlSaPassword = "P@ssw0rd";
-var sqlImage = Environment.GetEnvironmentVariable("SQL_IMAGE");
-var resolvedSqlImage = string.IsNullOrWhiteSpace(sqlImage)
-    ? "mcr.microsoft.com/mssql/server:2022-latest"
-    : sqlImage;
+var sqlImage = Environment.GetEnvironmentVariable("SQL_IMAGE") ?? "mcr.microsoft.com/azure-sql-edge:latest";
 
 // Local dependency containers are orchestrated by Aspire for host/devcontainer parity.
-var sql = builder.AddContainer("sql", resolvedSqlImage)
+var sql = builder.AddContainer("sql", sqlImage)
     .WithEnvironment("ACCEPT_EULA", "Y")
     .WithEnvironment("MSSQL_PID", "Developer")
     .WithEnvironment("SA_PASSWORD", sqlSaPassword)
     .WithEnvironment("MSSQL_SA_PASSWORD", sqlSaPassword)
     .WithEndpoint(name: "tcp", port: 1433, targetPort: 1433)
-    .WithVolume("mssql-data-v2", "/var/opt/mssql");
+    .WithVolume("mssql-data-v1", "/var/opt/mssql");
 
 var redis = builder.AddContainer("redis", "redis:7-alpine")
     .WithEndpoint(name: "tcp", port: 6379, targetPort: 6379)

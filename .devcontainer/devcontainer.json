@@ -21,6 +21,7 @@
 	},
 	"onCreateCommand": "n=1; until dotnet new install Aspire.ProjectTemplates --force; do [ $n -ge 3 ] && { echo '[warn] Aspire templates not installed after retries; continuing.'; break; }; echo \"[warn] template install attempt $n failed; retrying in 5s...\"; n=$((n+1)); sleep 5; done",
 	"postCreateCommand": "bash .devcontainer/install-dev-tools.sh && export SSL_CERT_DIR=\"$HOME/.aspnet/dev-certs/trust:/usr/lib/ssl/certs\" && dotnet dev-certs https --trust",
+	"postAttachCommand": "bash .devcontainer/install-vscode-extensions.sh",
 	"postStartCommand": "export SSL_CERT_DIR=\"$HOME/.aspnet/dev-certs/trust:/usr/lib/ssl/certs\" && dotnet dev-certs https --trust",
 	"customizations": {
 		"vscode": {
@@ -48,9 +49,7 @@
 				"ms-azuretools.vscode-azureresourcegroups",
 				"github.vscode-github-actions",
 				"dbaeumer.vscode-eslint",
-				"biomejs.biome",
-				"github.copilot",
-				"github.copilot-chat"
+				"biomejs.biome"
 			]
 		}
 	},

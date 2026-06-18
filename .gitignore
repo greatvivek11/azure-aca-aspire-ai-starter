@@ -4,6 +4,8 @@
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+!.vscode/install-extensions.sh
+!.vscode/validate-extensions-sync.sh
 *.code-workspace
 
 # User-specific files

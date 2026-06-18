@@ -9,9 +9,7 @@
         "ms-azuretools.vscode-azureresourcegroups",
         "github.vscode-github-actions",
         "dbaeumer.vscode-eslint",
-        "biomejs.biome",
-        "github.copilot",
-        "github.copilot-chat"
+        "biomejs.biome"
     ],
     "unwantedRecommendations": [
         "ms-python.python",

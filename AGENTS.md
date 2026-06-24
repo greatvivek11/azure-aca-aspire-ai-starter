@@ -21,8 +21,10 @@ This repository is a cloud-native AI application with four main code areas under
 ## Build And Test
 - Build the .NET solution from the repo root with `dotnet build azure-aca-aspire-ai-starter.sln`.
 - Run backend architecture tests with `dotnet test src/Backend.Tests/Backend.Tests.csproj`.
+- Setup automation behavior is guarded by `SetupAutomationGuardTests` in `src/Backend.Tests/SetupAutomationGuardTests.cs`; keep these passing when changing setup scripts, `.vscode/tasks.json`, or `.gitignore` allowlist entries.
 - Frontend commands should run from `src/frontend` and use npm because `package-lock.json` is present.
 - For local full-stack runs, prefer the Aspire host in `src/aspire`.
+- Local one-click onboarding depends on folder-open tasks in `.vscode/tasks.json` (env defaults, Docker check, native llama.cpp setup, readiness validation). Preserve task ordering when editing these flows.
 
 ## Editing Conventions
 - Keep changes minimal and scoped to the user request.

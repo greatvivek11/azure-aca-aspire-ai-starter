@@ -5,9 +5,10 @@ namespace AcaAspireAiTemplate.Backend.Infrastructure.Startup;
 
 public sealed record BackendRuntimeOptions(
     string AiMode,
-    string OllamaBaseUrl,
-    string OllamaChatModel,
-    string OllamaEmbedModel,
+    string LocalLlmBaseUrl,
+    string LocalLlmEmbedBaseUrl,
+    string LocalLlmChatModel,
+    string LocalLlmEmbedModel,
     string QdrantUrl,
     string QdrantCollection,
     AzureOpenAiRuntimeSettings? AzureOpenAiSettings,
@@ -22,6 +23,12 @@ public sealed record BackendRuntimeOptions(
     string SearchIndexName,
     string? SearchApiKey,
     bool UseManagedIdentityForSearch,
+    bool LocalRagFastResponse,
+    int LocalRagTopK,
+    int LocalRagMaxContextCharacters,
+    int LocalRagMaxChunkCharacters,
+    int LocalLlmChatTimeoutSeconds,
+    int LocalLlmChatMaxTokens,
     string StorageAccountName,
     string StorageAuthMode,
     string EmbeddingModelId,
@@ -32,9 +39,10 @@ public sealed record BackendRuntimeOptions(
     public static BackendRuntimeOptions FromConfiguration(IConfiguration configuration)
     {
         var aiMode = (Environment.GetEnvironmentVariable("AI_MODE") ?? "azure").Trim().ToLowerInvariant();
-        var ollamaBaseUrl = (Environment.GetEnvironmentVariable("OLLAMA_BASE_URL") ?? "http://ollama:11434").Trim();
-        var ollamaChatModel = (Environment.GetEnvironmentVariable("OLLAMA_CHAT_MODEL") ?? "gemma3:4b-it-qat").Trim();
-        var ollamaEmbedModel = (Environment.GetEnvironmentVariable("OLLAMA_EMBED_MODEL") ?? "nomic-embed-text").Trim();
+        var localLlmBaseUrl = (Environment.GetEnvironmentVariable("LLAMA_CPP_BASE_URL") ?? "http://host.docker.internal:8082").Trim();
+        var localLlmEmbedBaseUrl = (Environment.GetEnvironmentVariable("LLAMA_CPP_EMBED_BASE_URL") ?? "http://host.docker.internal:8083").Trim();
+        var localLlmChatModel = (Environment.GetEnvironmentVariable("LLAMA_CPP_CHAT_MODEL") ?? "Qwen/Qwen2.5-0.5B-Instruct").Trim();
+        var localLlmEmbedModel = (Environment.GetEnvironmentVariable("LLAMA_CPP_EMBED_MODEL") ?? "nomic-embed-text").Trim();
         var qdrantUrl = (Environment.GetEnvironmentVariable("QDRANT_URL") ?? "http://qdrant:6333").Trim();
         var qdrantCollection = (Environment.GetEnvironmentVariable("QDRANT_COLLECTION") ?? "documents").Trim();
 
@@ -62,13 +70,23 @@ public sealed record BackendRuntimeOptions(
             "managed-identity",
             StringComparison.OrdinalIgnoreCase);
 
+        var localRagFastResponse = string.Equals(
+            Environment.GetEnvironmentVariable("LOCAL_RAG_FAST_RESPONSE"),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
+        var localRagTopK = ReadClampedInt("LOCAL_RAG_TOP_K", 3, 1, 5);
+        var localRagMaxContextCharacters = ReadClampedInt("LOCAL_RAG_MAX_CONTEXT_CHARS", 1800, 500, 6000);
+        var localRagMaxChunkCharacters = ReadClampedInt("LOCAL_RAG_MAX_CHUNK_CHARS", 700, 250, 2000);
+        var localLlmChatTimeoutSeconds = ReadClampedInt("LLAMA_CPP_CHAT_TIMEOUT_SECONDS", 600, 30, 900);
+        var localLlmChatMaxTokens = ReadClampedInt("LLAMA_CPP_CHAT_MAX_TOKENS", 160, 32, 512);
+
         var storageAccountName = Environment.GetEnvironmentVariable("AZURE_STORAGE_ACCOUNT_NAME") ?? string.Empty;
         var storageAuthMode = (Environment.GetEnvironmentVariable("AZURE_STORAGE_AUTH_MODE") ?? "managed-identity")
             .Trim()
             .ToLowerInvariant();
 
         var embeddingModelId = (aiMode == "local"
-            ? Environment.GetEnvironmentVariable("OLLAMA_EMBED_MODEL") ?? "nomic-embed-text"
+            ? Environment.GetEnvironmentVariable("LLAMA_CPP_EMBED_MODEL") ?? "nomic-embed-text"
             : Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_MODEL_ID") ?? string.Empty).Trim();
 
         if (string.IsNullOrWhiteSpace(embeddingModelId) && aiMode == "azure")
@@ -77,7 +95,7 @@ public sealed record BackendRuntimeOptions(
         }
 
         var embeddingDimensions = aiMode == "local"
-            ? (int.TryParse(Environment.GetEnvironmentVariable("OLLAMA_EMBED_DIMENSIONS"), out var parsedLocalDimensions)
+            ? (int.TryParse(Environment.GetEnvironmentVariable("LLAMA_CPP_EMBED_DIMENSIONS"), out var parsedLocalDimensions)
                 ? parsedLocalDimensions
                 : 768)
             : (int.TryParse(Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_DIMENSIONS"), out var parsedDimensions)
@@ -94,9 +112,10 @@ public sealed record BackendRuntimeOptions(
 
         return new BackendRuntimeOptions(
             aiMode,
-            ollamaBaseUrl,
-            ollamaChatModel,
-            ollamaEmbedModel,
+            localLlmBaseUrl,
+            localLlmEmbedBaseUrl,
+            localLlmChatModel,
+            localLlmEmbedModel,
             qdrantUrl,
             qdrantCollection,
             azureOpenAiSettings,
@@ -111,12 +130,25 @@ public sealed record BackendRuntimeOptions(
             searchIndexName,
             searchApiKey,
             useManagedIdentityForSearch,
+            localRagFastResponse,
+            localRagTopK,
+            localRagMaxContextCharacters,
+            localRagMaxChunkCharacters,
+            localLlmChatTimeoutSeconds,
+            localLlmChatMaxTokens,
             storageAccountName,
             storageAuthMode,
             embeddingModelId,
             embeddingDimensions,
             uploadUrlExpiryMinutes,
             uploadMaxRequestBytes);
+    }
+
+    private static int ReadClampedInt(string name, int defaultValue, int minValue, int maxValue)
+    {
+        return int.TryParse(Environment.GetEnvironmentVariable(name), out var value)
+            ? Math.Clamp(value, minValue, maxValue)
+            : defaultValue;
     }
 
     private static AzureOpenAiRuntimeSettings ResolveAzureOpenAiSettings(IConfiguration configuration)

@@ -73,7 +73,7 @@ public class ApiEndpointIntegrationTests
     [Fact]
     public async Task Chat_Docs_Mode_Should_Return_200_With_Citations_When_Local_Search_Returns_Context()
     {
-        await using var app = await BuildApiTestAppWithDocsModeConfiguredAsync();
+        await using var app = await BuildApiTestAppWithDocsModeConfiguredAsync(localRagFastResponse: false);
         var client = app.GetTestClient();
         client.DefaultRequestHeaders.Add("x-test-auth", "true");
 
@@ -85,6 +85,29 @@ public class ApiEndpointIntegrationTests
 
         var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         payload.RootElement.GetProperty("answer").GetString().ShouldBe("stubbed-answer");
+
+        var citations = payload.RootElement.GetProperty("citations");
+        citations.ValueKind.ShouldBe(JsonValueKind.Array);
+        citations.GetArrayLength().ShouldBeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task Chat_Docs_Mode_Should_Return_Fast_Local_Rag_Response_When_Configured()
+    {
+        await using var app = await BuildApiTestAppWithDocsModeConfiguredAsync(localRagFastResponse: true);
+        var client = app.GetTestClient();
+        client.DefaultRequestHeaders.Add("x-test-auth", "true");
+
+        using var response = await client.PostAsync(
+            "/v1/chat",
+            new StringContent("{\"message\":\"summarize the document\",\"mode\":\"docs\"}", Encoding.UTF8, "application/json"));
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var answer = payload.RootElement.GetProperty("answer").GetString();
+        answer.ShouldNotBeNull();
+        answer.ShouldContain("This is indexed context from the document.");
 
         var citations = payload.RootElement.GetProperty("citations");
         citations.ValueKind.ShouldBe(JsonValueKind.Array);
@@ -207,7 +230,7 @@ public class ApiEndpointIntegrationTests
         return await BuildApiTestAppInternalAsync(uploadConfigured: true);
     }
 
-    private static async Task<WebApplication> BuildApiTestAppWithDocsModeConfiguredAsync()
+    private static async Task<WebApplication> BuildApiTestAppWithDocsModeConfiguredAsync(bool localRagFastResponse = true)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
@@ -244,14 +267,15 @@ public class ApiEndpointIntegrationTests
             OpenAiAuthMode: "api-key",
             EmbeddingModelId: "nomic-embed-text",
             EmbeddingDimensions: 768,
-            OllamaBaseUrl: "http://local-ollama",
+            LocalLlmEmbedBaseUrl: "http://local-llm",
             QdrantUrl: "http://local-qdrant",
             QdrantCollection: "documents",
             SearchEndpoint: string.Empty,
             SearchIndexName: string.Empty,
             SearchApiKey: null,
             ManagedIdentityClientId: null,
-            UseManagedIdentity: false);
+            UseManagedIdentity: false,
+            LocalRagFastResponse: localRagFastResponse);
 
         var ingestionOptions = new DocumentIngestionOptions(
             SqlConnectionString: "Server=tcp:dummy,1433;Initial Catalog=dummy;User Id=dummy;Password=dummy;",
@@ -308,7 +332,7 @@ public class ApiEndpointIntegrationTests
             OpenAiAuthMode: "api-key",
             EmbeddingModelId: "text-embedding-3-small",
             EmbeddingDimensions: 1536,
-            OllamaBaseUrl: "http://localhost:11434",
+            LocalLlmEmbedBaseUrl: "http://localhost:8080",
             QdrantUrl: "",
             QdrantCollection: "",
             SearchEndpoint: "",
@@ -441,19 +465,11 @@ public class ApiEndpointIntegrationTests
         {
             var path = request.RequestUri?.AbsolutePath ?? string.Empty;
 
-            if (path.EndsWith("/api/pull", StringComparison.OrdinalIgnoreCase))
+            if (path.EndsWith("/v1/embeddings", StringComparison.OrdinalIgnoreCase))
             {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
                 {
-                    Content = new StringContent("{}", Encoding.UTF8, "application/json")
-                });
-            }
-
-            if (path.EndsWith("/api/embeddings", StringComparison.OrdinalIgnoreCase))
-            {
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent("{\"embedding\":[0.12,0.34,0.56]}", Encoding.UTF8, "application/json")
+                    Content = new StringContent("{\"data\":[{\"embedding\":[0.12,0.34,0.56]}]}", Encoding.UTF8, "application/json")
                 });
             }
 

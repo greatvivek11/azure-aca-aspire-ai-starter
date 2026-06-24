@@ -40,6 +40,27 @@ const localAuthScriptPath = path.join(
 );
 const aspireEnvPath = path.join(repoRoot, "src", "aspire", ".env");
 
+function toGitBashPath(filePath) {
+	return filePath.replace(/^[A-Za-z]:/, (drive) => `/${drive[0].toLowerCase()}`).replace(/\\/g, "/");
+}
+
+function findWindowsBash() {
+	const candidates = [
+		"C:\\Program Files\\Git\\bin\\bash.exe",
+		"C:\\Program Files\\Git\\usr\\bin\\bash.exe",
+		"C:\\Program Files (x86)\\Git\\bin\\bash.exe",
+		"C:\\Program Files (x86)\\Git\\usr\\bin\\bash.exe",
+	];
+
+	for (const candidate of candidates) {
+		if (existsSync(candidate)) {
+			return candidate;
+		}
+	}
+
+	return null;
+}
+
 function parseDotEnv(text) {
 	const values = {};
 	for (const rawLine of text.split(/\r?\n/)) {
@@ -58,12 +79,23 @@ function parseDotEnv(text) {
 	return values;
 }
 
-function runSync(command, args) {
+function runSync(command, args, options = {}) {
 	try {
-		return spawnSync(command, args, { stdio: "pipe", encoding: "utf8" });
+		return spawnSync(command, args, { stdio: "pipe", encoding: "utf8", ...options });
 	} catch {
 		return { status: 1, stdout: "", stderr: "command failed" };
 	}
+}
+
+function runAz(args) {
+	// On Windows, Azure CLI ships as az.cmd which spawnSync cannot execute
+	// directly. Routing through `cmd /c az` resolves it from PATH (PATHEXT)
+	// without the quoting/security pitfalls of shell:true. On macOS/Linux az
+	// is a normal executable on PATH, so invoke it directly.
+	if (process.platform === "win32") {
+		return runSync("cmd", ["/c", "az", ...args]);
+	}
+	return runSync("az", args);
 }
 
 async function getLocalAuthSetupStatus() {
@@ -81,11 +113,11 @@ async function getLocalAuthSetupStatus() {
 		message: "",
 	};
 
-	const azCheck = runSync("az", ["--version"]);
+	const azCheck = runAz(["--version"]);
 	status.azInstalled = azCheck.status === 0;
 
 	if (status.azInstalled) {
-		const accountCheck = runSync("az", [
+		const accountCheck = runAz([
 			"account",
 			"show",
 			"--query",
@@ -139,8 +171,18 @@ async function getLocalAuthSetupStatus() {
 let setupInProgress = false;
 
 function runLocalAuthSetup() {
+	const isWindows = process.platform === "win32";
+	const bashCommand = isWindows ? findWindowsBash() : "bash";
+	if (isWindows && !bashCommand) {
+		return Promise.reject(
+			new Error(
+				"Git Bash was not found on Windows. Install Git for Windows so the local auth bootstrap script can run.",
+			),
+		);
+	}
+
 	return new Promise((resolve, reject) => {
-		const child = spawn("bash", [localAuthScriptPath], {
+		const child = spawn(bashCommand, [isWindows ? toGitBashPath(localAuthScriptPath) : localAuthScriptPath], {
 			cwd: repoRoot,
 			env: process.env,
 			stdio: ["ignore", "pipe", "pipe"],

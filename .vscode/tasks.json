@@ -2,6 +2,107 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			"label": "setup: ensure local AI env defaults",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				".vscode/ensure-aspire-env.sh"
+			],
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			},
+			"problemMatcher": [],
+			"windows": {
+				"command": "powershell",
+				"args": [
+					"-ExecutionPolicy", "Bypass",
+					"-File", "${workspaceFolder}\\.vscode\\ensure-aspire-env.ps1"
+				]
+			}
+		},
+		{
+			"label": "setup: ensure native llama.cpp",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				".vscode/ensure-local-llm.sh"
+			],
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			},
+			"problemMatcher": [],
+			"windows": {
+				"command": "powershell",
+				"args": [
+					"-ExecutionPolicy", "Bypass",
+					"-File", "${workspaceFolder}\\.vscode\\ensure-local-llm.ps1"
+				]
+			}
+		},
+		{
+			"label": "validate: native llama.cpp ready",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				".vscode/ensure-local-llm-ready.sh"
+			],
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			},
+			"problemMatcher": [],
+			"windows": {
+				"command": "powershell",
+				"args": [
+					"-ExecutionPolicy", "Bypass",
+					"-File", "${workspaceFolder}\\.vscode\\ensure-local-llm-ready.ps1"
+				]
+			}
+		},
+		{
+			"label": "tools: ensure Docker engine",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				".vscode/ensure-docker.sh"
+			],
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			},
+			"problemMatcher": [],
+			"windows": {
+				"command": "powershell",
+				"args": [
+					"-ExecutionPolicy", "Bypass",
+					"-File", "${workspaceFolder}\\.vscode\\ensure-docker.ps1"
+				]
+			}
+		},
+		{
+			"label": "tools: install Dapr CLI",
+			"type": "shell",
+			"command": "bash",
+			"args": [
+				"-c",
+				"command -v dapr >/dev/null && echo \"[info] Dapr CLI already installed\" || (echo \"Installing Dapr CLI...\" && curl -fsSL https://raw.githubusercontent.com/dapr/cli/master/install/install.sh | /bin/bash)"
+			],
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			},
+			"problemMatcher": [],
+			"windows": {
+				"command": "powershell",
+				"args": [
+					"-ExecutionPolicy", "Bypass",
+					"-File", "${workspaceFolder}\\.vscode\\install-dapr.ps1"
+				]
+			}
+		},
+		{
 			"label": "setup: install all extensions",
 			"type": "shell",
 			"command": "bash",
@@ -15,7 +116,14 @@
 			"runOptions": {
 				"runOn": "folderOpen"
 			},
-			"problemMatcher": []
+			"problemMatcher": [],
+			"windows": {
+				"command": "powershell",
+				"args": [
+					"-ExecutionPolicy", "Bypass",
+					"-File", "${workspaceFolder}\\.vscode\\install-extensions.ps1"
+				]
+			}
 		},
 		{
 			"label": "tools: install Azure CLI",
@@ -29,14 +137,20 @@
 				"reveal": "silent",
 				"panel": "shared"
 			},
-			"runOptions": {
-				"runOn": "folderOpen"
-			},
 			"problemMatcher": [],
 			"linux": {
 				"args": [
 					"-c",
 					"command -v az >/dev/null || (echo 'Installing Azure CLI...' && curl -sL https://aka.ms/InstallAzureCLIDeb | bash) || echo '[info] Azure CLI install skipped'"
+				]
+			},
+			"windows": {
+				"command": "powershell",
+				"args": [
+					"-ExecutionPolicy", "Bypass",
+					"-NoProfile",
+					"-Command",
+					"if (Get-Command az -ErrorAction SilentlyContinue) { Write-Host '[info] Azure CLI already installed' } else { Write-Host '[info] Azure CLI install would require manual intervention or MSI download' }"
 				]
 			}
 		},
@@ -52,22 +166,34 @@
 				"reveal": "silent",
 				"panel": "shared"
 			},
-			"runOptions": {
-				"runOn": "folderOpen"
-			},
-			"problemMatcher": []
+			"problemMatcher": [],
+			"windows": {
+				"command": "powershell",
+				"args": [
+					"-ExecutionPolicy", "Bypass",
+					"-NoProfile",
+					"-Command",
+					"if (Get-Command azd -ErrorAction SilentlyContinue) { Write-Host '[info] azd already installed' } else { Write-Host '[info] azd install would require manual intervention or installer download' }"
+				]
+			}
 		},
 		{
 			"label": "setup: install all tools",
 			"type": "shell",
 			"command": "echo",
 			"args": [
-				"Setting up Azure CLI and azd (devcontainer parity)..."
+				"Setting up Dapr, Azure CLI, azd, and local LLM (devcontainer parity)..."
 			],
 			"dependsOn": [
+				"setup: ensure local AI env defaults",
+				"tools: ensure Docker engine",
+				"setup: ensure native llama.cpp",
+				"validate: native llama.cpp ready",
+				"tools: install Dapr CLI",
 				"tools: install Azure CLI",
 				"tools: install Azure Developer CLI (azd)"
 			],
+			"dependsOrder": "sequence",
 			"presentation": {
 				"reveal": "silent"
 			},
@@ -157,7 +283,10 @@
 				"/consoleloggerparameters:NoSummary;ForceNoAlign"
 			],
 			"problemMatcher": "$msCompile",
-			"dependsOn": "setup: install all dependencies"
+			"dependsOn": [
+				"setup: install all tools",
+				"setup: install all dependencies"
+			]
 		},
 		{
 			"label": "publish",
@@ -198,7 +327,16 @@
 			"runOptions": {
 				"runOn": "folderOpen"
 			},
-			"problemMatcher": []
+			"problemMatcher": [],
+			"windows": {
+				"command": "powershell",
+				"args": [
+					"-ExecutionPolicy", "Bypass",
+					"-NoProfile",
+					"-Command",
+					"Write-Host '[info] Extension sync validation skipped on Windows'"
+				]
+			}
 		}
 	]
 }

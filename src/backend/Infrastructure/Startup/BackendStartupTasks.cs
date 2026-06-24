@@ -1,8 +1,6 @@
 using Azure.Storage.Blobs;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
-using System.Text;
-using System.Text.Json;
 
 namespace AcaAspireAiTemplate.Backend.Infrastructure.Startup;
 
@@ -67,53 +65,6 @@ END
         var containerClient = blobServiceClient.GetBlobContainerClient(storageContainerName);
         await containerClient.CreateIfNotExistsAsync();
         logger.LogInformation("Local blob storage container is ready. Container={ContainerName}", storageContainerName);
-    }
-
-    public static async Task WarmLocalOllamaModelsAsync(
-        string aiMode,
-        IHttpClientFactory httpClientFactory,
-        string ollamaBaseUrl,
-        IReadOnlyList<string> modelNames,
-        ILogger logger)
-    {
-        if (!string.Equals(aiMode, "local", StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        var uniqueModelNames = modelNames
-            .Where(modelName => !string.IsNullOrWhiteSpace(modelName))
-            .Select(modelName => modelName.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (uniqueModelNames.Length == 0)
-        {
-            logger.LogWarning("Skipping Ollama model warmup because no local model names were configured.");
-            return;
-        }
-
-        using var client = httpClientFactory.CreateClient();
-        foreach (var modelName in uniqueModelNames)
-        {
-            logger.LogInformation("Preloading Ollama model {ModelName}.", modelName);
-            using var payload = new StringContent(
-                JsonSerializer.Serialize(new { name = modelName, stream = false }),
-                Encoding.UTF8,
-                "application/json");
-            using var response = await client.PostAsync($"{ollamaBaseUrl.TrimEnd('/')}/api/pull", payload);
-            if (!response.IsSuccessStatusCode)
-            {
-                var responseBody = await response.Content.ReadAsStringAsync();
-                logger.LogWarning(
-                    "Skipping Ollama model warmup for {ModelName}. StatusCode={StatusCode}, Response={ResponseBody}",
-                    modelName,
-                    (int)response.StatusCode,
-                    string.IsNullOrWhiteSpace(responseBody) ? "<empty>" : responseBody);
-                continue;
-            }
-
-            logger.LogInformation("Ollama model {ModelName} is ready.", modelName);
-        }
     }
 
     public static async Task RunStartupStepAsync(string stepName, Func<Task> action, ILogger logger)

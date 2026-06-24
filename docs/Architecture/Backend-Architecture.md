@@ -41,7 +41,7 @@ The current backend is an operational foundation with chat, RAG, and ingestion s
 * `Program.cs` is a thin composition root: service registration, OpenTelemetry wiring, Dapr setup, auth, and startup tasks are delegated to `Infrastructure/` modules.
 * Feature endpoints are extracted into slices under `Features/`: `Health`, `AiPing`, `Chat`, `Customers`, and `DocumentIngestion`.
 * Data access uses raw `SqlConnection` / `SqlCommand` (no EF Core); schema is initialized from `Infrastructure/Sql/seed.sql` during startup.
-* AI integration is abstracted behind `IAiService`, implemented by `OllamaChatService` (local mode) and `FoundryChatService` (azure mode), selected via the `AI_MODE` environment variable.
+* AI integration is abstracted behind `IAiService`, implemented by `LlamaCppChatService` (local mode) and `FoundryChatService` (azure mode), selected via the `AI_MODE` environment variable.
 * Dapr is enabled for service invocation; the backend triggers the worker for ingestion and registers a subscribe handler for status updates.
 
 ## 🔍 Architectural Refinements
@@ -49,7 +49,7 @@ The current backend is an operational foundation with chat, RAG, and ingestion s
 While VSA provides the target organizational structure, the current backend uses a smaller set of refinements that can expand over time.
 
 1. **Shared Infrastructure Folder**: The `Infrastructure` folder houses cross-cutting concerns: AI integration, Entra auth, logging, startup tasks, and SQL seed scripts.
-2. **AI Service Abstraction**: `IAiService` with `OllamaChatService` and `FoundryChatService` isolates the chat/embedding provider from feature endpoints.
+2. **AI Service Abstraction**: `IAiService` with `LlamaCppChatService` and `FoundryChatService` isolates the chat/embedding provider from feature endpoints.
 3. **Dapr Integration**: The service is Dapr-enabled; the backend invokes the worker via Dapr service invocation for ingestion.
 4. **SQL Access Simplicity**: The implementation uses direct ADO.NET via a DI-backed store abstraction rather than introducing EF Core.
 5. **Event-Driven Extension Path**: Aspire + Dapr provide a path toward broader pub/sub workflows in later phases.
@@ -71,7 +71,7 @@ While VSA provides the target organizational structure, the current backend uses
 ├── Infrastructure/
 │   ├── Ai/
 │   │   ├── IAiService.cs
-│   │   ├── OllamaChatService.cs
+│   │   ├── LlamaCppChatService.cs
 │   │   ├── FoundryChatService.cs
 │   │   ├── AzureOpenAiOptions.cs
 │   │   └── AzureOpenAiRuntimeSettings.cs
@@ -96,7 +96,7 @@ While VSA provides the target organizational structure, the current backend uses
 
 3. **`Infrastructure/`**:
 
-   * **Ai**: `IAiService` with `OllamaChatService` (local) and `FoundryChatService` (azure).
+   * **Ai**: `IAiService` with `LlamaCppChatService` (local) and `FoundryChatService` (azure).
    * **Auth**: Entra ID JWT bearer setup and options.
    * **Logging**: log sanitization helpers.
    * **Sql**: `seed.sql` initializes the relational schema (`Customers`, `DocumentIngestionJobs`).

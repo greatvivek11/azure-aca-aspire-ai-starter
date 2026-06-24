@@ -276,6 +276,36 @@ select {
 	max-width: 95%;
 }
 
+.chat-progress {
+	padding: 12px;
+	border: 1px solid #bfdbfe;
+	border-radius: 12px;
+	background: #eff6ff;
+	color: #1e3a8a;
+	font-size: 13px;
+}
+
+.chat-progress-row {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 8px;
+}
+
+.chat-progress-track {
+	height: 8px;
+	overflow: hidden;
+	border-radius: 999px;
+	background: #dbeafe;
+}
+
+.chat-progress-bar {
+	height: 100%;
+	border-radius: inherit;
+	background: linear-gradient(90deg, #2563eb, #0f766e);
+	transition: width 700ms ease;
+}
+
 .citations {
 	margin-top: 8px;
 	display: flex;

@@ -68,8 +68,7 @@ app.Logger.LogInformation(
 
 if (string.Equals(runtimeOptions.AiMode, "local", StringComparison.OrdinalIgnoreCase))
 {
-    using var modelWarmupClient = app.Services.GetRequiredService<IHttpClientFactory>().CreateClient();
-    await WorkerStartupTasks.WarmLocalOllamaModelsAsync(modelWarmupClient, runtimeOptions.OllamaBaseUrl, [runtimeOptions.EmbeddingModelId], app.Logger);
+    app.Logger.LogInformation("Local AI startup warmup is disabled; llama.cpp model availability is managed by local server startup configuration.");
 }
 
 if (runtimeOptions.IngestionConfigured)
@@ -89,7 +88,7 @@ if (runtimeOptions.IngestionConfigured)
         runtimeOptions.SearchIndexName,
         runtimeOptions.QdrantUrl,
         runtimeOptions.QdrantCollection,
-        runtimeOptions.OllamaBaseUrl,
+        runtimeOptions.LocalLlmBaseUrl,
         runtimeOptions.GetOpenAiEndpointOrFallback(),
         runtimeOptions.OpenAiApiKey,
         runtimeOptions.OpenAiAuthMode,
@@ -154,7 +153,7 @@ static async Task RunIngestionLoopAsync(
     string searchIndexName,
     string qdrantUrl,
     string qdrantCollection,
-    string ollamaBaseUrl,
+    string localLlmBaseUrl,
     Uri openAiEndpoint,
     string openAiApiKey,
     string openAiAuthMode,
@@ -194,7 +193,7 @@ static async Task RunIngestionLoopAsync(
                 searchIndexName,
                 qdrantUrl,
                 qdrantCollection,
-                ollamaBaseUrl,
+                localLlmBaseUrl,
                 openAiEndpoint,
                 openAiApiKey,
                 openAiAuthMode,
@@ -257,7 +256,7 @@ static async Task ProcessDocumentAsync(
     string searchIndexName,
     string qdrantUrl,
     string qdrantCollection,
-    string ollamaBaseUrl,
+    string localLlmBaseUrl,
     Uri openAiEndpoint,
     string openAiApiKey,
     string openAiAuthMode,
@@ -290,7 +289,8 @@ static async Task ProcessDocumentAsync(
     }
 
     await UpdateDocumentIngestionJobStatusAsync(sqlConnectionString, documentId, "Chunking", 45, null);
-    var chunks = ChunkText(extractedText, 900, 120);
+    // Keep local embedding requests comfortably below the llama.cpp batch limit.
+    var chunks = ChunkText(extractedText, 220, 40);
     if (chunks.Count == 0)
     {
         throw new InvalidOperationException("Document text could not be chunked.");
@@ -304,7 +304,7 @@ static async Task ProcessDocumentAsync(
         var embedding = await GenerateEmbeddingAsync(
             aiMode,
             chunk,
-            ollamaBaseUrl,
+            localLlmBaseUrl,
             openAiEndpoint,
             openAiApiKey,
             openAiAuthMode,
@@ -571,7 +571,7 @@ static async Task UpsertQdrantDocumentsAsync(
 static async Task<float[]> GenerateEmbeddingAsync(
     string aiMode,
     string text,
-    string ollamaBaseUrl,
+    string localLlmBaseUrl,
     Uri endpoint,
     string? apiKey,
     string openAiAuthMode,
@@ -583,14 +583,13 @@ static async Task<float[]> GenerateEmbeddingAsync(
     if (string.Equals(aiMode, "local", StringComparison.OrdinalIgnoreCase))
     {
         using var localClient = httpClientFactory.CreateClient();
-        await WorkerStartupTasks.EnsureOllamaModelPulledAsync(localClient, ollamaBaseUrl, embeddingDeployment);
         using var localPayload = new StringContent(
-            JsonSerializer.Serialize(new { model = embeddingDeployment, prompt = text }),
+            JsonSerializer.Serialize(new { model = embeddingDeployment, input = text }),
             Encoding.UTF8,
             "application/json");
-        using var localResponse = await localClient.PostAsync($"{ollamaBaseUrl.TrimEnd('/')}/api/embeddings", localPayload);
+        using var localResponse = await localClient.PostAsync($"{localLlmBaseUrl.TrimEnd('/')}/v1/embeddings", localPayload);
         localResponse.EnsureSuccessStatusCode();
-        return await ParseLocalEmbeddingAsync(localResponse);
+        return await ParseEmbeddingAsync(localResponse);
     }
 
     using var client = httpClientFactory.CreateClient();
@@ -708,17 +707,6 @@ static async Task<float[]> ParseEmbeddingAsync(HttpResponseMessage response)
     using var document = JsonDocument.Parse(json);
     return document.RootElement
         .GetProperty("data")[0]
-        .GetProperty("embedding")
-        .EnumerateArray()
-        .Select(element => element.GetSingle())
-        .ToArray();
-}
-
-static async Task<float[]> ParseLocalEmbeddingAsync(HttpResponseMessage response)
-{
-    var json = await response.Content.ReadAsStringAsync();
-    using var document = JsonDocument.Parse(json);
-    return document.RootElement
         .GetProperty("embedding")
         .EnumerateArray()
         .Select(element => element.GetSingle())

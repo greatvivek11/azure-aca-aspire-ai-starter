@@ -70,10 +70,12 @@ builder.Services.AddEntraAuth(entraAuthOptions);
 var runtimeOptions = BackendRuntimeOptions.FromConfiguration(builder.Configuration);
 builder.Services.AddSingleton<IDocumentIngestionStore>(_ => new SqlDocumentIngestionStore(runtimeOptions.SqlConnectionString));
 builder.Services.AddSingleton<IAiService>(_ => runtimeOptions.AiMode == "local"
-    ? new OllamaChatService(
+    ? new LlamaCppChatService(
         _.GetRequiredService<IHttpClientFactory>(),
-        runtimeOptions.OllamaBaseUrl,
-        runtimeOptions.OllamaChatModel)
+        runtimeOptions.LocalLlmBaseUrl,
+        runtimeOptions.LocalLlmChatModel,
+        runtimeOptions.LocalLlmChatTimeoutSeconds,
+        runtimeOptions.LocalLlmChatMaxTokens)
     : new FoundryChatService(
         _.GetRequiredService<IHttpClientFactory>(),
         runtimeOptions.AzureOpenAiSettings!,
@@ -157,38 +159,24 @@ app.MapChatEndpoint(new ChatOptions(
     runtimeOptions.OpenAiAuthMode,
     runtimeOptions.EmbeddingModelId,
     runtimeOptions.EmbeddingDimensions,
-    runtimeOptions.OllamaBaseUrl,
+    runtimeOptions.LocalLlmEmbedBaseUrl,
     runtimeOptions.QdrantUrl,
     runtimeOptions.QdrantCollection,
     runtimeOptions.SearchEndpoint,
     runtimeOptions.SearchIndexName,
     runtimeOptions.SearchApiKey,
     runtimeOptions.ManagedIdentityClientId,
-    runtimeOptions.UseManagedIdentityForSearch));
+    runtimeOptions.UseManagedIdentityForSearch,
+    runtimeOptions.LocalRagFastResponse,
+    runtimeOptions.LocalRagTopK,
+    runtimeOptions.LocalRagMaxContextCharacters,
+    runtimeOptions.LocalRagMaxChunkCharacters));
 
 app.MapGet("/", () => "ACA Aspire AI Starter Backend is running!").AllowAnonymous();
 
 if (!skipStartupTasksForTests)
 {
-    app.Lifetime.ApplicationStarted.Register(() =>
-    {
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await BackendStartupTasks.WarmLocalOllamaModelsAsync(
-                    runtimeOptions.AiMode,
-                    app.Services.GetRequiredService<IHttpClientFactory>(),
-                    runtimeOptions.OllamaBaseUrl,
-                    [runtimeOptions.OllamaChatModel, runtimeOptions.OllamaEmbedModel],
-                    app.Logger);
-            }
-            catch (Exception ex)
-            {
-                app.Logger.LogError(ex, "Background Ollama model warmup failed.");
-            }
-        });
-    });
+    app.Logger.LogInformation("Local AI startup warmup is disabled; llama.cpp model availability is managed by local server startup configuration.");
 }
 
 app.Run();

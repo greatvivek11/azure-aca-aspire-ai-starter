@@ -20,10 +20,11 @@ var azureOpenAiApiKey = Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY
 var azureOpenAiModelId = Environment.GetEnvironmentVariable("AZURE_OPENAI_MODEL_ID") ?? string.Empty;
 var azureOpenAiEndpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT") ?? string.Empty;
 var aiMode = (Environment.GetEnvironmentVariable("AI_MODE") ?? "local").Trim().ToLowerInvariant();
-var ollamaBaseUrl = Environment.GetEnvironmentVariable("OLLAMA_BASE_URL") ?? "http://ollama:11434";
-var ollamaChatModel = Environment.GetEnvironmentVariable("OLLAMA_CHAT_MODEL") ?? "gemma3:4b-it-qat";
-var ollamaEmbedModel = Environment.GetEnvironmentVariable("OLLAMA_EMBED_MODEL") ?? "nomic-embed-text";
-var ollamaEmbedDimensions = Environment.GetEnvironmentVariable("OLLAMA_EMBED_DIMENSIONS") ?? "768";
+var localLlmBaseUrl = GetEnvOrDefault("LLAMA_CPP_BASE_URL", "http://host.docker.internal:8082");
+var localLlmEmbedBaseUrl = GetEnvOrDefault("LLAMA_CPP_EMBED_BASE_URL", "http://host.docker.internal:8083");
+var localLlmChatModel = GetEnvOrDefault("LLAMA_CPP_CHAT_MODEL", "Qwen/Qwen2.5-0.5B-Instruct");
+var localLlmEmbedModel = GetEnvOrDefault("LLAMA_CPP_EMBED_MODEL", "nomic-embed-text");
+var localLlmEmbedDimensions = GetEnvOrDefault("LLAMA_CPP_EMBED_DIMENSIONS", "768");
 var qdrantUrl = Environment.GetEnvironmentVariable("QDRANT_URL") ?? "http://qdrant:6333";
 var qdrantCollection = Environment.GetEnvironmentVariable("QDRANT_COLLECTION") ?? "documents";
 var azureOpenAiAuthMode = Environment.GetEnvironmentVariable("AZURE_OPENAI_AUTH_MODE") ?? "api-key";
@@ -70,7 +71,7 @@ var frontendMode = (Environment.GetEnvironmentVariable("ASPIRE_FRONTEND_MODE") ?
 var sqlSaPassword = "P@ssw0rd";
 var sqlImage = Environment.GetEnvironmentVariable("SQL_IMAGE") ?? "mcr.microsoft.com/azure-sql-edge:latest";
 
-// Local dependency containers are orchestrated by Aspire for host/devcontainer parity.
+// Local infrastructure containers are orchestrated by Aspire; llama.cpp runs natively on the host.
 var sql = builder.AddContainer("sql", sqlImage)
     .WithEnvironment("ACCEPT_EULA", "Y")
     .WithEnvironment("MSSQL_PID", "Developer")
@@ -87,10 +88,6 @@ var azurite = builder.AddContainer("azurite", "mcr.microsoft.com/azure-storage/a
     .WithEndpoint(name: "blob", port: 10000, targetPort: 10000)
     .WithVolume("azurite-data", "/data");
 
-var ollama = builder.AddContainer("ollama", "ollama/ollama:latest")
-    .WithEndpoint(name: "http", port: 11434, targetPort: 11434)
-    .WithVolume("ollama-data", "/root/.ollama");
-
 var qdrant = builder.AddContainer("qdrant", "qdrant/qdrant:v1.12.6")
     .WithEndpoint(name: "http", port: 6333, targetPort: 6333)
     .WithVolume("qdrant-data", "/qdrant/storage");
@@ -99,12 +96,12 @@ var qdrant = builder.AddContainer("qdrant", "qdrant/qdrant:v1.12.6")
 // You can also set them through the .NET Aspire dashboard when running the app
 
 // Add existing projects with Dapr support and Dockerfiles
-var backend = builder.AddDockerfile("backend", "../backend")
+var backendBuilder = builder.AddDockerfile("backend", "../backend")
     .WaitFor(sql)
     .WaitFor(redis)
     .WaitFor(azurite)
-    .WaitFor(ollama)
-    .WaitFor(qdrant)
+    .WaitFor(qdrant);
+var backend = backendBuilder
     .WithOtlpExporter()
     .WithHttpEndpoint(name: "http", port: 8080, targetPort: 8080)
     .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions
@@ -117,10 +114,11 @@ var backend = builder.AddDockerfile("backend", "../backend")
     .WithEnvironment("AZURE_OPENAI_MODEL_ID", azureOpenAiModelId)
     .WithEnvironment("AZURE_OPENAI_ENDPOINT", azureOpenAiEndpoint)
     .WithEnvironment("AI_MODE", aiMode)
-    .WithEnvironment("OLLAMA_BASE_URL", ollamaBaseUrl)
-    .WithEnvironment("OLLAMA_CHAT_MODEL", ollamaChatModel)
-    .WithEnvironment("OLLAMA_EMBED_MODEL", ollamaEmbedModel)
-    .WithEnvironment("OLLAMA_EMBED_DIMENSIONS", ollamaEmbedDimensions)
+    .WithEnvironment("LLAMA_CPP_BASE_URL", localLlmBaseUrl)
+    .WithEnvironment("LLAMA_CPP_EMBED_BASE_URL", localLlmEmbedBaseUrl)
+    .WithEnvironment("LLAMA_CPP_CHAT_MODEL", localLlmChatModel)
+    .WithEnvironment("LLAMA_CPP_EMBED_MODEL", localLlmEmbedModel)
+    .WithEnvironment("LLAMA_CPP_EMBED_DIMENSIONS", localLlmEmbedDimensions)
     .WithEnvironment("QDRANT_URL", qdrantUrl)
     .WithEnvironment("QDRANT_COLLECTION", qdrantCollection)
     .WithEnvironment("AZURE_OPENAI_AUTH_MODE", azureOpenAiAuthMode)
@@ -147,12 +145,12 @@ var backend = builder.AddDockerfile("backend", "../backend")
     .WithEnvironment("ConnectionStrings__Redis", "redis:6379")
     .WithEnvironment("REDIS_CONNECTION_STRING", "redis:6379");
 
-var worker = builder.AddDockerfile("worker", "../worker")
+var workerBuilder = builder.AddDockerfile("worker", "../worker")
     .WaitFor(sql)
     .WaitFor(redis)
     .WaitFor(azurite)
-    .WaitFor(ollama)
-    .WaitFor(qdrant)
+    .WaitFor(qdrant);
+var worker = workerBuilder
     .WithOtlpExporter()
     .WithHttpEndpoint(name: "http", port: 8081, targetPort: 8081)
     .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions
@@ -168,10 +166,11 @@ var worker = builder.AddDockerfile("worker", "../worker")
     .WithEnvironment("AZURE_OPENAI_MODEL_ID", azureOpenAiModelId)
     .WithEnvironment("AZURE_OPENAI_ENDPOINT", azureOpenAiEndpoint)
     .WithEnvironment("AI_MODE", aiMode)
-    .WithEnvironment("OLLAMA_BASE_URL", ollamaBaseUrl)
-    .WithEnvironment("OLLAMA_CHAT_MODEL", ollamaChatModel)
-    .WithEnvironment("OLLAMA_EMBED_MODEL", ollamaEmbedModel)
-    .WithEnvironment("OLLAMA_EMBED_DIMENSIONS", ollamaEmbedDimensions)
+    .WithEnvironment("LLAMA_CPP_BASE_URL", localLlmBaseUrl)
+    .WithEnvironment("LLAMA_CPP_EMBED_BASE_URL", localLlmEmbedBaseUrl)
+    .WithEnvironment("LLAMA_CPP_CHAT_MODEL", localLlmChatModel)
+    .WithEnvironment("LLAMA_CPP_EMBED_MODEL", localLlmEmbedModel)
+    .WithEnvironment("LLAMA_CPP_EMBED_DIMENSIONS", localLlmEmbedDimensions)
     .WithEnvironment("QDRANT_URL", qdrantUrl)
     .WithEnvironment("QDRANT_COLLECTION", qdrantCollection)
     .WithEnvironment("AZURE_OPENAI_AUTH_MODE", azureOpenAiAuthMode)
@@ -264,4 +263,10 @@ static void LoadEnvFile(string filePath)
             Environment.SetEnvironmentVariable(key, parts[1].Trim());
         }
     }
+}
+
+static string GetEnvOrDefault(string name, string defaultValue)
+{
+    var value = Environment.GetEnvironmentVariable(name);
+    return string.IsNullOrWhiteSpace(value) ? defaultValue : value.Trim();
 }

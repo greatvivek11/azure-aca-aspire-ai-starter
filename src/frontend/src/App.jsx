@@ -17,6 +17,48 @@ const emptyForm = {
 };
 
 const terminalStatuses = new Set(["Ready", "Failed"]);
+const chatEtaSeconds = 600;
+
+function formatDuration(totalSeconds) {
+	const minutes = Math.floor(totalSeconds / 60);
+	const seconds = totalSeconds % 60;
+	return minutes > 0 ? `${minutes}m ${seconds.toString().padStart(2, "0")}s` : `${seconds}s`;
+}
+
+function getChatProgress(elapsedSeconds) {
+	const progressPercent = Math.min(95, Math.max(8, Math.round((elapsedSeconds / chatEtaSeconds) * 95)));
+	const remainingSeconds = Math.max(0, chatEtaSeconds - elapsedSeconds);
+
+	if (elapsedSeconds < 8) {
+		return {
+			progressPercent,
+			label: "Retrieving relevant document chunks...",
+			eta: `ETA up to ${formatDuration(remainingSeconds)}`,
+		};
+	}
+
+	if (elapsedSeconds < 25) {
+		return {
+			progressPercent,
+			label: "Preparing the grounded prompt...",
+			eta: `ETA up to ${formatDuration(remainingSeconds)}`,
+		};
+	}
+
+	if (elapsedSeconds < 120) {
+		return {
+			progressPercent,
+			label: "Generating with local model server. CPU-only machines can take a few minutes.",
+			eta: `Elapsed ${formatDuration(elapsedSeconds)} · ETA up to ${formatDuration(remainingSeconds)}`,
+		};
+	}
+
+	return {
+		progressPercent,
+		label: "Still generating locally. The request is active; slower CPUs may need several minutes.",
+		eta: `Elapsed ${formatDuration(elapsedSeconds)} · timeout at ${formatDuration(chatEtaSeconds)}`,
+	};
+}
 
 export default function App() {
 	const [authConfig, setAuthConfig] = useState(null);
@@ -38,6 +80,8 @@ export default function App() {
 	const [chatInput, setChatInput] = useState("");
 	const [chatError, setChatError] = useState("");
 	const [chatLoading, setChatLoading] = useState(false);
+	const [chatStartedAt, setChatStartedAt] = useState(null);
+	const [chatElapsedSeconds, setChatElapsedSeconds] = useState(0);
 	const [uploadingFile, setUploadingFile] = useState(false);
 	const [messages, setMessages] = useState([]);
 	const [ingestionJobs, setIngestionJobs] = useState([]);
@@ -377,6 +421,20 @@ export default function App() {
 		return () => clearInterval(intervalId);
 	}, [apiFetch, isAuthenticated, pendingJobIds]);
 
+	useEffect(() => {
+		if (!chatLoading || !chatStartedAt) {
+			return undefined;
+		}
+
+		const updateElapsed = () => {
+			setChatElapsedSeconds(Math.floor((Date.now() - chatStartedAt) / 1000));
+		};
+
+		updateElapsed();
+		const intervalId = setInterval(updateElapsed, 1000);
+		return () => clearInterval(intervalId);
+	}, [chatLoading, chatStartedAt]);
+
 	const pendingUploadCount = useMemo(
 		() =>
 			ingestionJobs.filter((job) => !terminalStatuses.has(job.status)).length,
@@ -405,6 +463,7 @@ export default function App() {
 					? "Upload and ingest a file successfully before sending."
 					: "";
 	const sendDisabled = chatLoading || uploadingFile || !hasReadyDocument;
+	const chatProgress = chatLoading ? getChatProgress(chatElapsedSeconds) : null;
 
 	async function onCreateCustomer(event) {
 		event.preventDefault();
@@ -543,6 +602,8 @@ export default function App() {
 		setChatInput("");
 		setChatError("");
 		setChatLoading(true);
+		setChatStartedAt(Date.now());
+		setChatElapsedSeconds(0);
 
 		const userMessage = {
 			id: crypto.randomUUID(),
@@ -589,6 +650,7 @@ export default function App() {
 			]);
 		} finally {
 			setChatLoading(false);
+			setChatStartedAt(null);
 		}
 	}
 
@@ -847,6 +909,21 @@ export default function App() {
 								))
 							)}
 						</div>
+
+						{chatProgress ? (
+							<div className="chat-progress" role="status" aria-live="polite">
+								<div className="chat-progress-row">
+									<span>{chatProgress.label}</span>
+									<span>{chatProgress.eta}</span>
+								</div>
+								<div className="chat-progress-track">
+									<div
+										className="chat-progress-bar"
+										style={{ width: `${chatProgress.progressPercent}%` }}
+									/>
+								</div>
+							</div>
+						) : null}
 
 						<form className="chat-composer" onSubmit={onSendChat}>
 							<input

@@ -1,0 +1,5 @@
+{
+	// Allow tasks with "runOn": "folderOpen" to execute automatically on workspace load.
+	// Without this, VS Code silently skips auto-tasks even in a trusted workspace.
+	"task.allowAutomaticTasks": "on"
+}

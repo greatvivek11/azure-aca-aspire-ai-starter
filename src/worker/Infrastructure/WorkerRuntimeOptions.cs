@@ -12,7 +12,7 @@ internal sealed record WorkerRuntimeOptions(
     string SearchApiKey,
     string QdrantUrl,
     string QdrantCollection,
-    string OllamaBaseUrl,
+    string LocalLlmBaseUrl,
     string OpenAiEndpointText,
     string OpenAiApiKey,
     string OpenAiAuthMode,
@@ -43,7 +43,9 @@ internal sealed record WorkerRuntimeOptions(
         var qdrantUrl = (Environment.GetEnvironmentVariable("QDRANT_URL") ?? "http://qdrant:6333").Trim();
         var qdrantCollection = (Environment.GetEnvironmentVariable("QDRANT_COLLECTION") ?? "documents").Trim();
 
-        var ollamaBaseUrl = (Environment.GetEnvironmentVariable("OLLAMA_BASE_URL") ?? "http://ollama:11434").Trim();
+        var localLlmBaseUrl = (Environment.GetEnvironmentVariable("LLAMA_CPP_EMBED_BASE_URL")
+            ?? Environment.GetEnvironmentVariable("LLAMA_CPP_BASE_URL")
+            ?? "http://host.docker.internal:8083").Trim();
 
         var openAiEndpointText = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT") ?? string.Empty;
         var openAiApiKey = Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY") ?? string.Empty;
@@ -53,11 +55,11 @@ internal sealed record WorkerRuntimeOptions(
         var managedIdentityClientId = Environment.GetEnvironmentVariable("AZURE_CLIENT_ID");
 
         var embeddingModelId = aiMode == "local"
-            ? (Environment.GetEnvironmentVariable("OLLAMA_EMBED_MODEL") ?? "nomic-embed-text")
+            ? (Environment.GetEnvironmentVariable("LLAMA_CPP_EMBED_MODEL") ?? "nomic-embed-text")
             : (Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_MODEL_ID") ?? string.Empty);
 
         var embeddingDimensions = aiMode == "local"
-            ? (int.TryParse(Environment.GetEnvironmentVariable("OLLAMA_EMBED_DIMENSIONS"), out var parsedLocalDimensions)
+            ? (int.TryParse(Environment.GetEnvironmentVariable("LLAMA_CPP_EMBED_DIMENSIONS"), out var parsedLocalDimensions)
                 ? parsedLocalDimensions
                 : 768)
             : (int.TryParse(Environment.GetEnvironmentVariable("AZURE_OPENAI_EMBEDDING_DIMENSIONS"), out var parsedAzureDimensions)
@@ -81,7 +83,7 @@ internal sealed record WorkerRuntimeOptions(
             storageConfigured &&
             !string.IsNullOrWhiteSpace(qdrantUrl) &&
             !string.IsNullOrWhiteSpace(qdrantCollection) &&
-            !string.IsNullOrWhiteSpace(ollamaBaseUrl) &&
+            !string.IsNullOrWhiteSpace(localLlmBaseUrl) &&
             !string.IsNullOrWhiteSpace(embeddingModelId);
 
         var ingestionConfigured = aiMode == "local" ? localIngestionConfigured : azureIngestionConfigured;
@@ -98,7 +100,7 @@ internal sealed record WorkerRuntimeOptions(
             searchApiKey,
             qdrantUrl,
             qdrantCollection,
-            ollamaBaseUrl,
+            localLlmBaseUrl,
             openAiEndpointText,
             openAiApiKey,
             openAiAuthMode,

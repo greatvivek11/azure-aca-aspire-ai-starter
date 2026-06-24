@@ -8,8 +8,9 @@ A cloud-native AI assistant template: chat with and run RAG over your documents,
 
 ### Setup & Debug
 1. **Clone** the repo.
-2. **Open in Dev Container** — VS Code prompts to reopen in a container; `.devcontainer/` downloads .NET, Node.js, CLI tools, and all extensions.
-3. **Press F5** — Aspire orchestrates the full local stack (frontend, backend, worker, SQL, Redis, Ollama, Qdrant, Dapr).
+2. **Open in VS Code (host workflow)** — folder-open tasks provision local defaults, dependencies, and native llama.cpp readiness for first-run.
+3. **Optional: Open in Dev Container** — use this when you want containerized toolchains; local AI still uses host-native llama.cpp endpoints via `host.docker.internal`.
+4. **Press F5** — Aspire orchestrates the full local stack (frontend, backend, worker, SQL, Redis, Qdrant, Dapr).
 
 ### Deploy to Azure
 1. **One-time bootstrap** — Run `bash scripts/ci/bootstrap-ci-tenant-setup.sh` in an authenticated Azure shell to set up OIDC and a service principal.
@@ -22,7 +23,7 @@ A cloud-native AI assistant template: chat with and run RAG over your documents,
 
 - **Conversational AI + RAG** — chat grounded in your documents, with citations.
 - **Document ingestion** — upload `.pdf`, `.docx`, and `.txt` files for indexing.
-- **Local or Azure AI** — run fully local (Ollama + Qdrant) or on Azure (Azure OpenAI + AI Search) via a single `AI_MODE` switch.
+- **Local or Azure AI** — run fully local (llama.cpp-compatible server + Qdrant) or on Azure (Azure OpenAI + AI Search) via a single `AI_MODE` switch.
 - **Secure by default** — Microsoft Entra ID auth, passwordless managed identity, private backend, rate limiting, and upload guardrails.
 
 ## Architecture
@@ -43,20 +44,25 @@ See [docs/Architecture/Blueprint.md](./docs/Architecture/Blueprint.md) for the f
 ## Quick Start (Local)
 
 ```bash
-# 1. Clone and open in Dev Container
+# 1. Clone and open in VS Code
 git clone <repo-url> && cd azure-aca-aspire-ai-starter
-# In VS Code: when prompted, reopen in container (downloads all deps)
+# Folder-open tasks run automatically and prepare local defaults
 
-# 2. Create your local env (defaults to AI_MODE=local; no Azure needed)
+# Optional: reopen in Dev Container for a containerized toolchain
+# Local AI endpoints still target host-native llama.cpp via host.docker.internal
+
+# 2. Optional manual env creation (folder-open tasks auto-create src/aspire/.env)
 cp src/aspire/.env.example src/aspire/.env
 
 # 3. Debug (F5 in VS Code, or from terminal:)
 cd src/aspire && dotnet run
 ```
 
-Dev Container setup handles .NET 10 SDK, Node.js 20, Docker, Dapr, and Azure CLI. The `.env` file is gitignored; for the full list of variables, see [src/aspire/.env.example](./src/aspire/.env.example).
+Dev Container setup handles .NET 10 SDK, Node.js 20, Docker, Dapr, and Azure CLI. The `.env` file is gitignored. On workspace open, VS Code runs `setup: ensure local AI env defaults` to create `src/aspire/.env` when missing and populate required local AI defaults without overwriting non-empty values.
 
-**Local mode** runs Ollama, Qdrant, and Azurite as containers — no Azure resources required. Models are pulled on first run and cached in Docker volumes. Auth is disabled by default for first-run; to enable Entra auth locally, run `az login && bash scripts/setup-local-entra-auth.sh`.
+`src/aspire/.env.example` is the source of truth for default variable names and recommended values.
+
+**Local mode** runs native host llama.cpp with Qdrant and Azurite — no Azure resources required. VS Code folder-open tasks bootstrap llama.cpp binaries, models, and local servers before F5. Auth is disabled by default for first-run; to enable Entra auth locally, run `az login && bash scripts/setup-local-entra-auth.sh`.
 
 ### Run modes
 
@@ -97,5 +103,8 @@ Full reference: [CI/CD Pipeline](./docs/CI-CD-GitHub-Actions.md) and [GitHub Sec
 | [Frontend Architecture](./docs/Architecture/Frontend-Architecture.md) | Frontend stack and patterns |
 | [Network Hardening Extension](./docs/Architecture/Network-Hardening-Extension.md) | Optional VNET/private-endpoint path |
 | [Local Development with Dapr](./docs/LOCAL-DEVELOPMENT-DAPR.md) | Run modes and service communication |
+| [Windows Setup](./docs/WINDOWS-SETUP.md) | Windows-first setup and troubleshooting |
+| [Cross-Platform Setup](./docs/SETUP-CROSS-PLATFORM.md) | Setup flow across Windows, macOS, and Linux |
+| [llama.cpp Setup](./docs/LLAMA_CPP_SETUP.md) | Native local AI setup details and validation |
 | [Architecture Tests](./docs/Architecture-Tests.md) | Enforced backend boundaries |
 | [CI/CD](./docs/CI-CD-GitHub-Actions.md) · [GitHub Secrets](./docs/GitHub-Secrets-Setup.md) | Deployment pipeline and configuration |

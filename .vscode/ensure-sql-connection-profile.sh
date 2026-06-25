@@ -10,14 +10,20 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 aspire_env_path="$repo_root/src/aspire/.env"
 
-case "$(uname)" in
-  Darwin)
-    settings_dir="$HOME/Library/Application Support/Code/User"
-    ;;
-  *)
-    settings_dir="$HOME/.config/Code/User"
-    ;;
-esac
+# In remote/devcontainer sessions, VS Code reads machine settings from
+# ~/.vscode-server/data/Machine/settings.json.
+if [[ -d "$HOME/.vscode-server/data/Machine" ]]; then
+  settings_dir="$HOME/.vscode-server/data/Machine"
+else
+  case "$(uname)" in
+    Darwin)
+      settings_dir="$HOME/Library/Application Support/Code/User"
+      ;;
+    *)
+      settings_dir="$HOME/.config/Code/User"
+      ;;
+  esac
+fi
 
 settings_path="$settings_dir/settings.json"
 
@@ -46,13 +52,15 @@ if [[ -f "$aspire_env_path" ]]; then
 fi
 
 if command -v docker >/dev/null 2>&1; then
+  localhost_port_regex='127\.0\.0\.1:([0-9]+)->1433/tcp'
+  any_host_port_regex=':([0-9]+)->1433/tcp'
   while IFS='|' read -r name ports; do
     [[ "$name" == sql-* ]] || continue
-    if [[ "$ports" =~ 127\.0\.0\.1:([0-9]+)->1433/tcp ]]; then
+    if [[ "$ports" =~ $localhost_port_regex ]]; then
       sql_host_port="${BASH_REMATCH[1]}"
       break
     fi
-    if [[ "$ports" =~ :([0-9]+)->1433/tcp ]]; then
+    if [[ "$ports" =~ $any_host_port_regex ]]; then
       sql_host_port="${BASH_REMATCH[1]}"
       break
     fi
@@ -64,39 +72,42 @@ database="AcaAspireAiTemplate"
 user="sa"
 password="P@ssw0rd"
 
-property=$(cat <<EOF
-"mssql.connections": [
+node - "$settings_path" "$sql_host_port" "$server" "$database" "$user" "$password" <<'NODE'
+const fs = require('fs');
+
+const [settingsPath, portRaw, server, database, user, password] = process.argv.slice(2);
+const port = Number(portRaw);
+const profileName = `mssql-container-${port}`;
+
+let root = {};
+try {
+  const content = fs.readFileSync(settingsPath, 'utf8').trim();
+  root = content ? JSON.parse(content) : {};
+} catch {
+  root = {};
+}
+
+root['mssql.connections'] = [
   {
-    "id": "mssql-container-localhost-$sql_host_port",
-    "groupId": "ROOT",
-    "server": "$server",
-    "port": $sql_host_port,
-    "database": "$database",
-    "authenticationType": "SqlLogin",
-    "user": "$user",
-    "password": "$password",
-    "connectionString": "Server=$server,$sql_host_port;Database=$database;User ID=$user;Password=$password;Encrypt=False;TrustServerCertificate=True;Connection Timeout=15",
-    "encrypt": "Optional",
-    "trustServerCertificate": true,
-    "emptyPasswordInput": false,
-    "savePassword": false,
-    "profileName": "mssql-container"
+    id: `mssql-container-localhost-${port}`,
+    groupId: 'ROOT',
+    server,
+    port,
+    database,
+    authenticationType: 'SqlLogin',
+    user,
+    password,
+    connectionString: `Server=${server},${port};Database=${database};User ID=${user};Password=${password};Encrypt=False;TrustServerCertificate=True;Connection Timeout=15`,
+    encrypt: 'Optional',
+    trustServerCertificate: true,
+    emptyPasswordInput: false,
+    savePassword: true,
+    profileName
   }
-]
-EOF
-)
+];
 
-tmp_file="$settings_path.tmp"
+fs.writeFileSync(settingsPath, `${JSON.stringify(root, null, 2)}\n`, 'utf8');
+NODE
 
-if grep -q '"mssql\.connections"' "$settings_path"; then
-  perl -0777 -pe 's/\s*"mssql\.connections"\s*:\s*\[.*?\]\s*,?//sg' "$settings_path" > "$tmp_file"
-else
-  cp "$settings_path" "$tmp_file"
-fi
-
-perl -0777 -i -pe 's/,\s*(?=\s*\}\s*$)//s' "$tmp_file"
-perl -0777 -i -pe "s/\s*\}\s*\$/,\n$property\n}\n/s" "$tmp_file"
-mv "$tmp_file" "$settings_path"
-
-info "SQL connection profile ensured in VS Code user settings (server=$server, profile=mssql-container)"
+info "SQL connection profile ensured in VS Code user settings (server=$server, profile=mssql-container-$sql_host_port)"
 exit 0

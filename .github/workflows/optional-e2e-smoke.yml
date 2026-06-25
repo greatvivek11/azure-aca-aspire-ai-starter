@@ -1,0 +1,27 @@
+name: Optional E2E Smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore azure-aca-aspire-ai-starter.sln
+
+      - name: Run optional smoke integration subset
+        run: >-
+          dotnet test src/Backend.Tests/Backend.Tests.csproj
+          --filter "FullyQualifiedName~ApiEndpointIntegrationTests|FullyQualifiedName~ProgramPipelineIntegrationTests"

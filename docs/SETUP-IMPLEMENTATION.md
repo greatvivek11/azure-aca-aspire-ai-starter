@@ -24,6 +24,8 @@ The repository now supports an OS-aware setup experience for Windows, macOS, and
 - .vscode/ensure-aspire-env.sh
 - .vscode/ensure-docker.ps1
 - .vscode/ensure-docker.sh
+- .vscode/ensure-sql-connection-profile.ps1
+- .vscode/ensure-sql-connection-profile.sh
 - .vscode/ensure-local-llm.ps1
 - .vscode/ensure-local-llm.sh
 - .vscode/ensure-local-llm-ready.ps1
@@ -35,6 +37,8 @@ The repository now supports an OS-aware setup experience for Windows, macOS, and
 - On folder open, setup tasks prepare dependencies and local defaults without overwriting non-empty user values.
 - Dapr and supporting tools are validated or installed at user scope where possible.
 - Local llama.cpp setup and readiness checks run before full local launch.
+- MSSQL extension profile `mssql-container` is auto-seeded into VS Code User Settings (`mssql.connections`).
+- SQL profile host is set to `127.0.0.1`; port resolves from active Docker `sql-*` mapping when available, else `SQL_HOST_PORT`.
 
 ## Validation
 

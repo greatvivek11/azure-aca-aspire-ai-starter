@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using AcaAspireAiTemplate.Backend.Features.Chat;
+using AcaAspireAiTemplate.Backend.Features.Customers;
 using AcaAspireAiTemplate.Backend.Features.DocumentIngestion;
 using AcaAspireAiTemplate.Backend.Infrastructure.Ai;
 using AcaAspireAiTemplate.Backend.Infrastructure.Auth;
@@ -220,6 +221,67 @@ public class ApiEndpointIntegrationTests
         payload.RootElement.GetProperty("status").GetString().ShouldBe("Queued");
     }
 
+    [Fact]
+    public async Task Customers_CRUD_Should_Work_When_Authenticated()
+    {
+        await using var app = await BuildApiTestAppAsync();
+        var client = app.GetTestClient();
+        client.DefaultRequestHeaders.Add("x-test-auth", "true");
+
+        using var createResponse = await client.PostAsync(
+            "/v1/customers",
+            new StringContent("{\"name\":\"Ada\",\"email\":\"ada@example.com\",\"city\":\"London\",\"status\":\"Active\"}", Encoding.UTF8, "application/json"));
+        createResponse.StatusCode.ShouldBe(HttpStatusCode.Created);
+
+        var createPayload = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
+        var id = createPayload.RootElement.GetProperty("id").GetInt32();
+        id.ShouldBeGreaterThan(0);
+
+        using var listResponse = await client.GetAsync("/v1/customers");
+        listResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var listPayload = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync());
+        listPayload.RootElement.ValueKind.ShouldBe(JsonValueKind.Array);
+        listPayload.RootElement.GetArrayLength().ShouldBeGreaterThan(0);
+
+        using var updateResponse = await client.PutAsync(
+            $"/v1/customers/{id}",
+            new StringContent("{\"name\":\"Ada Lovelace\",\"email\":\"ada@example.com\",\"city\":\"London\",\"status\":\"Inactive\"}", Encoding.UTF8, "application/json"));
+        updateResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        using var deleteResponse = await client.DeleteAsync($"/v1/customers/{id}");
+        deleteResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task Customers_Create_Should_Return_400_When_Required_Fields_Are_Missing()
+    {
+        await using var app = await BuildApiTestAppAsync();
+        var client = app.GetTestClient();
+        client.DefaultRequestHeaders.Add("x-test-auth", "true");
+
+        using var response = await client.PostAsync(
+            "/v1/customers",
+            new StringContent("{\"name\":\"\",\"email\":\"\",\"city\":\"\",\"status\":\"\"}", Encoding.UTF8, "application/json"));
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Customers_Update_And_Delete_Should_Return_404_For_Missing_Record()
+    {
+        await using var app = await BuildApiTestAppAsync();
+        var client = app.GetTestClient();
+        client.DefaultRequestHeaders.Add("x-test-auth", "true");
+
+        using var updateResponse = await client.PutAsync(
+            "/v1/customers/9999",
+            new StringContent("{\"name\":\"Any\",\"email\":\"a@b.com\",\"city\":\"X\",\"status\":\"Active\"}", Encoding.UTF8, "application/json"));
+        updateResponse.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        using var deleteResponse = await client.DeleteAsync("/v1/customers/9999");
+        deleteResponse.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
     private static async Task<WebApplication> BuildApiTestAppAsync()
     {
         return await BuildApiTestAppInternalAsync(uploadConfigured: false);
@@ -240,6 +302,7 @@ public class ApiEndpointIntegrationTests
         builder.WebHost.UseTestServer();
         builder.Services.AddSingleton<IHttpClientFactory>(new StubHttpClientFactory());
         builder.Services.AddSingleton<IDocumentIngestionStore, InMemoryDocumentIngestionStore>();
+        builder.Services.AddSingleton<ICustomerRepository, InMemoryCustomerRepository>();
         builder.Services
             .AddAuthentication(TestAuthHandler.SchemeName)
             .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(
@@ -256,10 +319,6 @@ public class ApiEndpointIntegrationTests
         });
 
         builder.Services.AddSingleton<IAiService>(new StubAiService());
-
-        var app = builder.Build();
-        app.UseAuthentication();
-        app.UseAuthorization();
 
         var chatOptions = new ChatOptions(
             AiMode: "local",
@@ -276,6 +335,11 @@ public class ApiEndpointIntegrationTests
             ManagedIdentityClientId: null,
             UseManagedIdentity: false,
             LocalRagFastResponse: localRagFastResponse);
+        builder.Services.AddChatFeature(chatOptions);
+
+        var app = builder.Build();
+        app.UseAuthentication();
+        app.UseAuthorization();
 
         var ingestionOptions = new DocumentIngestionOptions(
             SqlConnectionString: "Server=tcp:dummy,1433;Initial Catalog=dummy;User Id=dummy;Password=dummy;",
@@ -288,7 +352,8 @@ public class ApiEndpointIntegrationTests
             ManagedIdentityClientId: null,
             UploadUrlLifetime: TimeSpan.FromMinutes(15));
 
-        app.MapChatEndpoint(chatOptions);
+        app.MapChatEndpoint();
+        app.MapCustomerEndpoints();
         app.MapDocumentIngestionEndpoints(ingestionOptions);
 
         await app.StartAsync();
@@ -305,6 +370,7 @@ public class ApiEndpointIntegrationTests
         builder.WebHost.UseTestServer();
         builder.Services.AddHttpClient();
         builder.Services.AddSingleton<IDocumentIngestionStore, InMemoryDocumentIngestionStore>();
+        builder.Services.AddSingleton<ICustomerRepository, InMemoryCustomerRepository>();
         builder.Services
             .AddAuthentication(TestAuthHandler.SchemeName)
             .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(
@@ -322,10 +388,6 @@ public class ApiEndpointIntegrationTests
 
         builder.Services.AddSingleton<IAiService>(new StubAiService());
 
-        var app = builder.Build();
-        app.UseAuthentication();
-        app.UseAuthorization();
-
         var chatOptions = new ChatOptions(
             AiMode: "azure",
             AzureOpenAi: null,
@@ -340,6 +402,11 @@ public class ApiEndpointIntegrationTests
             SearchApiKey: null,
             ManagedIdentityClientId: null,
             UseManagedIdentity: false);
+        builder.Services.AddChatFeature(chatOptions);
+
+        var app = builder.Build();
+        app.UseAuthentication();
+        app.UseAuthorization();
 
         var ingestionOptions = uploadConfigured
             ? new DocumentIngestionOptions(
@@ -363,7 +430,8 @@ public class ApiEndpointIntegrationTests
                 ManagedIdentityClientId: null,
                 UploadUrlLifetime: TimeSpan.FromMinutes(15));
 
-        app.MapChatEndpoint(chatOptions);
+        app.MapChatEndpoint();
+        app.MapCustomerEndpoints();
         app.MapDocumentIngestionEndpoints(ingestionOptions);
 
         await app.StartAsync();
@@ -383,6 +451,53 @@ public class ApiEndpointIntegrationTests
         public HttpClient CreateClient(string name)
         {
             return new HttpClient(new StubHttpMessageHandler(), disposeHandler: true);
+        }
+    }
+
+    private sealed class InMemoryCustomerRepository : ICustomerRepository
+    {
+        private readonly Dictionary<int, CustomerRecord> _customers = new();
+        private readonly object _sync = new();
+        private int _nextId = 1;
+
+        public Task<List<CustomerRecord>> GetCustomersAsync()
+        {
+            lock (_sync)
+            {
+                return Task.FromResult(_customers.Values.OrderBy(c => c.Id).ToList());
+            }
+        }
+
+        public Task<int> CreateCustomerAsync(CreateCustomerRequest request)
+        {
+            lock (_sync)
+            {
+                var id = _nextId++;
+                _customers[id] = new CustomerRecord(id, request.Name.Trim(), request.Email.Trim(), request.City.Trim(), request.Status.Trim());
+                return Task.FromResult(id);
+            }
+        }
+
+        public Task<bool> UpdateCustomerAsync(int id, UpdateCustomerRequest request)
+        {
+            lock (_sync)
+            {
+                if (!_customers.ContainsKey(id))
+                {
+                    return Task.FromResult(false);
+                }
+
+                _customers[id] = new CustomerRecord(id, request.Name.Trim(), request.Email.Trim(), request.City.Trim(), request.Status.Trim());
+                return Task.FromResult(true);
+            }
+        }
+
+        public Task<bool> DeleteCustomerAsync(int id)
+        {
+            lock (_sync)
+            {
+                return Task.FromResult(_customers.Remove(id));
+            }
         }
     }
 

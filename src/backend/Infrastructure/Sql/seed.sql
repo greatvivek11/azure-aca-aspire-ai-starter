@@ -34,3 +34,6 @@ BEGIN
       (N'Alan Turing', N'alan@example.com', N'Manchester', N'Pending'),
       (N'Katherine Johnson', N'katherine@example.com', N'White Sulphur Springs', N'Active');
 END;
+
+DECLARE @customersMaxId INT = ISNULL((SELECT MAX(Id) FROM dbo.Customers), 0);
+DBCC CHECKIDENT ('dbo.Customers', RESEED, @customersMaxId) WITH NO_INFOMSGS;

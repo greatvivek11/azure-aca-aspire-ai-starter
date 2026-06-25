@@ -49,6 +49,32 @@ public class SetupAutomationGuardTests
             .ShouldBeTrue("Missing readiness task in .vscode/tasks.json.");
     }
 
+    [Fact]
+    public void TasksJson_Should_Include_FolderOpen_Sql_Profile_Setup_Task()
+    {
+        var tasksPath = Path.Combine(RepositoryRoot, ".vscode", "tasks.json");
+        File.Exists(tasksPath).ShouldBeTrue("Expected .vscode/tasks.json to exist.");
+
+        using var doc = JsonDocument.Parse(File.ReadAllText(tasksPath));
+        var tasks = doc.RootElement.GetProperty("tasks").EnumerateArray().ToArray();
+
+        var sqlSetupTask = tasks.Single(t => t.GetProperty("label").GetString() == "setup: ensure SQL Server connection profile");
+
+        sqlSetupTask.GetProperty("runOptions").GetProperty("runOn").GetString().ShouldBe("folderOpen");
+        sqlSetupTask.GetProperty("dependsOrder").GetString().ShouldBe("sequence");
+
+        var depends = sqlSetupTask
+            .GetProperty("dependsOn")
+            .EnumerateArray()
+            .Select(e => e.GetString())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Cast<string>()
+            .ToArray();
+
+        depends.ShouldContain("setup: install all extensions");
+        depends.ShouldContain("tools: ensure Docker engine");
+    }
+
     [Theory]
     [InlineData(".vscode/ensure-local-llm.ps1")]
     [InlineData(".vscode/ensure-local-llm.sh")]
@@ -83,6 +109,8 @@ public class SetupAutomationGuardTests
     [InlineData(".vscode/ensure-local-llm-ready.sh")]
     [InlineData(".vscode/install-dapr.ps1")]
     [InlineData(".vscode/install-extensions.ps1")]
+    [InlineData(".vscode/ensure-sql-connection-profile.ps1")]
+    [InlineData(".vscode/ensure-sql-connection-profile.sh")]
     public void Vscode_Setup_Scripts_Should_Be_Allowed_By_Gitignore(string relativePath)
     {
         var scriptPath = Path.Combine(RepositoryRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));

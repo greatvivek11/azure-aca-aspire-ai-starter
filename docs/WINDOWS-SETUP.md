@@ -28,6 +28,18 @@ After cloning on Windows:
 
 ## Troubleshooting
 
+### MSSQL extension profile exists but connect fails (Error 258)
+
+The repo auto-creates profile `mssql-container` for VS Code extension `ms-mssql.mssql` on folder open.
+
+If Aspire restarts and SQL is remapped to a different host port, re-run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .vscode/ensure-sql-connection-profile.ps1
+```
+
+Then reconnect `mssql-container` in the MSSQL extension.
+
 ### "Unable to locate the Dapr CLI" on F5
 
 **Fix:** Run setup script and restart VS Code

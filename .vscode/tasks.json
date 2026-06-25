@@ -126,6 +126,46 @@
 			}
 		},
 		{
+			"label": "setup: ensure SQL Server connection profile",
+			"type": "shell",
+			"command": "echo",
+			"args": [
+				"Ensuring SQL connection profile for ms-mssql extension..."
+			],
+			"dependsOn": [
+				"setup: install all extensions",
+				"tools: ensure Docker engine"
+			],
+			"dependsOrder": "sequence",
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared"
+			},
+			"runOptions": {
+				"runOn": "folderOpen"
+			},
+			"problemMatcher": [],
+			"linux": {
+				"command": "bash",
+				"args": [
+					".vscode/ensure-sql-connection-profile.sh"
+				]
+			},
+			"osx": {
+				"command": "bash",
+				"args": [
+					".vscode/ensure-sql-connection-profile.sh"
+				]
+			},
+			"windows": {
+				"command": "powershell",
+				"args": [
+					"-ExecutionPolicy", "Bypass",
+					"-File", "${workspaceFolder}\\.vscode\\ensure-sql-connection-profile.ps1"
+				]
+			}
+		},
+		{
 			"label": "tools: install Azure CLI",
 			"type": "shell",
 			"command": "bash",

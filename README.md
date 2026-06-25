@@ -8,9 +8,17 @@ A cloud-native AI assistant template: chat with and run RAG over your documents,
 
 ### Setup & Debug
 1. **Clone** the repo.
-2. **Open in VS Code (host workflow)** — folder-open tasks provision local defaults, dependencies, and native llama.cpp readiness for first-run.
+2. **Open in VS Code (host workflow)** — folder-open tasks provision local defaults, dependencies, native llama.cpp readiness, and a local SQL Server connection profile for the MSSQL extension.
 3. **Optional: Open in Dev Container** — use this when you want containerized toolchains; local AI still uses host-native llama.cpp endpoints via `host.docker.internal`.
 4. **Press F5** — Aspire orchestrates the full local stack (frontend, backend, worker, SQL, Redis, Qdrant, Dapr).
+
+### SQL Server Extension (VS Code)
+
+- On folder open, the task `setup: ensure SQL Server connection profile` seeds a profile named `mssql-container` for extension `ms-mssql.mssql`.
+- The profile is written to **VS Code User Settings** (`mssql.connections`), not workspace settings.
+- The script targets `127.0.0.1` and attempts to resolve the active Docker SQL host port (`sql-*` container mapping to `1433`).
+- If Aspire restarts and SQL is mapped to a new host port, run task `setup: ensure SQL Server connection profile` again before connecting.
+- First connect may prompt for password (`sa` / `P@ssw0rd`) depending on local secure-store behavior.
 
 ### Deploy to Azure
 1. **One-time bootstrap** — Run the CI bootstrap in an authenticated Azure shell to set up OIDC and a service principal.

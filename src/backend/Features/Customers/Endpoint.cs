@@ -1,22 +1,21 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.Data.SqlClient;
 using AcaAspireAiTemplate.Backend.Infrastructure.Auth;
 
 namespace AcaAspireAiTemplate.Backend.Features.Customers;
 
 public static class Endpoint
 {
-    public static void MapCustomerEndpoints(this IEndpointRouteBuilder app, string sqlConnectionString)
+    public static void MapCustomerEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/v1/customers", async () =>
+        app.MapGet("/v1/customers", async (ICustomerRepository repository) =>
         {
-            var customers = await GetCustomersAsync(sqlConnectionString);
+            var customers = await repository.GetCustomersAsync();
             return Results.Ok(customers);
         }).RequireAuthorization(EntraAuthSetup.ApiScopePolicyName);
 
-        app.MapPost("/v1/customers", async (CreateCustomerRequest request) =>
+        app.MapPost("/v1/customers", async (CreateCustomerRequest request, ICustomerRepository repository) =>
         {
             if (string.IsNullOrWhiteSpace(request.Name)
                 || string.IsNullOrWhiteSpace(request.Email)
@@ -26,11 +25,11 @@ public static class Endpoint
                 return Results.BadRequest("Name, email, city, and status are required.");
             }
 
-            var id = await CreateCustomerAsync(sqlConnectionString, request);
+            var id = await repository.CreateCustomerAsync(request);
             return Results.Created($"/v1/customers/{id}", new { id });
         }).RequireAuthorization(EntraAuthSetup.ApiScopePolicyName);
 
-        app.MapPut("/v1/customers/{id:int}", async (int id, UpdateCustomerRequest request) =>
+        app.MapPut("/v1/customers/{id:int}", async (int id, UpdateCustomerRequest request, ICustomerRepository repository) =>
         {
             if (string.IsNullOrWhiteSpace(request.Name)
                 || string.IsNullOrWhiteSpace(request.Email)
@@ -40,102 +39,18 @@ public static class Endpoint
                 return Results.BadRequest("Name, email, city, and status are required.");
             }
 
-            var updated = await UpdateCustomerAsync(sqlConnectionString, id, request);
+            var updated = await repository.UpdateCustomerAsync(id, request);
             return updated ? Results.NoContent() : Results.NotFound();
         }).RequireAuthorization(EntraAuthSetup.ApiScopePolicyName);
 
-        app.MapDelete("/v1/customers/{id:int}", async (int id) =>
+        app.MapDelete("/v1/customers/{id:int}", async (int id, ICustomerRepository repository) =>
         {
-            var deleted = await DeleteCustomerAsync(sqlConnectionString, id);
+            var deleted = await repository.DeleteCustomerAsync(id);
             return deleted ? Results.NoContent() : Results.NotFound();
         }).RequireAuthorization(EntraAuthSetup.ApiScopePolicyName);
     }
-
-    private static async Task<List<CustomerRecord>> GetCustomersAsync(string connectionString)
-    {
-        var customers = new List<CustomerRecord>();
-        await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync();
-
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-SELECT Id, Name, Email, City, Status
-FROM dbo.Customers
-ORDER BY Id;
-""";
-
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            customers.Add(new CustomerRecord(
-                reader.GetInt32(0),
-                reader.GetString(1),
-                reader.GetString(2),
-                reader.GetString(3),
-                reader.GetString(4)));
-        }
-
-        return customers;
-    }
-
-    private static async Task<int> CreateCustomerAsync(string connectionString, CreateCustomerRequest request)
-    {
-        await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync();
-
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-INSERT INTO dbo.Customers (Name, Email, City, Status)
-OUTPUT INSERTED.Id
-VALUES (@name, @email, @city, @status);
-""";
-        command.Parameters.AddWithValue("@name", request.Name.Trim());
-        command.Parameters.AddWithValue("@email", request.Email.Trim());
-        command.Parameters.AddWithValue("@city", request.City.Trim());
-        command.Parameters.AddWithValue("@status", request.Status.Trim());
-
-        var result = await command.ExecuteScalarAsync();
-        return Convert.ToInt32(result);
-    }
-
-    private static async Task<bool> UpdateCustomerAsync(string connectionString, int id, UpdateCustomerRequest request)
-    {
-        await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync();
-
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-UPDATE dbo.Customers
-SET Name = @name,
-    Email = @email,
-    City = @city,
-    Status = @status
-WHERE Id = @id;
-""";
-        command.Parameters.AddWithValue("@id", id);
-        command.Parameters.AddWithValue("@name", request.Name.Trim());
-        command.Parameters.AddWithValue("@email", request.Email.Trim());
-        command.Parameters.AddWithValue("@city", request.City.Trim());
-        command.Parameters.AddWithValue("@status", request.Status.Trim());
-
-        var affected = await command.ExecuteNonQueryAsync();
-        return affected > 0;
-    }
-
-    private static async Task<bool> DeleteCustomerAsync(string connectionString, int id)
-    {
-        await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync();
-
-        await using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM dbo.Customers WHERE Id = @id;";
-        command.Parameters.AddWithValue("@id", id);
-
-        var affected = await command.ExecuteNonQueryAsync();
-        return affected > 0;
-    }
 }
 
-internal sealed record CustomerRecord(int Id, string Name, string Email, string City, string Status);
-internal sealed record CreateCustomerRequest(string Name, string Email, string City, string Status);
-internal sealed record UpdateCustomerRequest(string Name, string Email, string City, string Status);
+public sealed record CustomerRecord(int Id, string Name, string Email, string City, string Status);
+public sealed record CreateCustomerRequest(string Name, string Email, string City, string Status);
+public sealed record UpdateCustomerRequest(string Name, string Email, string City, string Status);

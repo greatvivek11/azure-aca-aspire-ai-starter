@@ -15,6 +15,8 @@
 !.vscode/install-dapr.ps1
 !.vscode/install-extensions.ps1
 !.vscode/install-extensions.sh
+!.vscode/ensure-sql-connection-profile.ps1
+!.vscode/ensure-sql-connection-profile.sh
 !.vscode/validate-extensions-sync.sh
 *.code-workspace
 

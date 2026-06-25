@@ -69,6 +69,7 @@ builder.Services.AddEntraAuth(entraAuthOptions);
 
 var runtimeOptions = BackendRuntimeOptions.FromConfiguration(builder.Configuration);
 builder.Services.AddSingleton<IDocumentIngestionStore>(_ => new SqlDocumentIngestionStore(runtimeOptions.SqlConnectionString));
+builder.Services.AddSingleton<ICustomerRepository>(_ => new SqlCustomerRepository(runtimeOptions.SqlConnectionString));
 builder.Services.AddSingleton<IAiService>(_ => runtimeOptions.AiMode == "local"
     ? new LlamaCppChatService(
         _.GetRequiredService<IHttpClientFactory>(),
@@ -81,6 +82,24 @@ builder.Services.AddSingleton<IAiService>(_ => runtimeOptions.AiMode == "local"
         runtimeOptions.AzureOpenAiSettings!,
         runtimeOptions.OpenAiAuthMode,
         runtimeOptions.ManagedIdentityClientId));
+builder.Services.AddChatFeature(new ChatOptions(
+    runtimeOptions.AiMode,
+    runtimeOptions.AzureOpenAiSettings,
+    runtimeOptions.OpenAiAuthMode,
+    runtimeOptions.EmbeddingModelId,
+    runtimeOptions.EmbeddingDimensions,
+    runtimeOptions.LocalLlmEmbedBaseUrl,
+    runtimeOptions.QdrantUrl,
+    runtimeOptions.QdrantCollection,
+    runtimeOptions.SearchEndpoint,
+    runtimeOptions.SearchIndexName,
+    runtimeOptions.SearchApiKey,
+    runtimeOptions.ManagedIdentityClientId,
+    runtimeOptions.UseManagedIdentityForSearch,
+    runtimeOptions.LocalRagFastResponse,
+    runtimeOptions.LocalRagTopK,
+    runtimeOptions.LocalRagMaxContextCharacters,
+    runtimeOptions.LocalRagMaxChunkCharacters));
 
 var app = builder.Build();
 
@@ -142,7 +161,7 @@ app.UseUploadRequestProtection(runtimeOptions.UploadMaxRequestBytes);
 
 app.MapHealthEndpoint();
 app.MapAiPingEndpoint();
-app.MapCustomerEndpoints(sqlConnectionString);
+app.MapCustomerEndpoints();
 app.MapDocumentIngestionEndpoints(new DocumentIngestionOptions(
     sqlConnectionString,
     runtimeOptions.WorkerDaprBaseUrl,
@@ -153,24 +172,7 @@ app.MapDocumentIngestionEndpoints(new DocumentIngestionOptions(
     runtimeOptions.StoragePublicBlobEndpoint,
     runtimeOptions.ManagedIdentityClientId,
     TimeSpan.FromMinutes(runtimeOptions.UploadUrlExpiryMinutes)));
-app.MapChatEndpoint(new ChatOptions(
-    runtimeOptions.AiMode,
-    runtimeOptions.AzureOpenAiSettings,
-    runtimeOptions.OpenAiAuthMode,
-    runtimeOptions.EmbeddingModelId,
-    runtimeOptions.EmbeddingDimensions,
-    runtimeOptions.LocalLlmEmbedBaseUrl,
-    runtimeOptions.QdrantUrl,
-    runtimeOptions.QdrantCollection,
-    runtimeOptions.SearchEndpoint,
-    runtimeOptions.SearchIndexName,
-    runtimeOptions.SearchApiKey,
-    runtimeOptions.ManagedIdentityClientId,
-    runtimeOptions.UseManagedIdentityForSearch,
-    runtimeOptions.LocalRagFastResponse,
-    runtimeOptions.LocalRagTopK,
-    runtimeOptions.LocalRagMaxContextCharacters,
-    runtimeOptions.LocalRagMaxChunkCharacters));
+app.MapChatEndpoint();
 
 app.MapGet("/", () => "ACA Aspire AI Starter Backend is running!").AllowAnonymous();
 

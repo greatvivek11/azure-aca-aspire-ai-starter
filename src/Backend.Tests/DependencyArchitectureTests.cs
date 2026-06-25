@@ -74,6 +74,42 @@ public class DependencyArchitectureTests
         authSource.ShouldContain("AddJwtBearer");
     }
 
+    [Fact]
+    public void Customers_Feature_Should_Use_Repository_Abstraction()
+    {
+        var customersEndpointPath = Path.Combine(RepositoryRoot, "src/backend/Features/Customers/Endpoint.cs");
+        File.Exists(customersEndpointPath).ShouldBeTrue("Customers endpoint file was not found.");
+
+        var source = File.ReadAllText(customersEndpointPath);
+        source.ShouldContain("ICustomerRepository");
+        source.ShouldNotContain("SqlConnection");
+        source.ShouldNotContain("command.CommandText");
+    }
+
+    [Fact]
+    public void Chat_Endpoint_Should_Remain_Http_Orchestration()
+    {
+        var chatEndpointPath = Path.Combine(RepositoryRoot, "src/backend/Features/Chat/Endpoint.cs");
+        File.Exists(chatEndpointPath).ShouldBeTrue("Chat endpoint file was not found.");
+
+        var source = File.ReadAllText(chatEndpointPath);
+        source.ShouldContain("ChatRagOrchestrator");
+        source.ShouldNotContain("GenerateEmbeddingAsync(");
+        source.ShouldNotContain("SearchRelevantChunks");
+        source.ShouldNotContain("AcquireManagedIdentityTokenAsync");
+    }
+
+    [Fact]
+    public void Sql_Seed_Should_Normalize_Customers_Identity_To_Max_Id()
+    {
+        var seedScriptPath = Path.Combine(RepositoryRoot, "src/backend/Infrastructure/Sql/seed.sql");
+        File.Exists(seedScriptPath).ShouldBeTrue("Backend SQL seed script was not found.");
+
+        var source = File.ReadAllText(seedScriptPath);
+        source.ShouldContain("MAX(Id)");
+        source.ShouldContain("DBCC CHECKIDENT ('dbo.Customers', RESEED, @customersMaxId)");
+    }
+
     private static string ResolveRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

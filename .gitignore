@@ -86,4 +86,11 @@ src/aspire/appsettings.Development.json
 # Entra federated credential bootstrap files (generated locally, never commit)
 federated-credential*.json
 
+# Local AI artifacts (machine-specific, never commit)
+**/llama.cpp/bin/**
+**/llama.cpp/models/**
+*llama.cpp*bin/*
+*llama.cpp*models/*
+*.gguf
+
 .tmp/

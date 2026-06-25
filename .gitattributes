@@ -1,3 +1,42 @@
-*.sh text eol=lf
-*.ps1 text eol=crlf
+# Normalize all text files to LF in the repository and in working trees.
+* text=auto eol=lf
+
+# Windows command scripts should remain CRLF for maximum compatibility.
 *.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Treat common binary assets as binary so Git never attempts EOL conversion.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
+*.7z binary
+*.dll binary
+*.exe binary
+*.so binary
+*.dylib binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.otf binary
+*.pfx binary
+*.p12 binary
+*.snk binary
+*.nupkg binary
+*.jar binary
+*.class binary
+*.db binary
+*.sqlite binary
+*.mp3 binary
+*.mp4 binary
+*.mov binary
+*.avi binary
+*.wav binary
+*.gguf binary

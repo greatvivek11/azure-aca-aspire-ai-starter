@@ -53,6 +53,9 @@ set_if_missing_or_empty "LLAMA_CPP_BASE_URL" "http://host.docker.internal:8082"
 set_if_missing_or_empty "LLAMA_CPP_EMBED_BASE_URL" "http://host.docker.internal:8083"
 set_if_missing_or_empty "LLAMA_CPP_MODELS_DIR" "$HOME/.local/share/llama.cpp/models"
 set_if_missing_or_empty "LLAMA_CPP_BIN_DIR" "$HOME/.local/share/llama.cpp/bin"
+if [[ "${DEVCONTAINERS:-}" == "true" || -f "/.dockerenv" ]]; then
+  set_if_missing_or_empty "LLAMA_CPP_DEVCONTAINER_MODELS_DIR" "$HOME/.cache/llama.cpp/models"
+fi
 set_if_missing_or_empty "LLAMA_CPP_CHAT_MODEL" "Qwen/Qwen2.5-0.5B-Instruct"
 set_if_missing_or_empty "LLAMA_CPP_CHAT_MODEL_FILE" "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf"
 set_if_missing_or_empty "LLAMA_CPP_EMBED_MODEL" "nomic-embed-text"

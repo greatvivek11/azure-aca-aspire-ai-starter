@@ -11,6 +11,9 @@ end_of_line = lf
 insert_final_newline = true
 trim_trailing_whitespace = true
 
+[*.{bat,cmd}]
+end_of_line = crlf
+
 # Code files settings
 [*.{cs,csx,vb,vbx,js,jsx,ts,tsx,html,css,json,xml,md,sql,yml,yaml}]
 indent_style = space

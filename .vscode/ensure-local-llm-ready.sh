@@ -6,6 +6,10 @@ set -euo pipefail
 
 info() { printf '[local-llm-ready] %s\n' "$*"; }
 
+is_in_devcontainer() {
+  [[ "${DEVCONTAINERS:-}" == "true" ]] || [[ -f "/.dockerenv" ]]
+}
+
 workspace_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 env_path="$workspace_root/src/aspire/.env"
 
@@ -16,6 +20,14 @@ load_dotenv() {
     key="${line%%=*}"
     value="${line#*=}"
     key="${key//[[:space:]]/}"
+    value="${value%$'\r'}"
+    value="${value#${value%%[![:space:]]*}}"
+    value="${value%${value##*[![:space:]]}}"
+    if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+      value="${value:1:-1}"
+    elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
+      value="${value:1:-1}"
+    fi
     [[ -z "$key" ]] && continue
     if [[ -z "${!key:-}" ]]; then
       export "$key=$value"
@@ -54,6 +66,12 @@ wait_endpoint() {
 }
 
 load_dotenv
+
+if is_in_devcontainer; then
+  info "Running in devcontainer; Aspire will start llama.cpp containers during app startup."
+  info "Readiness check skipped until Aspire container endpoints are running."
+  exit 0
+fi
 
 chat_port="$(port_from_url "${LLAMA_CPP_BASE_URL:-http://host.docker.internal:8082}" 8082)"
 embed_port="$(port_from_url "${LLAMA_CPP_EMBED_BASE_URL:-http://host.docker.internal:8083}" 8083)"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Ensure native llama.cpp and local GGUF model files are available.
-# This script downloads models, installs a native llama-server release when needed,
-# and starts chat + embedding servers for the Aspire containers to call.
+# Ensure llama.cpp and local GGUF model files are available.
+# On host machines: installs native llama-server and starts servers.
+# In devcontainers: downloads models and relies on Aspire-orchestrated containers.
 
 set -euo pipefail
 
@@ -18,6 +18,11 @@ info() { printf '[local-llm] %s\n' "$*"; }
 warn() { printf '[local-llm] warning: %s\n' "$*" >&2; }
 err() { printf '[local-llm] error: %s\n' "$*" >&2; }
 
+# Detect if running in devcontainer
+is_in_devcontainer() {
+  [[ "${DEVCONTAINERS:-}" == "true" ]] || [[ -f "/.dockerenv" ]]
+}
+
 workspace_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 env_path="$workspace_root/src/aspire/.env"
 
@@ -28,6 +33,14 @@ load_dotenv() {
     key="${line%%=*}"
     value="${line#*=}"
     key="${key//[[:space:]]/}"
+    value="${value%$'\r'}"
+    value="${value#${value%%[![:space:]]*}}"
+    value="${value%${value##*[![:space:]]}}"
+    if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+      value="${value:1:-1}"
+    elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
+      value="${value:1:-1}"
+    fi
     [[ -z "$key" ]] && continue
     if [[ -z "${!key:-}" ]]; then
       export "$key=$value"
@@ -49,7 +62,11 @@ port_from_url() {
 
 load_dotenv
 
-models_dir="${LLAMA_CPP_MODELS_DIR:-${HOME}/.local/share/llama.cpp/models}"
+if is_in_devcontainer; then
+  models_dir="${LLAMA_CPP_DEVCONTAINER_MODELS_DIR:-${HOME}/.cache/llama.cpp/models}"
+else
+  models_dir="${LLAMA_CPP_MODELS_DIR:-${HOME}/.local/share/llama.cpp/models}"
+fi
 bin_dir="${LLAMA_CPP_BIN_DIR:-${HOME}/.local/share/llama.cpp/bin}"
 chat_base_url="${LLAMA_CPP_BASE_URL:-http://host.docker.internal:8082}"
 embed_base_url="${LLAMA_CPP_EMBED_BASE_URL:-http://host.docker.internal:8083}"
@@ -147,11 +164,15 @@ persist_resolved_chat_model() {
 
 file_size_mb() {
   local path="$1"
+  local size_bytes
   if stat --version >/dev/null 2>&1; then
-    awk "BEGIN { printf \"%.1f\", $(stat -c%s \"$path\") / 1048576 }"
+    size_bytes="$(stat -c%s -- "$path" 2>/dev/null || true)"
   else
-    awk "BEGIN { printf \"%.1f\", $(stat -f%z \"$path\") / 1048576 }"
+    size_bytes="$(stat -f%z -- "$path" 2>/dev/null || true)"
   fi
+
+  [[ "$size_bytes" =~ ^[0-9]+$ ]] || return 1
+  awk -v bytes="$size_bytes" 'BEGIN { printf "%.1f", bytes / 1048576 }'
 }
 
 model_file_meets_min_size() {
@@ -163,8 +184,16 @@ model_file_meets_min_size() {
   [[ -f "$path" ]] || return 1
 
   local size_mb
-  size_mb="$(file_size_mb "$path")"
-  if awk "BEGIN { exit !($size_mb >= $min_size_mb) }"; then
+  if ! size_mb="$(file_size_mb "$path")"; then
+    warn "Could not determine file size for $model: $path"
+    if [[ "$delete_if_small" == true ]]; then
+      rm -f "$path"
+      warn "Removed unreadable model file: $path"
+    fi
+    return 1
+  fi
+
+  if awk -v actual="$size_mb" -v min="$min_size_mb" 'BEGIN { exit !(actual >= min) }'; then
     info "Model available: $model (${size_mb} MB)"
     return 0
   fi
@@ -451,23 +480,38 @@ start_server() {
   return 1
 }
 
-info "Ensuring native llama.cpp setup"
+info "Ensuring llama.cpp setup"
 info "Model cache: $models_dir"
-info "Binary cache: $bin_dir"
+if is_in_devcontainer; then
+  info "Running in devcontainer; llama.cpp will be managed by Aspire containers"
+else
+  info "Binary cache: $bin_dir"
+fi
 
 if [[ "$validate_only" == true ]]; then
   model_available "$chat_model" && info "Model available: $chat_model" || true
   model_available "$embed_model" && info "Model available: $embed_model" || true
-  find_llama_server >/dev/null 2>&1 && info "llama-server available" || true
+  if ! is_in_devcontainer; then
+    find_llama_server >/dev/null 2>&1 && info "llama-server available" || true
+  fi
   info "Validation complete; downloads and server startup skipped."
   exit 0
 fi
 
 ensure_chat_model
 download_model "$embed_model"
-server_path="$(install_llama_cpp)"
-persist_resolved_chat_model
-start_server "llama-chat" "$chat_port" "$selected_chat_file" "$selected_chat_model" false "$server_path"
-start_server "llama-embed" "$embed_port" "$embed_file" "$embed_model" true "$server_path"
 
-info "Native llama.cpp chat and embedding servers are ready."
+if is_in_devcontainer; then
+  info "Configuring for devcontainer-based llama.cpp"
+  set_dotenv_value "LLAMA_CPP_DEVCONTAINER_MODELS_DIR" "$models_dir"
+  info "Models downloaded to $models_dir"
+  info "Aspire will start llama-chat and llama-embed containers on startup"
+  exit 0
+else
+  # On host machine: setup native binaries and start servers
+  server_path="$(install_llama_cpp)"
+  persist_resolved_chat_model
+  start_server "llama-chat" "$chat_port" "$selected_chat_file" "$selected_chat_model" false "$server_path"
+  start_server "llama-embed" "$embed_port" "$embed_file" "$embed_model" true "$server_path"
+  info "Native llama.cpp chat and embedding servers are ready."
+fi

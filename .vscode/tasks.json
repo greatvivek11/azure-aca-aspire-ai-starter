@@ -141,7 +141,7 @@
 			"linux": {
 				"args": [
 					"-c",
-					"command -v az >/dev/null || (echo 'Installing Azure CLI...' && curl -sL https://aka.ms/InstallAzureCLIDeb | bash) || echo '[info] Azure CLI install skipped'"
+					"command -v az >/dev/null && echo \"[info] Azure CLI already installed\" || (echo \"Installing Azure CLI...\" && curl -sL https://aka.ms/InstallAzureCLIDeb | bash) || echo \"[info] Azure CLI install skipped\""
 				]
 			},
 			"windows": {

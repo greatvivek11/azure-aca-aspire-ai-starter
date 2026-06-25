@@ -1,11 +1,35 @@
-# Local AI Setup (Native llama.cpp)
+# Local AI Setup (Native llama.cpp with Devcontainer Support)
 
 ## Goal
 
-A new user should be able to clone, open in VS Code, wait for folder-open tasks, then press F5 and run local AI without manual setup steps.
+A new user should be able to clone, open in VS Code (on host or devcontainer), wait for folder-open tasks, then press F5 and run local AI without manual setup steps.
+
+## Architecture: Host vs Devcontainer
+
+This project uses a **hybrid approach** to maximize developer experience across different environments:
+
+### On Host Machine (Windows/Mac/Linux)
+- **llama.cpp runs natively** as background processes on the host
+- `llama-chat` on `127.0.0.1:8082`
+- `llama-embed` on `127.0.0.1:8083`
+- Backend/worker access via `http://host.docker.internal:8082|8083`
+- **Benefit**: Native performance, GPU acceleration (if available), minimal resource overhead
+
+### In Devcontainer
+- **llama.cpp runs in Docker containers** orchestrated by Aspire
+- Models cached in `~/.cache/llama.cpp/models` (persisted on host filesystem)
+- `llama-chat` container on port 8082
+- `llama-embed` container on port 8083
+- Backend/worker access via internal container network: `http://llama-chat:8082|8083`
+- **Benefit**: Cross-platform consistency, no host-native binary dependency, one-click setup
+
+The setup script automatically detects the environment and configures accordingly:
+- On host: installs native `llama-server` binary, starts servers
+- In devcontainer: downloads models only, Aspire containers handle the rest
 
 ## What Runs Where
 
+### Host Machine
 - Host-native processes:
   - `llama-chat` on `127.0.0.1:8082`
   - `llama-embed` on `127.0.0.1:8083`
@@ -14,10 +38,23 @@ A new user should be able to clone, open in VS Code, wait for folder-open tasks,
   - SQL, Redis, Azurite, Qdrant
 
 Backend/worker call host-native llama.cpp with:
-
 ```env
 LLAMA_CPP_BASE_URL=http://host.docker.internal:8082
 LLAMA_CPP_EMBED_BASE_URL=http://host.docker.internal:8083
+```
+
+### Devcontainer
+- Aspire-orchestrated containers:
+  - backend, worker, frontend
+  - SQL, Redis, Azurite, Qdrant
+  - **llama-chat** (new, GPU disabled by default)
+  - **llama-embed** (new, GPU disabled by default)
+- Models cached in `~/.cache/llama.cpp/models` (mounted read-only)
+
+Backend/worker call dockerized llama.cpp via internal network:
+```env
+LLAMA_CPP_BASE_URL=http://llama-chat:8082
+LLAMA_CPP_EMBED_BASE_URL=http://llama-embed:8083
 ```
 
 ## Folder-Open Automation
@@ -26,8 +63,8 @@ On workspace open, VS Code tasks handle local setup:
 
 1. ensure `src/aspire/.env` defaults
 2. ensure Docker is running (for app infrastructure)
-3. ensure native llama.cpp (`llama-server`)
-4. verify native chat + embedding endpoints are healthy
+3. ensure llama.cpp (native on host, container in devcontainer)
+4. verify chat + embedding endpoints are healthy
 
 Because these run on folder open, users can wait for task completion and then press F5.
 
@@ -35,15 +72,25 @@ Because these run on folder open, users can wait for task completion and then pr
 
 ```env
 AI_MODE=local
-LLAMA_CPP_BASE_URL=http://host.docker.internal:8082
-LLAMA_CPP_EMBED_BASE_URL=http://host.docker.internal:8083
-LLAMA_CPP_MODELS_DIR=
-LLAMA_CPP_BIN_DIR=
+LLAMA_CPP_BASE_URL=http://host.docker.internal:8082                    # (host) or http://llama-chat:8082 (devcontainer)
+LLAMA_CPP_EMBED_BASE_URL=http://host.docker.internal:8083              # (host) or http://llama-embed:8083 (devcontainer)
+LLAMA_CPP_MODELS_DIR=~/.local/share/llama.cpp/models                       # host-native cache
+LLAMA_CPP_DEVCONTAINER_MODELS_DIR=~/.cache/llama.cpp/models                 # devcontainer cache
+LLAMA_CPP_BIN_DIR=~/.local/share/llama.cpp/bin                          # (host only)
 LLAMA_CPP_CHAT_MODEL=Qwen/Qwen2.5-0.5B-Instruct
 LLAMA_CPP_CHAT_MODEL_FILE=Qwen2.5-0.5B-Instruct-Q4_K_M.gguf
 LLAMA_CPP_EMBED_MODEL=nomic-embed-text
 LLAMA_CPP_EMBED_MODEL_FILE=nomic-embed-text-v1.5.f16.gguf
-LLAMA_CPP_GPU_LAYERS=
+LLAMA_CPP_GPU_LAYERS=                                                    # (set to >0 for GPU; host only, devcontainer defaults to CPU)
+```
+
+## Devcontainer-Specific Environment Variables
+
+These override the default container images and model files:
+
+```env
+LLAMA_CPP_CHAT_IMAGE=ghcr.io/ggml-org/llama.cpp:server                 # Docker image for chat server
+LLAMA_CPP_EMBED_IMAGE=ghcr.io/ggml-org/llama.cpp:server                # Docker image for embedding server
 ```
 
 ## Chat Model Fallbacks (<1GB)

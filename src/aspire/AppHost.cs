@@ -1,4 +1,5 @@
 using Aspire.Hosting;
+using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Dapr;
 using CommunityToolkit.Aspire.Hosting.Dapr;
 using System.Collections.Immutable;
@@ -6,6 +7,10 @@ using System;
 using System.IO;
 
 var builder = DistributedApplication.CreateBuilder(args);
+
+// Detect if running in devcontainer
+bool isInDevcontainer = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DEVCONTAINERS")) || 
+                        File.Exists("/.dockerenv");
 
 // Keep Dapr components repo-scoped so local runtime does not load ~/.dapr defaults.
 var daprComponentsPath = Path.GetFullPath("../components");
@@ -20,8 +25,14 @@ var azureOpenAiApiKey = Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY
 var azureOpenAiModelId = Environment.GetEnvironmentVariable("AZURE_OPENAI_MODEL_ID") ?? string.Empty;
 var azureOpenAiEndpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT") ?? string.Empty;
 var aiMode = (Environment.GetEnvironmentVariable("AI_MODE") ?? "local").Trim().ToLowerInvariant();
-var localLlmBaseUrl = GetEnvOrDefault("LLAMA_CPP_BASE_URL", "http://host.docker.internal:8082");
-var localLlmEmbedBaseUrl = GetEnvOrDefault("LLAMA_CPP_EMBED_BASE_URL", "http://host.docker.internal:8083");
+
+// Set appropriate llama.cpp URLs based on environment
+var localLlmBaseUrl = isInDevcontainer 
+    ? "http://llama-chat:8080"
+    : GetEnvOrDefault("LLAMA_CPP_BASE_URL", "http://host.docker.internal:8082");
+var localLlmEmbedBaseUrl = isInDevcontainer
+    ? "http://llama-embed:8080"
+    : GetEnvOrDefault("LLAMA_CPP_EMBED_BASE_URL", "http://host.docker.internal:8083");
 var localLlmChatModel = GetEnvOrDefault("LLAMA_CPP_CHAT_MODEL", "Qwen/Qwen2.5-0.5B-Instruct");
 var localLlmEmbedModel = GetEnvOrDefault("LLAMA_CPP_EMBED_MODEL", "nomic-embed-text");
 var localLlmEmbedDimensions = GetEnvOrDefault("LLAMA_CPP_EMBED_DIMENSIONS", "768");
@@ -71,6 +82,32 @@ var frontendMode = (Environment.GetEnvironmentVariable("ASPIRE_FRONTEND_MODE") ?
 var sqlSaPassword = "P@ssw0rd";
 var sqlImage = Environment.GetEnvironmentVariable("SQL_IMAGE") ?? "mcr.microsoft.com/azure-sql-edge:latest";
 
+// In devcontainer: add llama.cpp containers with model volumes
+IResourceBuilder<ContainerResource>? llamaChatResource = null;
+IResourceBuilder<ContainerResource>? llamaEmbedResource = null;
+
+if (isInDevcontainer && aiMode == "local")
+{
+    var modelsDir = Environment.GetEnvironmentVariable("LLAMA_CPP_DEVCONTAINER_MODELS_DIR")
+        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache", "llama.cpp", "models");
+    Directory.CreateDirectory(modelsDir);
+    
+    var llamaChatImage = Environment.GetEnvironmentVariable("LLAMA_CPP_CHAT_IMAGE") ?? "ghcr.io/ggml-org/llama.cpp:server";
+    var llamaEmbedImage = Environment.GetEnvironmentVariable("LLAMA_CPP_EMBED_IMAGE") ?? "ghcr.io/ggml-org/llama.cpp:server";
+    var chatModel = Environment.GetEnvironmentVariable("LLAMA_CPP_CHAT_MODEL_FILE") ?? "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf";
+    var embedModel = Environment.GetEnvironmentVariable("LLAMA_CPP_EMBED_MODEL_FILE") ?? "nomic-embed-text-v1.5.f16.gguf";
+    
+    llamaChatResource = builder.AddContainer("llama-chat", llamaChatImage)
+        .WithBindMount(modelsDir, "/models", isReadOnly: true)
+        .WithHttpEndpoint(name: "http", targetPort: 8080)
+        .WithArgs("--host", "0.0.0.0", "--port", "8080", "--model", $"/models/{chatModel}", "--alias", localLlmChatModel);
+    
+    llamaEmbedResource = builder.AddContainer("llama-embed", llamaEmbedImage)
+        .WithBindMount(modelsDir, "/models", isReadOnly: true)
+        .WithHttpEndpoint(name: "http", targetPort: 8080)
+        .WithArgs("--host", "0.0.0.0", "--port", "8080", "--model", $"/models/{embedModel}", "--alias", localLlmEmbedModel, "--embedding");
+}
+
 // Local infrastructure containers are orchestrated by Aspire; llama.cpp runs natively on the host.
 var sql = builder.AddContainer("sql", sqlImage)
     .WithEnvironment("ACCEPT_EULA", "Y")
@@ -101,6 +138,13 @@ var backendBuilder = builder.AddDockerfile("backend", "../backend")
     .WaitFor(redis)
     .WaitFor(azurite)
     .WaitFor(qdrant);
+
+// Add wait dependencies for llama.cpp containers in devcontainer
+if (isInDevcontainer && aiMode == "local" && llamaChatResource != null && llamaEmbedResource != null)
+{
+    backendBuilder.WaitFor(llamaChatResource);
+    backendBuilder.WaitFor(llamaEmbedResource);
+}
 var backend = backendBuilder
     .WithOtlpExporter()
     .WithHttpEndpoint(name: "http", port: 8080, targetPort: 8080)
@@ -150,6 +194,13 @@ var workerBuilder = builder.AddDockerfile("worker", "../worker")
     .WaitFor(redis)
     .WaitFor(azurite)
     .WaitFor(qdrant);
+
+// Add wait dependencies for llama.cpp containers in devcontainer
+if (isInDevcontainer && aiMode == "local" && llamaChatResource != null && llamaEmbedResource != null)
+{
+    workerBuilder.WaitFor(llamaChatResource);
+    workerBuilder.WaitFor(llamaEmbedResource);
+}
 var worker = workerBuilder
     .WithOtlpExporter()
     .WithHttpEndpoint(name: "http", port: 8081, targetPort: 8081)

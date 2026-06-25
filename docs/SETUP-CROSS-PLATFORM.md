@@ -10,7 +10,7 @@ This guide covers the updated one-click setup that now supports **Windows, macOS
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (running)
 
 **Optional (recommended):**
-- [Git Bash](https://git-scm.com/) or [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) on Windows (for bash scripts)
+- [Git Bash](https://git-scm.com/) or [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) on Windows (only for Bash-only helper scripts)
 
 ## Setup (Local Development)
 
@@ -23,7 +23,7 @@ Right-click scripts/setup.bat → Run as administrator (NOT required, but may he
 
 **Option 2: PowerShell from VS Code terminal**
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1
+powershell.exe -ExecutionPolicy Bypass -File scripts/setup-env.ps1
 ```
 
 **Option 3: Auto-run on folder open**
@@ -80,13 +80,13 @@ Auto-run on folder open (same tasks as Windows).
 ### Windows
 
 **"Unable to locate the Dapr CLI" on F5**
-- Run `scripts/setup.bat` or `powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1`
+- Run `scripts/setup.bat` or `powershell.exe -ExecutionPolicy Bypass -File scripts/setup-env.ps1`
 - Dapr CLI will be installed to `%USERPROFILE%\.dapr\bin` and added to PATH
 - Restart VS Code after install completes
 
 **PowerShell script execution blocked**
 - Run in PowerShell: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
-- Or use: `powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1`
+- Or use: `powershell.exe -ExecutionPolicy Bypass -File scripts/setup-env.ps1`
 
 **"code" CLI not found when installing extensions**
 - In VS Code on Windows: `Ctrl+Shift+P` → `"Shell Command: Install 'code' command in PATH"`
@@ -144,12 +144,24 @@ Auto-run on folder open (same tasks as Windows).
 VALIDATE_ONLY=true bash scripts/setup-dev-tools.sh
 
 # PowerShell
-powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1 -ValidateOnly
+powershell.exe -ExecutionPolicy Bypass -File scripts/setup-env.ps1 -ValidateOnly
+```
+
+PowerShell-only form:
+
+```powershell
+$env:VALIDATE_ONLY = "true"
+powershell.exe -ExecutionPolicy Bypass -File scripts/setup-env.ps1
 ```
 
 **For Dapr components (already set by AppHost.cs):**
 ```bash
 cp src/aspire/.env.example src/aspire/.env
+# Dapr components are in src/components/ (repo-scoped, not ~/.dapr)
+```
+
+```powershell
+Copy-Item src/aspire/.env.example src/aspire/.env
 # Dapr components are in src/components/ (repo-scoped, not ~/.dapr)
 ```
 

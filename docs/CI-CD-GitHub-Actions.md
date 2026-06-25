@@ -152,6 +152,10 @@ gh api \
   /repos/<owner>/<repo>/environments/dev
 ```
 
+```powershell
+gh api --method PUT -H "Accept: application/vnd.github+json" /repos/<owner>/<repo>/environments/dev
+```
+
 Environment secrets are optional. Repository secrets still work.
 
 ### Workflow Environment Variables
@@ -181,7 +185,7 @@ These become Container Apps environment variables and are passed to the backend 
 `azure/login` authenticates Azure CLI for the current job. `azd` uses its own auth
 mode unless configured, so the workflow sets:
 
-```bash
+```sh
 azd config set auth.useAzCliAuth true
 ```
 
@@ -242,6 +246,12 @@ scripts/validate-azure-env.sh \
   "azure-aca-aspire-ai-starter-rg"
 ```
 
+Windows PowerShell equivalent:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File scripts/validate-azure-env.ps1 -SubscriptionId "${{ secrets.AZURE_SUBSCRIPTION_ID }}" -ResourceGroup "azure-aca-aspire-ai-starter-rg"
+```
+
 **Checks:**
 - ✅ Resource group exists (creates if missing)
 - ✅ SQL Server exists (warns if not)
@@ -258,7 +268,7 @@ scripts/validate-azure-env.sh \
 
 The validation job runs **Architecture Tests** to ensure code quality:
 
-```bash
+```sh
 dotnet test src/Backend.Tests/Backend.Tests.csproj --configuration Release
 ```
 
@@ -276,7 +286,7 @@ dotnet test src/Backend.Tests/Backend.Tests.csproj --configuration Release
 
 ### 1. Push to Main or Manual Trigger
 
-```bash
+```sh
 git push origin main
 ```
 
@@ -328,7 +338,7 @@ Click on a workflow run → View detailed logs for:
 
 After deployment completes:
 
-```bash
+```sh
 # List deployed container apps
 az containerapp list --resource-group azure-aca-aspire-ai-starter-rg --query "[].{name:name, status:properties.runStatus}"
 
@@ -344,7 +354,7 @@ az containerapp logs show --name web --resource-group azure-aca-aspire-ai-starte
 
 **Check**: Build or test errors in logs
 
-```bash
+```sh
 # Run locally to debug
 dotnet build azure-aca-aspire-ai-starter.sln
 dotnet test src/Backend.Tests/Backend.Tests.csproj
@@ -359,7 +369,7 @@ Most common root cause after switching to environments: subject mismatch.
 If deploy job uses environment `dev`, federated credential subject must be:
 `repo:<owner>/<repo>:environment:dev`
 
-```bash
+```sh
 # Verify service principal
 az ad sp show --id <AZURE_CLIENT_ID>
 
@@ -371,7 +381,7 @@ az identity federated-credential list --resource-group azure-aca-aspire-ai-start
 
 **Check**: GitHub Secrets are configured
 
-```bash
+```sh
 gh secret list --repo <owner>/<repo>
 ```
 
@@ -379,7 +389,7 @@ gh secret list --repo <owner>/<repo>
 
 **Check**: Service Principal has Contributor role
 
-```bash
+```sh
 az role assignment list --assignee <AZURE_CLIENT_ID>
 ```
 
@@ -389,7 +399,7 @@ az role assignment list --assignee <AZURE_CLIENT_ID>
 
 To test the workflow logic locally before pushing:
 
-```bash
+```sh
 # Build backend
 dotnet build src/backend/Backend.csproj --configuration Release
 
@@ -398,10 +408,11 @@ dotnet test src/Backend.Tests/Backend.Tests.csproj
 
 # Build frontend
 npm run build --prefix src/frontend
-
-# Test validation script
-bash scripts/validate-azure-env.sh <SUBSCRIPTION_ID> azure-aca-aspire-ai-starter-rg
 ```
+
+Validation script by OS:
+- macOS/Linux/WSL: `bash scripts/validate-azure-env.sh <SUBSCRIPTION_ID> azure-aca-aspire-ai-starter-rg`
+- Windows PowerShell: `powershell.exe -ExecutionPolicy Bypass -File scripts/validate-azure-env.ps1 -SubscriptionId <SUBSCRIPTION_ID> -ResourceGroup azure-aca-aspire-ai-starter-rg`
 
 ---
 

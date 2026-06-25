@@ -12,7 +12,13 @@ The backend test suite (`src/Backend.Tests/`) enforces architectural boundaries,
 
 Run the suite:
 
-```bash
+```sh
+dotnet test src/Backend.Tests/Backend.Tests.csproj
+```
+
+Windows PowerShell uses the same command:
+
+```powershell
 dotnet test src/Backend.Tests/Backend.Tests.csproj
 ```
 

@@ -8,10 +8,10 @@ After cloning on Windows:
 2. **Run one of:**
    ```powershell
    # Option A: Full setup (takes 2-3 min)
-   powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1
+   powershell.exe -ExecutionPolicy Bypass -File scripts/setup-env.ps1
 
    # Option B: Validation only (checks deps, ~10 sec)
-   powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1 -ValidateOnly
+   powershell.exe -ExecutionPolicy Bypass -File scripts/setup-env.ps1 -ValidateOnly
 
    # Option C: Double-click (uses setup.bat)
    scripts\setup.bat
@@ -32,7 +32,7 @@ After cloning on Windows:
 
 **Fix:** Run setup script and restart VS Code
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1
+powershell.exe -ExecutionPolicy Bypass -File scripts/setup-env.ps1
 ```
 
 Dapr will be installed to `%USERPROFILE%\.dapr\bin` and added to PATH. After install completes:
@@ -48,7 +48,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 Or always use:
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1
+powershell.exe -ExecutionPolicy Bypass -File scripts/setup-env.ps1
 ```
 
 ### "code" command not found (during extension install)
@@ -84,11 +84,20 @@ All runs are **idempotent** — safe to run multiple times.
 ```powershell
 # Validate only (useful for CI)
 $ENV:VALIDATE_ONLY="true"
-powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1
+powershell.exe -ExecutionPolicy Bypass -File scripts/setup-env.ps1
 
 # Or via parameter
-powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1 -ValidateOnly
+powershell.exe -ExecutionPolicy Bypass -File scripts/setup-env.ps1 -ValidateOnly
 ```
+
+## Enable Local Entra Auth
+
+```powershell
+az login
+powershell.exe -ExecutionPolicy Bypass -File scripts/setup-local-entra-auth.ps1
+```
+
+This creates or reuses local API/SPA app registrations and writes `ENTRA_*` values into `src/aspire/.env`.
 
 ## See Also
 

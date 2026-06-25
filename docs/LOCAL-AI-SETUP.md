@@ -128,6 +128,15 @@ curl -X POST http://localhost:8083/v1/embeddings \
   -d '{"model":"nomic-embed-text","input":"Hello world"}'
 ```
 
+```powershell
+Invoke-RestMethod http://localhost:8082/health
+Invoke-RestMethod http://localhost:8082/v1/models
+Invoke-RestMethod http://localhost:8083/health
+
+$Body = @{ model = "nomic-embed-text"; input = "Hello world" } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri http://localhost:8083/v1/embeddings -ContentType "application/json" -Body $Body
+```
+
 ## Troubleshooting
 
 ### Setup task failed downloading llama.cpp

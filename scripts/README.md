@@ -9,7 +9,7 @@ This directory contains cross-platform setup scripts for developing the Azure AC
   - Example: `.vscode/ensure-aspire-env.ps1` and `.vscode/ensure-aspire-env.sh` ensure `src/aspire/.env` exists and local AI defaults are present.
 - `scripts/*`:
   - Developer-invoked setup and validation wrappers intended for local use.
-  - Example: `scripts/setup-env.ps1`, `scripts/setup-dev-tools.sh`, `scripts/setup-local-entra-auth.sh`.
+  - Example: `scripts/setup-env.ps1`, `scripts/setup-dev-tools.sh`, `scripts/setup-local-entra-auth.sh`, `scripts/setup-local-entra-auth.ps1`.
 - `scripts/ci/*`:
   - CI/CD and cloud bootstrap automation for pipelines and tenant/resource provisioning.
   - Example: `scripts/ci/ensure-entra-auth.sh`, `scripts/ci/bootstrap-ci-tenant-setup.sh`.
@@ -20,7 +20,7 @@ Keep these domains separate to preserve single responsibility and minimize coupl
 
 | Platform | Entry Point | Command |
 |----------|-------------|---------|
-| **Windows** | `scripts/setup.bat` | Double-click or `powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1` |
+| **Windows** | `scripts/setup.bat` | Double-click or `powershell.exe -ExecutionPolicy Bypass -File scripts/setup-env.ps1` |
 | **macOS** | `scripts/setup.sh` | `bash scripts/setup-dev-tools.sh` |
 | **Linux** | `scripts/setup.sh` | `bash scripts/setup-dev-tools.sh` |
 | **WSL / Git Bash** | `scripts/setup.sh` | `bash scripts/setup-dev-tools.sh` |
@@ -57,7 +57,7 @@ Environment variable defaults should be maintained in `src/aspire/.env.example`;
 
 ### Manual (full setup)
 ```
-Windows:  powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1
+Windows:  powershell.exe -ExecutionPolicy Bypass -File scripts/setup-env.ps1
 Unix:     bash scripts/setup-dev-tools.sh
 ```
 
@@ -78,7 +78,7 @@ This additionally:
 
 ### Windows: "Unable to locate the Dapr CLI" on F5
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1
+powershell.exe -ExecutionPolicy Bypass -File scripts/setup-env.ps1
 # Then restart VS Code
 ```
 
@@ -111,7 +111,13 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 VALIDATE_ONLY=true bash scripts/setup-dev-tools.sh
 
 # PowerShell: Check deps without installing
-powershell -ExecutionPolicy Bypass -File scripts/setup-env.ps1 -ValidateOnly
+powershell.exe -ExecutionPolicy Bypass -File scripts/setup-env.ps1 -ValidateOnly
+```
+
+```powershell
+# PowerShell-only alternative
+$env:VALIDATE_ONLY = "true"
+powershell.exe -ExecutionPolicy Bypass -File scripts/setup-env.ps1
 ```
 
 ## Documentation

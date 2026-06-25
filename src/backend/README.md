@@ -43,9 +43,17 @@ AI is abstracted behind `IAiService`, selected by `AI_MODE`:
 
 ## Running
 
-```bash
+```sh
 dotnet run                 # standalone
 docker build -t api . && docker run -p 8080:8080 api
+```
+
+Windows PowerShell equivalent:
+
+```powershell
+dotnet run
+docker build -t api .
+docker run -p 8080:8080 api
 ```
 
 For local full-stack runs, prefer the Aspire host in `src/aspire` (it wires SQL, Redis, Azurite, Qdrant, and Dapr).

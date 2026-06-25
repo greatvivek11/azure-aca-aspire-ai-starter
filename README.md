@@ -13,7 +13,9 @@ A cloud-native AI assistant template: chat with and run RAG over your documents,
 4. **Press F5** — Aspire orchestrates the full local stack (frontend, backend, worker, SQL, Redis, Qdrant, Dapr).
 
 ### Deploy to Azure
-1. **One-time bootstrap** — Run `bash scripts/ci/bootstrap-ci-tenant-setup.sh` in an authenticated Azure shell to set up OIDC and a service principal.
+1. **One-time bootstrap** — Run the CI bootstrap in an authenticated Azure shell to set up OIDC and a service principal.
+	- macOS/Linux/WSL: `bash scripts/ci/bootstrap-ci-tenant-setup.sh --subscription-id "<your-subscription-id>" --github-owner "<owner>" --github-repo "<repo>"`
+	- Windows PowerShell: follow the PowerShell bootstrap commands in [docs/GitHub-Secrets-Setup.md](./docs/GitHub-Secrets-Setup.md#1-create-service-principal-for-github-actions)
 2. **Add GitHub secrets** — [5-min checklist](./docs/GitHub-Secrets-Setup.md#quick-bootstrap-checklist-5-10-min).
 3. **Push to main** — GitHub Actions validates, builds, provisions infrastructure, and deploys automatically. (PRs validate only; merge to `main` to deploy.)
 
@@ -58,11 +60,30 @@ cp src/aspire/.env.example src/aspire/.env
 cd src/aspire && dotnet run
 ```
 
+```powershell
+# 1. Clone and open in VS Code
+git clone <repo-url>
+Set-Location azure-aca-aspire-ai-starter
+# Folder-open tasks run automatically and prepare local defaults
+
+# Optional: reopen in Dev Container for a containerized toolchain
+# Local AI endpoints still target host-native llama.cpp via host.docker.internal
+
+# 2. Optional manual env creation (folder-open tasks auto-create src/aspire/.env)
+Copy-Item src/aspire/.env.example src/aspire/.env
+
+# 3. Debug (F5 in VS Code, or from terminal:)
+Set-Location src/aspire
+dotnet run
+```
+
 Dev Container setup handles .NET 10 SDK, Node.js 20, Docker, Dapr, and Azure CLI. The `.env` file is gitignored. On workspace open, VS Code runs `setup: ensure local AI env defaults` to create `src/aspire/.env` when missing and populate required local AI defaults without overwriting non-empty values.
 
 `src/aspire/.env.example` is the source of truth for default variable names and recommended values.
 
-**Local mode** runs native host llama.cpp with Qdrant and Azurite — no Azure resources required. VS Code folder-open tasks bootstrap llama.cpp binaries, models, and local servers before F5. Auth is disabled by default for first-run; to enable Entra auth locally, run `az login && bash scripts/setup-local-entra-auth.sh`.
+**Local mode** runs native host llama.cpp with Qdrant and Azurite — no Azure resources required. VS Code folder-open tasks bootstrap llama.cpp binaries, models, and local servers before F5. Auth is disabled by default for first-run. To enable Entra auth locally:
+- macOS/Linux/WSL: `az login && bash scripts/setup-local-entra-auth.sh`
+- Windows PowerShell: `az login; powershell.exe -ExecutionPolicy Bypass -File scripts/setup-local-entra-auth.ps1`
 
 ### Run modes
 
@@ -75,17 +96,22 @@ Details and troubleshooting: [docs/LOCAL-DEVELOPMENT-DAPR.md](./docs/LOCAL-DEVEL
 
 ## Testing
 
-```bash
+```sh
 dotnet test src/Backend.Tests/Backend.Tests.csproj   # backend architecture + integration tests
 npm run lint --prefix src/frontend                    # frontend lint
-bash scripts/lint-workflows.sh                        # GitHub Actions workflow lint
 ```
+
+Workflow lint command by OS:
+- macOS/Linux/WSL: `bash scripts/lint-workflows.sh`
+- Windows PowerShell: run from Git Bash/WSL, or use the CI workflow run as the canonical lint gate
 
 See [docs/Architecture-Tests.md](./docs/Architecture-Tests.md) for what the test suite enforces.
 
 ## Cloud Deployment
 
-1. **Bootstrap (one-time):** Run `bash scripts/ci/bootstrap-ci-tenant-setup.sh` to create a service principal and OIDC federated credential.
+1. **Bootstrap (one-time):** Create a service principal and OIDC federated credential.
+	- macOS/Linux/WSL: `bash scripts/ci/bootstrap-ci-tenant-setup.sh --subscription-id "<your-subscription-id>" --github-owner "<owner>" --github-repo "<repo>"`
+	- Windows PowerShell: use the PowerShell bootstrap block in [docs/GitHub-Secrets-Setup.md](./docs/GitHub-Secrets-Setup.md#1-create-service-principal-for-github-actions)
 2. **Configure secrets:** Follow the [5-minute checklist](./docs/GitHub-Secrets-Setup.md#quick-bootstrap-checklist-5-10-min) to add `AZURE_SUBSCRIPTION_ID`, `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, SQL credentials, etc.
 3. **Push to main:** GitHub Actions runs validation, then provisions infrastructure (SQL, Blob, AI Search, AI Foundry) via Bicep, and deploys to Azure Container Apps using `azd`. Entra app registrations and Managed Identity RBAC are wired automatically.
 

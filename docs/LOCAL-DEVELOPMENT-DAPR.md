@@ -11,6 +11,11 @@ This document explains the service communication strategy for local development 
 ASPIRE_FRONTEND_MODE=vite-dev dotnet run --project src/aspire/aspire.csproj
 ```
 
+```powershell
+$env:ASPIRE_FRONTEND_MODE = "vite-dev"
+dotnet run --project src/aspire/aspire.csproj
+```
+
 **Communication Pattern:**
 ```
 Frontend (Vite HMR)  →  Direct HTTP  →  Backend (Docker)
@@ -100,6 +105,15 @@ export ASPIRE_FRONTEND_MODE=vite-dev
 dotnet run --project src/aspire/aspire.csproj
 ```
 
+```powershell
+# Set environment variable
+$env:ASPIRE_FRONTEND_MODE = "vite-dev"
+
+# Frontend runs on port 3000 with HMR
+# Proxy: /api/* -> http://localhost:8080
+dotnet run --project src/aspire/aspire.csproj
+```
+
 ### Enable Dapr Service Invocation (Container Mode)
 ```bash
 # Option 1: Explicitly set to container mode
@@ -107,6 +121,20 @@ export ASPIRE_FRONTEND_MODE=container
 
 # Option 2: Unset the variable (defaults to container)
 unset ASPIRE_FRONTEND_MODE
+
+# Requires dapr placement service:
+dapr run --dapr-placement-service-port 50005
+
+# Then start Aspire (frontend rebuilds in container)
+dotnet run --project src/aspire/aspire.csproj
+```
+
+```powershell
+# Option 1: Explicitly set to container mode
+$env:ASPIRE_FRONTEND_MODE = "container"
+
+# Option 2: Remove the variable (defaults to container)
+Remove-Item Env:ASPIRE_FRONTEND_MODE -ErrorAction SilentlyContinue
 
 # Requires dapr placement service:
 dapr run --dapr-placement-service-port 50005
@@ -147,15 +175,27 @@ export BACKEND_PROXY_BASE_URL="http://127.0.0.1:3500/v1.0/invoke/api/method"
 cd src/aspire && dotnet run
 ```
 
+```powershell
+# Start placement service first (new terminal)
+dapr run --dapr-placement-service-port 50005
+
+# Set frontend to use Dapr proxy
+$env:BACKEND_PROXY_BASE_URL = "http://127.0.0.1:3500/v1.0/invoke/api/method"
+
+# Run Aspire
+Set-Location src/aspire
+dotnet run
+```
+
 ## Troubleshooting
 
 ### Frontend can't reach backend in vite-dev
 - Check: `curl http://localhost:8080/v1/customers`
-- Ensure backend container is running: `docker ps | grep backend`
+- Ensure backend container is running: `docker ps --filter "name=backend"`
 - Check backend logs: `docker logs <backend-container-id>`
 
 ### Dapr service invocation fails in container mode
-- Ensure placement service is running: `ps aux | grep "dapr.*placement"`
+- Ensure placement service is running: `Get-Process dapr -ErrorAction SilentlyContinue`
 - Check Dapr sidecar logs: `docker logs <container-id>`
 - Verify Dapr metadata: `curl http://localhost:3500/v1.0/metadata`
 - Common error: `"couldn't find service: api"` means placement is disconnected

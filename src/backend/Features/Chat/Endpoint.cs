@@ -33,7 +33,7 @@ public static class Endpoint
                 {
                     var embedding = await GenerateLocalEmbeddingAsync(
                         request.Message,
-                        options.OllamaBaseUrl,
+                        options.LocalLlmEmbedBaseUrl,
                         options.EmbeddingModelId,
                         httpClientFactory);
                     searchResults = await SearchRelevantChunksFromQdrantAsync(
@@ -63,6 +63,7 @@ public static class Endpoint
 
                 var citations = new List<ChatCitation>();
                 var contextParts = new List<string>();
+                var contextCharacterCount = 0;
 
                 foreach (var result in searchResults)
                 {
@@ -71,7 +72,20 @@ public static class Endpoint
                         continue;
                     }
 
-                    contextParts.Add(result.Content);
+                    var context = TrimForLocalRag(result.Content, options.LocalRagMaxChunkCharacters);
+                    if (options.IsLocalMode && contextCharacterCount + context.Length > options.LocalRagMaxContextCharacters)
+                    {
+                        var remainingCharacters = options.LocalRagMaxContextCharacters - contextCharacterCount;
+                        if (remainingCharacters <= 0)
+                        {
+                            break;
+                        }
+
+                        context = TrimForLocalRag(context, remainingCharacters);
+                    }
+
+                    contextParts.Add(context);
+                    contextCharacterCount += context.Length;
                     citations.Add(new ChatCitation(
                         result.DocumentId,
                         result.ChunkId,
@@ -83,6 +97,11 @@ public static class Endpoint
                     return Results.Ok(new ChatResponse(
                         "I could not find relevant indexed content for this question yet. Upload and ingest a file first.",
                         citations));
+                }
+
+                if (options.IsLocalMode && options.LocalRagFastResponse)
+                {
+                    return Results.Ok(new ChatResponse(BuildLocalRagFastResponse(contextParts), citations));
                 }
 
                 var prompt = BuildRagPrompt(request.Message, contextParts);
@@ -100,7 +119,7 @@ public static class Endpoint
         var contextBlock = string.Join("\n\n---\n\n", contexts);
         return $"""
 You are an enterprise copilot assistant.
-Answer only from the provided context. If context is insufficient, say so.
+    Answer only from the provided context. If context is insufficient, say so. Keep the answer concise.
 
 Context:
 {contextBlock}
@@ -108,6 +127,33 @@ Context:
 Question:
 {question}
 """;
+    }
+
+    private static string BuildLocalRagFastResponse(IEnumerable<string> contexts)
+    {
+        var snippets = contexts
+            .Select(context => TrimForLocalRag(context, 450))
+            .Where(context => !string.IsNullOrWhiteSpace(context))
+            .Take(3)
+            .ToArray();
+
+        if (snippets.Length == 0)
+        {
+            return "I found indexed content for the document, but it did not include enough readable text to summarize.";
+        }
+
+        return "Based on the indexed document:\n\n" + string.Join("\n\n", snippets.Select(snippet => $"- {snippet}"));
+    }
+
+    private static string TrimForLocalRag(string value, int maxCharacters)
+    {
+        var normalized = string.Join(' ', value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        if (normalized.Length <= maxCharacters)
+        {
+            return normalized;
+        }
+
+        return normalized[..Math.Max(0, maxCharacters - 3)].TrimEnd() + "...";
     }
 
     private static async Task<float[]> GenerateEmbeddingAsync(
@@ -147,32 +193,24 @@ Question:
 
     private static async Task<float[]> GenerateLocalEmbeddingAsync(
         string text,
-        string ollamaBaseUrl,
+        string localLlmBaseUrl,
         string embeddingModel,
         IHttpClientFactory httpClientFactory)
     {
         using var client = httpClientFactory.CreateClient();
-        await EnsureOllamaModelPulledAsync(client, ollamaBaseUrl, embeddingModel);
-
         var requestBody = new
         {
             model = embeddingModel,
-            prompt = text
+            input = text
         };
         using var payload = new StringContent(
             JsonSerializer.Serialize(requestBody),
             Encoding.UTF8,
             "application/json");
-        using var response = await client.PostAsync($"{ollamaBaseUrl.TrimEnd('/')}/api/embeddings", payload);
+        using var response = await client.PostAsync($"{localLlmBaseUrl.TrimEnd('/')}/v1/embeddings", payload);
         response.EnsureSuccessStatusCode();
 
-        var json = await response.Content.ReadAsStringAsync();
-        using var document = JsonDocument.Parse(json);
-        return document.RootElement
-            .GetProperty("embedding")
-            .EnumerateArray()
-            .Select(x => x.GetSingle())
-            .ToArray();
+        return await ParseEmbeddingAsync(response);
     }
 
     private static bool IsAuthFailure(System.Net.HttpStatusCode statusCode) =>
@@ -295,7 +333,7 @@ Question:
         var searchPayload = new Dictionary<string, object?>
         {
             ["vector"] = embedding,
-            ["limit"] = 5,
+            ["limit"] = options.LocalRagTopK,
             ["with_payload"] = true
         };
 
@@ -377,7 +415,7 @@ Question:
         var requestBody = new Dictionary<string, object?>
         {
             ["search"] = "*",
-            ["top"] = 5,
+            ["top"] = options.LocalRagTopK,
             ["select"] = "id,documentId,chunkId,fileName,content",
             ["vectorQueries"] = new[]
             {
@@ -385,7 +423,7 @@ Question:
                 {
                     ["kind"] = "vector",
                     ["fields"] = "contentVector",
-                    ["k"] = 5,
+                    ["k"] = options.LocalRagTopK,
                     ["vector"] = embedding
                 }
             }
@@ -491,20 +529,6 @@ Question:
             || message.Contains("access_token", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static async Task EnsureOllamaModelPulledAsync(HttpClient client, string ollamaBaseUrl, string modelName)
-    {
-        using var payload = new StringContent(
-            JsonSerializer.Serialize(new { name = modelName, stream = false }),
-            Encoding.UTF8,
-            "application/json");
-        using var response = await client.PostAsync($"{ollamaBaseUrl.TrimEnd('/')}/api/pull", payload);
-        if (!response.IsSuccessStatusCode)
-        {
-            var responseBody = await response.Content.ReadAsStringAsync();
-            throw new InvalidOperationException(
-                $"Ollama failed to pull model '{modelName}' (HTTP {(int)response.StatusCode}). Response: {responseBody}");
-        }
-    }
 }
 
 public sealed record ChatOptions(
@@ -513,14 +537,18 @@ public sealed record ChatOptions(
     string OpenAiAuthMode,
     string EmbeddingModelId,
     int EmbeddingDimensions,
-    string OllamaBaseUrl,
+    string LocalLlmEmbedBaseUrl,
     string QdrantUrl,
     string QdrantCollection,
     string SearchEndpoint,
     string SearchIndexName,
     string? SearchApiKey,
     string? ManagedIdentityClientId,
-    bool UseManagedIdentity)
+    bool UseManagedIdentity,
+    bool LocalRagFastResponse = false,
+    int LocalRagTopK = 3,
+    int LocalRagMaxContextCharacters = 1800,
+    int LocalRagMaxChunkCharacters = 700)
 {
     public bool IsLocalMode => string.Equals(AiMode, "local", StringComparison.OrdinalIgnoreCase);
 

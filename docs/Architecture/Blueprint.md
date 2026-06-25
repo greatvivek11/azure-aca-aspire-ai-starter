@@ -26,13 +26,13 @@ Provide a production-aligned starter that combines conversational AI and documen
 | Orchestration | .NET Aspire (`src/aspire/AppHost.cs`) for local composition, service discovery, telemetry |
 | Service comms | Dapr service invocation (FE → Dapr → BE); worker triggered via Dapr |
 | AI (azure mode) | Azure AI Foundry / Azure OpenAI for chat + embeddings; Azure AI Search for vectors |
-| AI (local mode) | Ollama for chat + embeddings; Qdrant for vectors; Azurite for blob |
+| AI (local mode) | llama.cpp-compatible local model server for chat + embeddings; Qdrant for vectors; Azurite for blob |
 | Data | Azure SQL (relational), Azure Blob Storage (files), vector store (AI Search or Qdrant) |
 | Identity | Microsoft Entra ID auth; passwordless User-Assigned Managed Identity for Azure services |
 | IaC / CI-CD | Bicep (`infra/`) deployed via GitHub Actions + `azd provision`/`azd deploy` |
 | Observability | OpenTelemetry from Aspire; optional Log Analytics + Application Insights |
 
-The AI provider is abstracted behind `IAiService` (`OllamaChatService` for local, `FoundryChatService` for azure), selected by the `AI_MODE` environment variable.
+The AI provider is abstracted behind `IAiService` (`LlamaCppChatService` for local, `FoundryChatService` for azure), selected by the `AI_MODE` environment variable.
 
 ## Principles
 
@@ -59,7 +59,7 @@ The AI provider is abstracted behind `IAiService` (`OllamaChatService` for local
 
 ## AI Modes
 
-- **`AI_MODE=local`** (default for local dev): Ollama + Qdrant + Azurite run as containers via Aspire. No Azure resources required.
+- **`AI_MODE=local`** (default for local dev): native host llama.cpp + Qdrant + Azurite. No Azure resources required.
 - **`AI_MODE=azure`** (default for cloud deploy): Azure OpenAI/Foundry + Azure AI Search + Azure Blob Storage. Local mode is not deployable to cloud as-is.
 
 ## Constraints

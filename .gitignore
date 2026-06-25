@@ -4,6 +4,16 @@
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+!.vscode/ensure-aspire-env.ps1
+!.vscode/ensure-aspire-env.sh
+!.vscode/ensure-docker.ps1
+!.vscode/ensure-docker.sh
+!.vscode/ensure-local-llm-ready.ps1
+!.vscode/ensure-local-llm-ready.sh
+!.vscode/ensure-local-llm.ps1
+!.vscode/ensure-local-llm.sh
+!.vscode/install-dapr.ps1
+!.vscode/install-extensions.ps1
 !.vscode/install-extensions.sh
 !.vscode/validate-extensions-sync.sh
 *.code-workspace
@@ -75,3 +85,12 @@ src/aspire/appsettings.Development.json
 
 # Entra federated credential bootstrap files (generated locally, never commit)
 federated-credential*.json
+
+# Local AI artifacts (machine-specific, never commit)
+**/llama.cpp/bin/**
+**/llama.cpp/models/**
+*llama.cpp*bin/*
+*llama.cpp*models/*
+*.gguf
+
+.tmp/

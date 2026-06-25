@@ -184,6 +184,13 @@ bash scripts/ci/bootstrap-ci-tenant-setup.sh \
   --github-repo "<repo>"
 ```
 
+Windows PowerShell equivalent (no Bash required):
+
+```powershell
+az login
+powershell.exe -ExecutionPolicy Bypass -File scripts/ci/bootstrap-ci-tenant-setup.ps1 --subscription-id "<your-subscription-id>" --github-owner "<owner>" --github-repo "<repo>"
+```
+
 Required parameter:
 - `--subscription-id`
 - `--github-owner`
@@ -222,6 +229,13 @@ bash scripts/ci/bootstrap-ci-tenant-setup.sh \
   --github-environment "dev"
 ```
 
+Windows PowerShell equivalent:
+
+```powershell
+az login
+powershell.exe -ExecutionPolicy Bypass -File scripts/ci/bootstrap-ci-tenant-setup.ps1 --subscription-id "<your-subscription-id>" --resource-group "azure-aca-aspire-ai-starter-rg" --location "southindia" --github-owner "<owner>" --github-repo "<repo>" --github-environment "dev"
+```
+
 ### 2. Create GitHub Environment (Required for environment-based OIDC)
 
 The deployment workflow uses a GitHub Environment (default: `dev`) and expects
@@ -239,6 +253,10 @@ gh api \
   --method PUT \
   -H "Accept: application/vnd.github+json" \
   /repos/<owner>/<repo>/environments/dev
+```
+
+```powershell
+gh api --method PUT -H "Accept: application/vnd.github+json" /repos/<owner>/<repo>/environments/dev
 ```
 
 Notes:
@@ -287,6 +305,36 @@ else
 fi
 ```
 
+PowerShell equivalent:
+
+```powershell
+$GithubOwner = "<your-github-owner>"
+$GithubRepo = "<your-github-repo>"
+$GithubEnvironment = "dev"
+$AzureClientId = "<appId-from-step-1>"
+
+$CredentialName = "github-actions-env-$GithubEnvironment"
+$CredentialPath = Join-Path $PWD "federated-credential.json"
+
+@{
+  name = $CredentialName
+  issuer = "https://token.actions.githubusercontent.com"
+  subject = "repo:$GithubOwner/$GithubRepo`:environment:$GithubEnvironment"
+  description = "GitHub Actions environment $GithubEnvironment"
+  audiences = @("api://AzureADTokenExchange")
+} | ConvertTo-Json -Depth 5 | Set-Content -Path $CredentialPath -Encoding UTF8
+
+$Existing = az ad app federated-credential list --id $AzureClientId --query "[?name=='$CredentialName'].name" -o tsv
+
+if ([string]::IsNullOrWhiteSpace($Existing)) {
+  Write-Host "Creating federated credential '$CredentialName'..."
+  az ad app federated-credential create --id $AzureClientId --parameters "@$CredentialPath"
+} else {
+  Write-Host "Updating existing federated credential '$CredentialName'..."
+  az ad app federated-credential update --id $AzureClientId --federated-credential-id $CredentialName --parameters "@$CredentialPath"
+}
+```
+
 Verify the credential was created/updated correctly:
 
 ```bash
@@ -294,6 +342,10 @@ az ad app federated-credential list \
   --id "$AZURE_CLIENT_ID" \
   --query "[].{name:name, subject:subject, issuer:issuer}" \
   -o table
+```
+
+```powershell
+az ad app federated-credential list --id $env:AZURE_CLIENT_ID --query "[].{name:name, subject:subject, issuer:issuer}" -o table
 ```
 
 Expected output shows `subject` as `repo:<owner>/<repo>:environment:<environment>`. If the subject still shows an old repo name, re-run the upsert block above.
@@ -316,6 +368,10 @@ az identity federated-credential create \
   --issuer "https://token.actions.githubusercontent.com" \
   --subject "repo:${GITHUB_OWNER}/${GITHUB_REPO}:environment:${GITHUB_ENVIRONMENT}" \
   --audiences "api://AzureADTokenExchange"
+```
+
+```powershell
+az identity federated-credential create --name "github-actions-env-$GithubEnvironment" --identity-name "<managed-identity-resource-name>" --resource-group "<managed-identity-resource-group>" --issuer "https://token.actions.githubusercontent.com" --subject "repo:$GithubOwner/$GithubRepo`:environment:$GithubEnvironment" --audiences "api://AzureADTokenExchange"
 ```
 
 ### 4. Add Secrets to GitHub Repository
@@ -378,6 +434,10 @@ Not required for provision mode. Leave unset unless you intentionally override t
 gh secret list --repo <owner>/<repo>
 ```
 
+```powershell
+gh secret list --repo <owner>/<repo>
+```
+
 ### Test GitHub Actions Workflow:
 
 ```bash
@@ -404,7 +464,7 @@ Monitor the workflow at: **Actions → Deploy to Azure Container Apps → Latest
 
 ### ❌ "Insufficient permissions" error in GitHub Actions
 
-**Cause**: Service Principal lacks required permissions  
+**Cause**: Service Principal lacks required permissions
 **Solution**:
 - Re-run the one-time bootstrap script in Step 1; it assigns required Azure RBAC and Entra directory role.
 - If failure is from `scripts/ci/ensure-entra-auth.sh bootstrap` with `Insufficient privileges to complete the operation`, verify the CI principal has Entra `Cloud Application Administrator` at tenant scope.
@@ -422,18 +482,27 @@ az role assignment create \
   --scope /subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RESOURCE_GROUP>
 ```
 
+```powershell
+az role assignment create --assignee <appId> --role Contributor --scope /subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RESOURCE_GROUP>
+az role assignment create --assignee <appId> --role "User Access Administrator" --scope /subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RESOURCE_GROUP>
+```
+
 ### ❌ "Azure OpenAI credentials not found" during deployment
 
-**Cause**: Secrets not configured in GitHub  
+**Cause**: Secrets not configured in GitHub
 **Solution**: Verify all AI Services secrets are set (see Step 4 above)
 
 ### ❌ OIDC "Subject not recognized" error
 
-**Cause**: Federated credential configuration mismatch  
+**Cause**: Federated credential configuration mismatch
 **Solution**: Verify issuer and subject match:
 ```bash
 az ad app federated-credential list \
   --id <AZURE_CLIENT_ID>
+```
+
+```powershell
+az ad app federated-credential list --id <AZURE_CLIENT_ID>
 ```
 
 Expected `subject` must match the workflow token exactly:
@@ -442,7 +511,7 @@ Expected `subject` must match the workflow token exactly:
 
 ### ❌ "ParentResourceNotFound" for userAssignedIdentities/federatedIdentityCredentials
 
-**Cause**: Using managed-identity command with a service principal appId/clientId, or wrong managed identity name/resource group  
+**Cause**: Using managed-identity command with a service principal appId/clientId, or wrong managed identity name/resource group
 **Solution**: If your workflow uses `AZURE_CLIENT_ID` from a service principal/app registration, use `az ad app federated-credential create` (Step 2). Only use `az identity federated-credential create` when you have an existing User Assigned Managed Identity.
 
 ---

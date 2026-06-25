@@ -1,4 +1,5 @@
 using Aspire.Hosting;
+using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Dapr;
 using CommunityToolkit.Aspire.Hosting.Dapr;
 using System.Collections.Immutable;
@@ -6,6 +7,10 @@ using System;
 using System.IO;
 
 var builder = DistributedApplication.CreateBuilder(args);
+
+// Detect if running in devcontainer
+bool isInDevcontainer = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DEVCONTAINERS")) || 
+                        File.Exists("/.dockerenv");
 
 // Keep Dapr components repo-scoped so local runtime does not load ~/.dapr defaults.
 var daprComponentsPath = Path.GetFullPath("../components");
@@ -20,10 +25,17 @@ var azureOpenAiApiKey = Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY
 var azureOpenAiModelId = Environment.GetEnvironmentVariable("AZURE_OPENAI_MODEL_ID") ?? string.Empty;
 var azureOpenAiEndpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT") ?? string.Empty;
 var aiMode = (Environment.GetEnvironmentVariable("AI_MODE") ?? "local").Trim().ToLowerInvariant();
-var ollamaBaseUrl = Environment.GetEnvironmentVariable("OLLAMA_BASE_URL") ?? "http://ollama:11434";
-var ollamaChatModel = Environment.GetEnvironmentVariable("OLLAMA_CHAT_MODEL") ?? "gemma3:4b-it-qat";
-var ollamaEmbedModel = Environment.GetEnvironmentVariable("OLLAMA_EMBED_MODEL") ?? "nomic-embed-text";
-var ollamaEmbedDimensions = Environment.GetEnvironmentVariable("OLLAMA_EMBED_DIMENSIONS") ?? "768";
+
+// Set appropriate llama.cpp URLs based on environment
+var localLlmBaseUrl = isInDevcontainer 
+    ? "http://llama-chat:8080"
+    : GetEnvOrDefault("LLAMA_CPP_BASE_URL", "http://host.docker.internal:8082");
+var localLlmEmbedBaseUrl = isInDevcontainer
+    ? "http://llama-embed:8080"
+    : GetEnvOrDefault("LLAMA_CPP_EMBED_BASE_URL", "http://host.docker.internal:8083");
+var localLlmChatModel = GetEnvOrDefault("LLAMA_CPP_CHAT_MODEL", "Qwen/Qwen2.5-0.5B-Instruct");
+var localLlmEmbedModel = GetEnvOrDefault("LLAMA_CPP_EMBED_MODEL", "nomic-embed-text");
+var localLlmEmbedDimensions = GetEnvOrDefault("LLAMA_CPP_EMBED_DIMENSIONS", "768");
 var qdrantUrl = Environment.GetEnvironmentVariable("QDRANT_URL") ?? "http://qdrant:6333";
 var qdrantCollection = Environment.GetEnvironmentVariable("QDRANT_COLLECTION") ?? "documents";
 var azureOpenAiAuthMode = Environment.GetEnvironmentVariable("AZURE_OPENAI_AUTH_MODE") ?? "api-key";
@@ -70,7 +82,33 @@ var frontendMode = (Environment.GetEnvironmentVariable("ASPIRE_FRONTEND_MODE") ?
 var sqlSaPassword = "P@ssw0rd";
 var sqlImage = Environment.GetEnvironmentVariable("SQL_IMAGE") ?? "mcr.microsoft.com/azure-sql-edge:latest";
 
-// Local dependency containers are orchestrated by Aspire for host/devcontainer parity.
+// In devcontainer: add llama.cpp containers with model volumes
+IResourceBuilder<ContainerResource>? llamaChatResource = null;
+IResourceBuilder<ContainerResource>? llamaEmbedResource = null;
+
+if (isInDevcontainer && aiMode == "local")
+{
+    var modelsDir = Environment.GetEnvironmentVariable("LLAMA_CPP_DEVCONTAINER_MODELS_DIR")
+        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache", "llama.cpp", "models");
+    Directory.CreateDirectory(modelsDir);
+    
+    var llamaChatImage = Environment.GetEnvironmentVariable("LLAMA_CPP_CHAT_IMAGE") ?? "ghcr.io/ggml-org/llama.cpp:server";
+    var llamaEmbedImage = Environment.GetEnvironmentVariable("LLAMA_CPP_EMBED_IMAGE") ?? "ghcr.io/ggml-org/llama.cpp:server";
+    var chatModel = Environment.GetEnvironmentVariable("LLAMA_CPP_CHAT_MODEL_FILE") ?? "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf";
+    var embedModel = Environment.GetEnvironmentVariable("LLAMA_CPP_EMBED_MODEL_FILE") ?? "nomic-embed-text-v1.5.f16.gguf";
+    
+    llamaChatResource = builder.AddContainer("llama-chat", llamaChatImage)
+        .WithBindMount(modelsDir, "/models", isReadOnly: true)
+        .WithHttpEndpoint(name: "http", targetPort: 8080)
+        .WithArgs("--host", "0.0.0.0", "--port", "8080", "--model", $"/models/{chatModel}", "--alias", localLlmChatModel);
+    
+    llamaEmbedResource = builder.AddContainer("llama-embed", llamaEmbedImage)
+        .WithBindMount(modelsDir, "/models", isReadOnly: true)
+        .WithHttpEndpoint(name: "http", targetPort: 8080)
+        .WithArgs("--host", "0.0.0.0", "--port", "8080", "--model", $"/models/{embedModel}", "--alias", localLlmEmbedModel, "--embedding");
+}
+
+// Local infrastructure containers are orchestrated by Aspire; llama.cpp runs natively on the host.
 var sql = builder.AddContainer("sql", sqlImage)
     .WithEnvironment("ACCEPT_EULA", "Y")
     .WithEnvironment("MSSQL_PID", "Developer")
@@ -87,10 +125,6 @@ var azurite = builder.AddContainer("azurite", "mcr.microsoft.com/azure-storage/a
     .WithEndpoint(name: "blob", port: 10000, targetPort: 10000)
     .WithVolume("azurite-data", "/data");
 
-var ollama = builder.AddContainer("ollama", "ollama/ollama:latest")
-    .WithEndpoint(name: "http", port: 11434, targetPort: 11434)
-    .WithVolume("ollama-data", "/root/.ollama");
-
 var qdrant = builder.AddContainer("qdrant", "qdrant/qdrant:v1.12.6")
     .WithEndpoint(name: "http", port: 6333, targetPort: 6333)
     .WithVolume("qdrant-data", "/qdrant/storage");
@@ -99,12 +133,19 @@ var qdrant = builder.AddContainer("qdrant", "qdrant/qdrant:v1.12.6")
 // You can also set them through the .NET Aspire dashboard when running the app
 
 // Add existing projects with Dapr support and Dockerfiles
-var backend = builder.AddDockerfile("backend", "../backend")
+var backendBuilder = builder.AddDockerfile("backend", "../backend")
     .WaitFor(sql)
     .WaitFor(redis)
     .WaitFor(azurite)
-    .WaitFor(ollama)
-    .WaitFor(qdrant)
+    .WaitFor(qdrant);
+
+// Add wait dependencies for llama.cpp containers in devcontainer
+if (isInDevcontainer && aiMode == "local" && llamaChatResource != null && llamaEmbedResource != null)
+{
+    backendBuilder.WaitFor(llamaChatResource);
+    backendBuilder.WaitFor(llamaEmbedResource);
+}
+var backend = backendBuilder
     .WithOtlpExporter()
     .WithHttpEndpoint(name: "http", port: 8080, targetPort: 8080)
     .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions
@@ -117,10 +158,11 @@ var backend = builder.AddDockerfile("backend", "../backend")
     .WithEnvironment("AZURE_OPENAI_MODEL_ID", azureOpenAiModelId)
     .WithEnvironment("AZURE_OPENAI_ENDPOINT", azureOpenAiEndpoint)
     .WithEnvironment("AI_MODE", aiMode)
-    .WithEnvironment("OLLAMA_BASE_URL", ollamaBaseUrl)
-    .WithEnvironment("OLLAMA_CHAT_MODEL", ollamaChatModel)
-    .WithEnvironment("OLLAMA_EMBED_MODEL", ollamaEmbedModel)
-    .WithEnvironment("OLLAMA_EMBED_DIMENSIONS", ollamaEmbedDimensions)
+    .WithEnvironment("LLAMA_CPP_BASE_URL", localLlmBaseUrl)
+    .WithEnvironment("LLAMA_CPP_EMBED_BASE_URL", localLlmEmbedBaseUrl)
+    .WithEnvironment("LLAMA_CPP_CHAT_MODEL", localLlmChatModel)
+    .WithEnvironment("LLAMA_CPP_EMBED_MODEL", localLlmEmbedModel)
+    .WithEnvironment("LLAMA_CPP_EMBED_DIMENSIONS", localLlmEmbedDimensions)
     .WithEnvironment("QDRANT_URL", qdrantUrl)
     .WithEnvironment("QDRANT_COLLECTION", qdrantCollection)
     .WithEnvironment("AZURE_OPENAI_AUTH_MODE", azureOpenAiAuthMode)
@@ -147,12 +189,19 @@ var backend = builder.AddDockerfile("backend", "../backend")
     .WithEnvironment("ConnectionStrings__Redis", "redis:6379")
     .WithEnvironment("REDIS_CONNECTION_STRING", "redis:6379");
 
-var worker = builder.AddDockerfile("worker", "../worker")
+var workerBuilder = builder.AddDockerfile("worker", "../worker")
     .WaitFor(sql)
     .WaitFor(redis)
     .WaitFor(azurite)
-    .WaitFor(ollama)
-    .WaitFor(qdrant)
+    .WaitFor(qdrant);
+
+// Add wait dependencies for llama.cpp containers in devcontainer
+if (isInDevcontainer && aiMode == "local" && llamaChatResource != null && llamaEmbedResource != null)
+{
+    workerBuilder.WaitFor(llamaChatResource);
+    workerBuilder.WaitFor(llamaEmbedResource);
+}
+var worker = workerBuilder
     .WithOtlpExporter()
     .WithHttpEndpoint(name: "http", port: 8081, targetPort: 8081)
     .WithDaprSidecar(new CommunityToolkit.Aspire.Hosting.Dapr.DaprSidecarOptions
@@ -168,10 +217,11 @@ var worker = builder.AddDockerfile("worker", "../worker")
     .WithEnvironment("AZURE_OPENAI_MODEL_ID", azureOpenAiModelId)
     .WithEnvironment("AZURE_OPENAI_ENDPOINT", azureOpenAiEndpoint)
     .WithEnvironment("AI_MODE", aiMode)
-    .WithEnvironment("OLLAMA_BASE_URL", ollamaBaseUrl)
-    .WithEnvironment("OLLAMA_CHAT_MODEL", ollamaChatModel)
-    .WithEnvironment("OLLAMA_EMBED_MODEL", ollamaEmbedModel)
-    .WithEnvironment("OLLAMA_EMBED_DIMENSIONS", ollamaEmbedDimensions)
+    .WithEnvironment("LLAMA_CPP_BASE_URL", localLlmBaseUrl)
+    .WithEnvironment("LLAMA_CPP_EMBED_BASE_URL", localLlmEmbedBaseUrl)
+    .WithEnvironment("LLAMA_CPP_CHAT_MODEL", localLlmChatModel)
+    .WithEnvironment("LLAMA_CPP_EMBED_MODEL", localLlmEmbedModel)
+    .WithEnvironment("LLAMA_CPP_EMBED_DIMENSIONS", localLlmEmbedDimensions)
     .WithEnvironment("QDRANT_URL", qdrantUrl)
     .WithEnvironment("QDRANT_COLLECTION", qdrantCollection)
     .WithEnvironment("AZURE_OPENAI_AUTH_MODE", azureOpenAiAuthMode)
@@ -264,4 +314,10 @@ static void LoadEnvFile(string filePath)
             Environment.SetEnvironmentVariable(key, parts[1].Trim());
         }
     }
+}
+
+static string GetEnvOrDefault(string name, string defaultValue)
+{
+    var value = Environment.GetEnvironmentVariable(name);
+    return string.IsNullOrWhiteSpace(value) ? defaultValue : value.Trim();
 }

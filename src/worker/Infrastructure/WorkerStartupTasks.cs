@@ -1,58 +1,7 @@
-using System.Text;
-using System.Text.Json;
 using Microsoft.Data.SqlClient;
 
 internal static class WorkerStartupTasks
 {
-    internal static async Task EnsureOllamaModelPulledAsync(HttpClient client, string ollamaBaseUrl, string modelName)
-    {
-        using var payload = new StringContent(
-            JsonSerializer.Serialize(new { name = modelName, stream = false }),
-            Encoding.UTF8,
-            "application/json");
-        using var response = await client.PostAsync($"{ollamaBaseUrl.TrimEnd('/')}/api/pull", payload);
-        if (!response.IsSuccessStatusCode)
-        {
-            var responseBody = await response.Content.ReadAsStringAsync();
-            throw new InvalidOperationException(
-                $"Ollama failed to pull model '{modelName}' (HTTP {(int)response.StatusCode}). Response: {responseBody}");
-        }
-    }
-
-    internal static async Task WarmLocalOllamaModelsAsync(
-        HttpClient client,
-        string ollamaBaseUrl,
-        IReadOnlyList<string> modelNames,
-        ILogger logger)
-    {
-        var uniqueModelNames = modelNames
-            .Where(modelName => !string.IsNullOrWhiteSpace(modelName))
-            .Select(modelName => modelName.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (uniqueModelNames.Length == 0)
-        {
-            logger.LogWarning("Skipping Ollama model warmup because no local model names were configured.");
-            return;
-        }
-
-        foreach (var modelName in uniqueModelNames)
-        {
-            logger.LogInformation("Preloading Ollama model {ModelName}.", modelName);
-            try
-            {
-                await EnsureOllamaModelPulledAsync(client, ollamaBaseUrl, modelName);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Skipping Ollama model warmup for {ModelName}.", modelName);
-                continue;
-            }
-
-            logger.LogInformation("Ollama model {ModelName} is ready.", modelName);
-        }
-    }
-
     internal static async Task RequeueNonTerminalJobsAsync(string connectionString)
     {
         await using var connection = new SqlConnection(connectionString);

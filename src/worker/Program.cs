@@ -216,13 +216,29 @@ static async Task RunIngestionLoopAsync(
 
             if (claimedJob is not null)
             {
-                logger.LogError(ex, "Unexpected error while processing document {DocumentId}", claimedJob.DocumentId);
-                await UpdateDocumentIngestionJobStatusAsync(
-                    sqlConnectionString,
-                    claimedJob.DocumentId,
-                    "Failed",
-                    100,
-                    ex.Message);
+                var isTransient = ex is HttpRequestException hre
+                    && hre.StatusCode == System.Net.HttpStatusCode.TooManyRequests;
+
+                if (isTransient)
+                {
+                    logger.LogWarning(ex, "Transient rate-limit error for document {DocumentId}; will re-queue.", claimedJob.DocumentId);
+                    await UpdateDocumentIngestionJobStatusAsync(
+                        sqlConnectionString,
+                        claimedJob.DocumentId,
+                        "Queued",
+                        0,
+                        null);
+                }
+                else
+                {
+                    logger.LogError(ex, "Unexpected error while processing document {DocumentId}", claimedJob.DocumentId);
+                    await UpdateDocumentIngestionJobStatusAsync(
+                        sqlConnectionString,
+                        claimedJob.DocumentId,
+                        "Failed",
+                        100,
+                        ex.Message);
+                }
             }
             else
             {
@@ -592,30 +608,46 @@ static async Task<float[]> GenerateEmbeddingAsync(
         return await ParseEmbeddingAsync(localResponse);
     }
 
-    using var client = httpClientFactory.CreateClient();
-    var usingManagedIdentity = await ConfigureOpenAiAuthAsync(client, apiKey, openAiAuthMode, managedIdentityClientId, httpClientFactory);
-
+    const int MaxRetries = 5;
     var requestUri = BuildEmbeddingsRequestUri(endpoint, embeddingDeployment);
-    using var payload = new StringContent(
-        JsonSerializer.Serialize(new { input = text, dimensions = embeddingDimensions }),
-        Encoding.UTF8,
-        "application/json");
-    using var response = await client.PostAsync(requestUri, payload);
-    if (IsAuthFailure(response.StatusCode) && usingManagedIdentity && !string.IsNullOrWhiteSpace(apiKey))
+
+    for (var attempt = 0; attempt <= MaxRetries; attempt++)
     {
-        using var retryClient = httpClientFactory.CreateClient();
-        retryClient.DefaultRequestHeaders.Add("api-key", apiKey);
-        using var retryPayload = new StringContent(
+        using var client = httpClientFactory.CreateClient();
+        var usingManagedIdentity = await ConfigureOpenAiAuthAsync(client, apiKey, openAiAuthMode, managedIdentityClientId, httpClientFactory);
+
+        using var payload = new StringContent(
             JsonSerializer.Serialize(new { input = text, dimensions = embeddingDimensions }),
             Encoding.UTF8,
             "application/json");
-        using var retryResponse = await retryClient.PostAsync(requestUri, retryPayload);
-        retryResponse.EnsureSuccessStatusCode();
-        return await ParseEmbeddingAsync(retryResponse);
+        using var response = await client.PostAsync(requestUri, payload);
+
+        if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests && attempt < MaxRetries)
+        {
+            var retryAfter = response.Headers.RetryAfter?.Delta
+                ?? TimeSpan.FromSeconds(Math.Min(60, Math.Pow(2, attempt + 1)));
+            await Task.Delay(retryAfter);
+            continue;
+        }
+
+        if (IsAuthFailure(response.StatusCode) && usingManagedIdentity && !string.IsNullOrWhiteSpace(apiKey))
+        {
+            using var retryClient = httpClientFactory.CreateClient();
+            retryClient.DefaultRequestHeaders.Add("api-key", apiKey);
+            using var retryPayload = new StringContent(
+                JsonSerializer.Serialize(new { input = text, dimensions = embeddingDimensions }),
+                Encoding.UTF8,
+                "application/json");
+            using var retryResponse = await retryClient.PostAsync(requestUri, retryPayload);
+            retryResponse.EnsureSuccessStatusCode();
+            return await ParseEmbeddingAsync(retryResponse);
+        }
+
+        response.EnsureSuccessStatusCode();
+        return await ParseEmbeddingAsync(response);
     }
 
-    response.EnsureSuccessStatusCode();
-    return await ParseEmbeddingAsync(response);
+    throw new HttpRequestException("Embedding request failed after exhausting retries due to rate limiting (429 Too Many Requests).");
 }
 
 static async Task<Stream> OpenBlobReadStreamAsync(

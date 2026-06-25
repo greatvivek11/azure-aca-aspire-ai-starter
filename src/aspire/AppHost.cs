@@ -9,7 +9,7 @@ using System.IO;
 var builder = DistributedApplication.CreateBuilder(args);
 
 // Detect if running in devcontainer
-bool isInDevcontainer = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DEVCONTAINERS")) || 
+bool isInDevcontainer = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DEVCONTAINERS")) ||
                         File.Exists("/.dockerenv");
 
 // Keep Dapr components repo-scoped so local runtime does not load ~/.dapr defaults.
@@ -27,7 +27,7 @@ var azureOpenAiEndpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPO
 var aiMode = (Environment.GetEnvironmentVariable("AI_MODE") ?? "local").Trim().ToLowerInvariant();
 
 // Set appropriate llama.cpp URLs based on environment
-var localLlmBaseUrl = isInDevcontainer 
+var localLlmBaseUrl = isInDevcontainer
     ? "http://llama-chat:8080"
     : GetEnvOrDefault("LLAMA_CPP_BASE_URL", "http://host.docker.internal:8082");
 var localLlmEmbedBaseUrl = isInDevcontainer
@@ -81,6 +81,8 @@ var frontendMode = (Environment.GetEnvironmentVariable("ASPIRE_FRONTEND_MODE") ?
     .ToLowerInvariant();
 var sqlSaPassword = "P@ssw0rd";
 var sqlImage = Environment.GetEnvironmentVariable("SQL_IMAGE") ?? "mcr.microsoft.com/azure-sql-edge:latest";
+var sqlHostPortRaw = GetEnvOrDefault("SQL_HOST_PORT", "1433");
+var sqlHostPort = int.TryParse(sqlHostPortRaw, out var parsedSqlHostPort) ? parsedSqlHostPort : 1433;
 
 // In devcontainer: add llama.cpp containers with model volumes
 IResourceBuilder<ContainerResource>? llamaChatResource = null;
@@ -91,17 +93,17 @@ if (isInDevcontainer && aiMode == "local")
     var modelsDir = Environment.GetEnvironmentVariable("LLAMA_CPP_DEVCONTAINER_MODELS_DIR")
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache", "llama.cpp", "models");
     Directory.CreateDirectory(modelsDir);
-    
+
     var llamaChatImage = Environment.GetEnvironmentVariable("LLAMA_CPP_CHAT_IMAGE") ?? "ghcr.io/ggml-org/llama.cpp:server";
     var llamaEmbedImage = Environment.GetEnvironmentVariable("LLAMA_CPP_EMBED_IMAGE") ?? "ghcr.io/ggml-org/llama.cpp:server";
     var chatModel = Environment.GetEnvironmentVariable("LLAMA_CPP_CHAT_MODEL_FILE") ?? "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf";
     var embedModel = Environment.GetEnvironmentVariable("LLAMA_CPP_EMBED_MODEL_FILE") ?? "nomic-embed-text-v1.5.f16.gguf";
-    
+
     llamaChatResource = builder.AddContainer("llama-chat", llamaChatImage)
         .WithBindMount(modelsDir, "/models", isReadOnly: true)
         .WithHttpEndpoint(name: "http", targetPort: 8080)
         .WithArgs("--host", "0.0.0.0", "--port", "8080", "--model", $"/models/{chatModel}", "--alias", localLlmChatModel);
-    
+
     llamaEmbedResource = builder.AddContainer("llama-embed", llamaEmbedImage)
         .WithBindMount(modelsDir, "/models", isReadOnly: true)
         .WithHttpEndpoint(name: "http", targetPort: 8080)
@@ -114,7 +116,7 @@ var sql = builder.AddContainer("sql", sqlImage)
     .WithEnvironment("MSSQL_PID", "Developer")
     .WithEnvironment("SA_PASSWORD", sqlSaPassword)
     .WithEnvironment("MSSQL_SA_PASSWORD", sqlSaPassword)
-    .WithEndpoint(name: "tcp", port: 1433, targetPort: 1433)
+    .WithEndpoint(name: "tcp", port: sqlHostPort, targetPort: 1433)
     .WithVolume("mssql-data-v1", "/var/opt/mssql");
 
 var redis = builder.AddContainer("redis", "redis:7-alpine")

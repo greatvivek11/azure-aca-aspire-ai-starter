@@ -29,6 +29,7 @@ powershell.exe -ExecutionPolicy Bypass -File scripts/setup-env.ps1
 **Option 3: Auto-run on folder open**
 When you open the workspace in VS Code, the following tasks run automatically:
 - `setup: install all extensions` — installs VS Code extensions
+- `setup: ensure SQL Server connection profile` — seeds `mssql-container` in VS Code User Settings (`mssql.connections`)
 - `npm: install frontend` — npm ci
 - `dotnet: restore backend/worker` — dotnet restore
 
@@ -55,6 +56,17 @@ bash scripts/setup-dev-tools.sh
 ```
 
 Auto-run on folder open (same tasks as Windows).
+
+## SQL Server Extension Profile Behavior
+
+- Connection profile automation targets extension `ms-mssql.mssql`.
+- Profile name: `mssql-container`.
+- Storage location: **VS Code User Settings** (`mssql.connections`) so the connection appears in the extension across workspaces.
+- Hostname is pinned to `127.0.0.1` (avoids localhost/IPv6 ambiguity on some hosts).
+- Port selection is dynamic when possible:
+   - preferred: live Docker mapping from running `sql-*` container (`hostPort -> 1433`)
+   - fallback: `SQL_HOST_PORT` from `src/aspire/.env`
+- If SQL host port changes after restarting Aspire, run task `setup: ensure SQL Server connection profile` again.
 
 ## What Gets Installed
 
@@ -91,6 +103,11 @@ Auto-run on folder open (same tasks as Windows).
 **"code" CLI not found when installing extensions**
 - In VS Code on Windows: `Ctrl+Shift+P` → `"Shell Command: Install 'code' command in PATH"`
 - Then retry setup
+
+**MSSQL extension timeout / Error 258**
+- Re-run task `setup: ensure SQL Server connection profile` (updates profile to current Docker SQL host port)
+- In MSSQL Connections pane, reconnect `mssql-container`
+- If needed, remove and re-add the node via `MS SQL: Connect` to clear stale in-memory state
 
 ### macOS
 
